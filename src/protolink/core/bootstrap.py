@@ -1,0 +1,290 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from protolink.application.auto_response_runtime_service import AutoResponseRuntimeService
+from protolink.application.capture_replay_job_service import CaptureReplayJobService
+from protolink.application.channel_bridge_runtime_service import ChannelBridgeRuntimeService
+from protolink.application.device_scan_execution_service import DeviceScanExecutionService
+from protolink.application.packet_replay_service import PacketReplayExecutionService
+from protolink.application.register_monitor_service import RegisterMonitorService
+from protolink.application.rule_engine_service import RuleEngineService
+from protolink.application.script_host_service import PythonInlineScriptHost, ScriptHostService
+from protolink.application.serial_service import SerialSessionService
+from protolink.application.mqtt_client_service import MqttClientSessionService
+from protolink.application.mqtt_server_service import MqttServerSessionService
+from protolink.application.tcp_client_service import TcpClientSessionService
+from protolink.application.tcp_server_service import TcpServerSessionService
+from protolink.application.timed_task_service import TimedTaskService
+from protolink.application.udp_service import UdpSessionService
+from protolink.core.event_bus import EventBus
+from protolink.core.logging import InMemoryLogStore, StructuredLogEntry, WorkspaceJsonlLogWriter, default_workspace_log_path
+from protolink.core.packet_inspector import PacketInspectorState
+from protolink.core.settings import (
+    AppSettings,
+    SettingsLayout,
+    default_settings_root,
+    ensure_settings_layout,
+    load_app_settings,
+    remember_workspace,
+    resolve_workspace_root,
+    save_app_settings,
+)
+from protolink.core.automation_rule_profiles import default_automation_rules_profile_path
+from protolink.core.transport import (
+    TransportAdapter,
+    TransportCapabilities,
+    TransportConfig,
+    TransportDescriptor,
+    TransportKind,
+    TransportRegistry,
+)
+from protolink.core.workspace import WorkspaceLayout, ensure_workspace_layout
+from protolink.core.wiring import wire_packet_inspector, wire_transport_logging
+from protolink.transports.serial import SerialTransportAdapter
+from protolink.transports.mqtt_client import MqttClientTransportAdapter
+from protolink.transports.mqtt_server import MqttServerTransportAdapter
+from protolink.transports.tcp_client import TcpClientTransportAdapter
+from protolink.transports.tcp_server import TcpServerTransportAdapter
+from protolink.transports.udp import UdpTransportAdapter
+
+
+@dataclass(frozen=True, slots=True)
+class AppContext:
+    base_dir: Path
+    settings_layout: SettingsLayout
+    settings: AppSettings
+    workspace: WorkspaceLayout
+    transport_registry: TransportRegistry
+    event_bus: EventBus
+    log_store: InMemoryLogStore
+    packet_inspector: PacketInspectorState
+    serial_session_service: SerialSessionService
+    mqtt_client_service: MqttClientSessionService
+    mqtt_server_service: MqttServerSessionService
+    tcp_client_service: TcpClientSessionService
+    tcp_server_service: TcpServerSessionService
+    udp_service: UdpSessionService
+    packet_replay_service: PacketReplayExecutionService
+    register_monitor_service: RegisterMonitorService
+    auto_response_runtime_service: AutoResponseRuntimeService
+    rule_engine_service: RuleEngineService
+    device_scan_execution_service: DeviceScanExecutionService
+    script_host_service: ScriptHostService
+    timed_task_service: TimedTaskService
+    channel_bridge_runtime_service: ChannelBridgeRuntimeService
+    capture_replay_job_service: CaptureReplayJobService
+
+
+class PlaceholderTransportAdapter(TransportAdapter):
+    def __init__(self, descriptor: TransportDescriptor) -> None:
+        super().__init__(descriptor)
+
+    async def open(self, config: TransportConfig) -> None:
+        self.bind_session(config)
+        raise NotImplementedError(f"{self.descriptor.display_name} is not implemented yet.")
+
+    async def close(self) -> None:
+        return None
+
+    async def send(self, payload: bytes, metadata=None) -> None:
+        raise NotImplementedError(f"{self.descriptor.display_name} is not implemented yet.")
+
+
+def default_transport_descriptors() -> tuple[TransportDescriptor, ...]:
+    return (
+        TransportDescriptor(
+            kind=TransportKind.SERIAL,
+            display_name="Serial Studio",
+            capabilities=TransportCapabilities(supports_binary_payloads=True, supports_reconnect=True),
+        ),
+        TransportDescriptor(
+            kind=TransportKind.TCP_CLIENT,
+            display_name="TCP Client",
+            capabilities=TransportCapabilities(supports_binary_payloads=True, supports_tls=True),
+        ),
+        TransportDescriptor(
+            kind=TransportKind.TCP_SERVER,
+            display_name="TCP Server",
+            capabilities=TransportCapabilities(can_listen=True, can_accept_clients=True, supports_binary_payloads=True),
+        ),
+        TransportDescriptor(
+            kind=TransportKind.UDP,
+            display_name="UDP Lab",
+            capabilities=TransportCapabilities(can_listen=True, supports_binary_payloads=True),
+        ),
+        TransportDescriptor(
+            kind=TransportKind.MQTT_CLIENT,
+            display_name="MQTT Client",
+            capabilities=TransportCapabilities(supports_topics=True, supports_binary_payloads=True, supports_tls=True),
+        ),
+        TransportDescriptor(
+            kind=TransportKind.MQTT_SERVER,
+            display_name="MQTT Server",
+            capabilities=TransportCapabilities(
+                can_listen=True,
+                can_accept_clients=True,
+                supports_topics=True,
+                supports_binary_payloads=True,
+                supports_tls=True,
+            ),
+        ),
+    )
+
+
+def build_transport_registry() -> TransportRegistry:
+    registry = TransportRegistry()
+    for descriptor in default_transport_descriptors():
+        if descriptor.kind == TransportKind.SERIAL:
+            registry.register(
+                descriptor.kind,
+                lambda descriptor=descriptor: SerialTransportAdapter(descriptor),
+            )
+            continue
+        if descriptor.kind == TransportKind.TCP_CLIENT:
+            registry.register(
+                descriptor.kind,
+                lambda descriptor=descriptor: TcpClientTransportAdapter(descriptor),
+            )
+            continue
+        if descriptor.kind == TransportKind.MQTT_CLIENT:
+            registry.register(
+                descriptor.kind,
+                lambda descriptor=descriptor: MqttClientTransportAdapter(descriptor),
+            )
+            continue
+        if descriptor.kind == TransportKind.MQTT_SERVER:
+            registry.register(
+                descriptor.kind,
+                lambda descriptor=descriptor: MqttServerTransportAdapter(descriptor),
+            )
+            continue
+        if descriptor.kind == TransportKind.TCP_SERVER:
+            registry.register(
+                descriptor.kind,
+                lambda descriptor=descriptor: TcpServerTransportAdapter(descriptor),
+            )
+            continue
+        if descriptor.kind == TransportKind.UDP:
+            registry.register(
+                descriptor.kind,
+                lambda descriptor=descriptor: UdpTransportAdapter(descriptor),
+            )
+            continue
+        registry.register(
+            descriptor.kind,
+            lambda descriptor=descriptor: PlaceholderTransportAdapter(descriptor),
+        )
+    return registry
+
+
+def bootstrap_app_context(
+    base_dir: Path,
+    *,
+    workspace_override: Path | None = None,
+    persist_settings: bool = False,
+) -> AppContext:
+    settings_layout = ensure_settings_layout(default_settings_root(base_dir))
+    settings = load_app_settings(settings_layout)
+    workspace_root = resolve_workspace_root(base_dir, settings, workspace_override)
+    workspace = ensure_workspace_layout(workspace_root)
+
+    if workspace_override is not None or persist_settings:
+        settings = remember_workspace(settings, workspace.root)
+        save_app_settings(settings_layout, settings)
+
+    event_bus = EventBus()
+    log_store = InMemoryLogStore()
+    workspace_log_writer = WorkspaceJsonlLogWriter(default_workspace_log_path(workspace.logs))
+    packet_inspector = PacketInspectorState()
+    transport_registry = build_transport_registry()
+    wire_transport_logging(event_bus, log_store)
+    wire_packet_inspector(event_bus, packet_inspector)
+    event_bus.subscribe(StructuredLogEntry, workspace_log_writer.append)
+    serial_session_service = SerialSessionService(transport_registry, event_bus, workspace)
+    mqtt_client_service = MqttClientSessionService(transport_registry, event_bus, workspace)
+    mqtt_server_service = MqttServerSessionService(transport_registry, event_bus, workspace)
+    tcp_client_service = TcpClientSessionService(transport_registry, event_bus, workspace)
+    tcp_server_service = TcpServerSessionService(transport_registry, event_bus, workspace)
+    udp_service = UdpSessionService(transport_registry, event_bus, workspace)
+    packet_replay_service = PacketReplayExecutionService(
+        {
+            TransportKind.SERIAL: serial_session_service,
+            TransportKind.MQTT_CLIENT: mqtt_client_service,
+            TransportKind.MQTT_SERVER: mqtt_server_service,
+            TransportKind.TCP_CLIENT: tcp_client_service,
+            TransportKind.TCP_SERVER: tcp_server_service,
+            TransportKind.UDP: udp_service,
+        }
+    )
+    register_monitor_service = RegisterMonitorService(event_bus)
+    auto_response_runtime_service = AutoResponseRuntimeService(
+        event_bus,
+        {
+            TransportKind.SERIAL: serial_session_service,
+            TransportKind.MQTT_CLIENT: mqtt_client_service,
+            TransportKind.MQTT_SERVER: mqtt_server_service,
+            TransportKind.TCP_CLIENT: tcp_client_service,
+            TransportKind.TCP_SERVER: tcp_server_service,
+            TransportKind.UDP: udp_service,
+        },
+    )
+    rule_engine_service = RuleEngineService(
+        packet_replay_service=packet_replay_service,
+        auto_response_runtime_service=auto_response_runtime_service,
+        profile_path=default_automation_rules_profile_path(workspace.profiles),
+    )
+    device_scan_execution_service = DeviceScanExecutionService(
+        event_bus,
+        {
+            TransportKind.SERIAL: serial_session_service,
+            TransportKind.TCP_CLIENT: tcp_client_service,
+            TransportKind.TCP_SERVER: tcp_server_service,
+            TransportKind.UDP: udp_service,
+            TransportKind.MQTT_CLIENT: mqtt_client_service,
+            TransportKind.MQTT_SERVER: mqtt_server_service,
+        },
+    )
+    script_host_service = ScriptHostService()
+    script_host_service.register_host(PythonInlineScriptHost())
+    channel_bridge_runtime_service = ChannelBridgeRuntimeService(
+        event_bus,
+        script_host_service,
+        {
+            TransportKind.SERIAL: serial_session_service,
+            TransportKind.MQTT_CLIENT: mqtt_client_service,
+            TransportKind.MQTT_SERVER: mqtt_server_service,
+            TransportKind.TCP_CLIENT: tcp_client_service,
+            TransportKind.TCP_SERVER: tcp_server_service,
+            TransportKind.UDP: udp_service,
+        },
+    )
+    capture_replay_job_service = CaptureReplayJobService(packet_replay_service)
+    timed_task_service = TimedTaskService(rule_engine_service)
+
+    return AppContext(
+        base_dir=base_dir,
+        settings_layout=settings_layout,
+        settings=settings,
+        workspace=workspace,
+        transport_registry=transport_registry,
+        event_bus=event_bus,
+        log_store=log_store,
+        packet_inspector=packet_inspector,
+        serial_session_service=serial_session_service,
+        mqtt_client_service=mqtt_client_service,
+        mqtt_server_service=mqtt_server_service,
+        tcp_client_service=tcp_client_service,
+        tcp_server_service=tcp_server_service,
+        udp_service=udp_service,
+        packet_replay_service=packet_replay_service,
+        register_monitor_service=register_monitor_service,
+        auto_response_runtime_service=auto_response_runtime_service,
+        rule_engine_service=rule_engine_service,
+        device_scan_execution_service=device_scan_execution_service,
+        script_host_service=script_host_service,
+        timed_task_service=timed_task_service,
+        channel_bridge_runtime_service=channel_bridge_runtime_service,
+        capture_replay_job_service=capture_replay_job_service,
+    )
