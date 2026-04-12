@@ -1,32 +1,41 @@
 # ProtoLink Roadmap
 
-## M0 Foundation
+Last rebuilt: 2026-04-11
 
-### 目标
+## Scope
 
-把项目从“参考分析”推进到“正式工程可持续开发”。
+This file is a product-direction reference only.
 
-### 交付物
+- It is **not** the canonical backlog.
+- It is **not** the canonical mainline tracker.
+- It must not be used as the current planning source.
 
-- 正式工程骨架
-- 工作区模型
-- 配置加载基础
-- 主窗口和导航基线
-- 文档、验证路径、任务台账
+Canonical planning documents are:
 
-### 退出条件
+- `docs/ENGINEERING_TASKLIST.md`
+- `docs/PROJECT_STATUS.md`
+- `docs/MAINLINE_STATUS.md`
+- `docs/CURRENT_STATE.md`
 
-- 可启动
-- 可验证
-- 可继续迭代
+## Purpose
 
-## M1 Transport Core
+This roadmap preserves the long-horizon product shape so the team can reason about direction without polluting the active mainline.
 
-### 目标
+## Milestone themes
 
-打通基础传输层，形成统一连接生命周期。
+### M0 — Foundation
 
-### 范围
+Direction:
+
+- formal project shell
+- workspace model
+- settings/config bootstrap
+- main window and navigation baseline
+- canonical docs and validation entry points
+
+### M1 — Transport breadth
+
+Direction:
 
 - Serial
 - TCP Client
@@ -35,70 +44,37 @@
 - MQTT Client
 - MQTT Server
 
-### 退出条件
+### M2 — Protocol workbench
 
-- 至少 3 个传输模块达到可连接、可收发、可记录日志
-- 统一日志模型可复用
+Direction:
 
-## M2 Modbus Workbench
+- Modbus RTU workflow
+- Modbus TCP workflow
+- packet inspection
+- register monitoring
+- replay/export linkage
 
-### 目标
+### M3 — Automation and platformization
 
-以 Modbus RTU 为主线，建立第一个真正可交付的协议工作流。
+Direction:
 
-### 范围
+- rule engine
+- script host
+- timed tasks
+- channel bridge
+- richer automation owner surfaces
 
-- 自定义帧
-- 设备搜索
-- 数据监控
-- 自动应答
-- 帧解析
-- 导入导出
+### M4 — Delivery and handoff
 
-### 退出条件
+Direction:
 
-- 完成 Modbus RTU 端到端流程
-- 建立 Modbus TCP 的复用边界
+- trusted release gate
+- packaging and verification
+- install / uninstall / clean-machine delivery
+- release checklist and regression discipline
 
-## M3 Automation
+## Historical note
 
-### 目标
+Older task IDs and boundary text that once appeared here are now archived or retired.
 
-把 ProtoLink 从工具升级为平台。
-
-### 范围
-
-- 规则引擎
-- 脚本宿主
-- 通道联动
-- 定时任务
-- 报文回放
-
-### BL-003 验收边界
-
-- Script Console 只能通过当前受控脚本宿主进入 UI，默认保持 Python builtins 白名单，不扩大文件、模块导入或网络能力。
-- Script Console 必须展示 stdout、result、error 和运行状态，并在任何定时任务、通道桥接、自动化规则联动进入 UI 前提供可见停止/禁用路径。
-- Data Tools 作为独立工具面进入，不依赖当前 transport session；编码转换、校验和、格式化等能力必须先有 headless 单元测试。
-- Network Tools 采用 read-only-first 策略；涉及系统或网络配置写操作时，必须有明确权限边界、审计输出和回滚说明。
-- BL-003 不阻塞 M4 release-preparation；只有当 BL-002 干净退出后才进入实现主线。
-
-### BL-003 验证命令
-
-```powershell
-uv run pytest tests/test_script_host_service.py tests/test_rule_engine_service.py tests/test_channel_bridge_runtime_service.py -q
-uv run pytest tests/test_catalog.py tests/test_ui_main_window.py -q
-```
-
-## M4 Delivery
-
-### 目标
-
-让项目进入可打包、可测试、可交付状态。
-
-### 范围
-
-- 打包
-- 升级策略
-- 发布清单
-- 回归清单
-- 基础 smoke test
+Use `docs/TASK_ARCHIVE.md` for historical aliases and invalidated planning claims.

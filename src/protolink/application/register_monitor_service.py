@@ -17,6 +17,9 @@ class RegisterMonitorSnapshot:
     register_words_text: str = ""
     decoded_value: str = ""
     last_live_source: str | None = None
+    live_transport_kind: str | None = None
+    live_session_id: str | None = None
+    live_peer: str | None = None
     last_error: str | None = None
 
 
@@ -123,6 +126,20 @@ class RegisterMonitorService:
     def set_register_words_text(self, text: str) -> None:
         self._set_snapshot(register_words_text=text)
 
+    def set_live_scope(
+        self,
+        *,
+        transport_kind: str | None = None,
+        session_id: str | None = None,
+        peer: str | None = None,
+    ) -> None:
+        self._set_snapshot(
+            live_transport_kind=transport_kind,
+            live_session_id=session_id,
+            live_peer=peer,
+            last_error=None,
+        )
+
     def decode_current_words(self) -> None:
         point = self._selected_point()
         if point is None:
@@ -153,6 +170,12 @@ class RegisterMonitorService:
         if entry.category != "transport.message" or not entry.raw_payload:
             return
         if not entry.message.lower().startswith("inbound "):
+            return
+        if self._snapshot.live_transport_kind and entry.transport_kind != self._snapshot.live_transport_kind:
+            return
+        if self._snapshot.live_session_id and entry.session_id != self._snapshot.live_session_id:
+            return
+        if self._snapshot.live_peer and entry.metadata.get("peer") != self._snapshot.live_peer:
             return
 
         live_registers, source_label = self._extract_live_registers(entry.raw_payload)

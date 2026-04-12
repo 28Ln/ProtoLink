@@ -6,10 +6,13 @@ from pathlib import Path
 from protolink.application.auto_response_runtime_service import AutoResponseRuntimeService
 from protolink.application.capture_replay_job_service import CaptureReplayJobService
 from protolink.application.channel_bridge_runtime_service import ChannelBridgeRuntimeService
+from protolink.application.data_tools_service import DataToolsService
 from protolink.application.device_scan_execution_service import DeviceScanExecutionService
+from protolink.application.network_tools_service import NetworkToolsService
 from protolink.application.packet_replay_service import PacketReplayExecutionService
 from protolink.application.register_monitor_service import RegisterMonitorService
 from protolink.application.rule_engine_service import RuleEngineService
+from protolink.application.script_console_service import ScriptConsoleService
 from protolink.application.script_host_service import PythonInlineScriptHost, ScriptHostService
 from protolink.application.serial_service import SerialSessionService
 from protolink.application.mqtt_client_service import MqttClientSessionService
@@ -19,7 +22,14 @@ from protolink.application.tcp_server_service import TcpServerSessionService
 from protolink.application.timed_task_service import TimedTaskService
 from protolink.application.udp_service import UdpSessionService
 from protolink.core.event_bus import EventBus
-from protolink.core.logging import InMemoryLogStore, StructuredLogEntry, WorkspaceJsonlLogWriter, default_workspace_log_path
+from protolink.core.logging import (
+    InMemoryLogStore,
+    RuntimeFailureEvidenceRecorder,
+    StructuredLogEntry,
+    WorkspaceJsonlLogWriter,
+    default_runtime_failure_evidence_path,
+    default_workspace_log_path,
+)
 from protolink.core.packet_inspector import PacketInspectorState
 from protolink.core.settings import (
     AppSettings,
@@ -59,7 +69,10 @@ class AppContext:
     transport_registry: TransportRegistry
     event_bus: EventBus
     log_store: InMemoryLogStore
+    workspace_log_writer: WorkspaceJsonlLogWriter
     packet_inspector: PacketInspectorState
+    data_tools_service: DataToolsService
+    network_tools_service: NetworkToolsService
     serial_session_service: SerialSessionService
     mqtt_client_service: MqttClientSessionService
     mqtt_server_service: MqttServerSessionService
@@ -72,6 +85,7 @@ class AppContext:
     rule_engine_service: RuleEngineService
     device_scan_execution_service: DeviceScanExecutionService
     script_host_service: ScriptHostService
+    script_console_service: ScriptConsoleService
     timed_task_service: TimedTaskService
     channel_bridge_runtime_service: ChannelBridgeRuntimeService
     capture_replay_job_service: CaptureReplayJobService
@@ -194,10 +208,24 @@ def bootstrap_app_context(
         settings = remember_workspace(settings, workspace.root)
         save_app_settings(settings_layout, settings)
 
-    event_bus = EventBus()
+    runtime_failure_evidence_recorder = RuntimeFailureEvidenceRecorder(
+        default_runtime_failure_evidence_path(workspace.logs)
+    )
+    event_bus = EventBus(
+        failure_recorder=lambda error: runtime_failure_evidence_recorder.append_handler_error(
+            event_type=error.event_type.__name__,
+            handler_name=getattr(error.handler, "__name__", repr(error.handler)),
+            error=error.error,
+        )
+    )
     log_store = InMemoryLogStore()
-    workspace_log_writer = WorkspaceJsonlLogWriter(default_workspace_log_path(workspace.logs))
+    workspace_log_writer = WorkspaceJsonlLogWriter(
+        default_workspace_log_path(workspace.logs),
+        failure_evidence_recorder=runtime_failure_evidence_recorder,
+    )
     packet_inspector = PacketInspectorState()
+    data_tools_service = DataToolsService()
+    network_tools_service = NetworkToolsService()
     transport_registry = build_transport_registry()
     wire_transport_logging(event_bus, log_store)
     wire_packet_inspector(event_bus, packet_inspector)
@@ -234,6 +262,7 @@ def bootstrap_app_context(
         packet_replay_service=packet_replay_service,
         auto_response_runtime_service=auto_response_runtime_service,
         profile_path=default_automation_rules_profile_path(workspace.profiles),
+        event_bus=event_bus,
     )
     device_scan_execution_service = DeviceScanExecutionService(
         event_bus,
@@ -248,6 +277,11 @@ def bootstrap_app_context(
     )
     script_host_service = ScriptHostService()
     script_host_service.register_host(PythonInlineScriptHost())
+    script_console_service = ScriptConsoleService(
+        script_host_service,
+        workspace,
+        event_bus=event_bus,
+    )
     channel_bridge_runtime_service = ChannelBridgeRuntimeService(
         event_bus,
         script_host_service,
@@ -261,7 +295,7 @@ def bootstrap_app_context(
         },
     )
     capture_replay_job_service = CaptureReplayJobService(packet_replay_service)
-    timed_task_service = TimedTaskService(rule_engine_service)
+    timed_task_service = TimedTaskService(rule_engine_service, event_bus=event_bus)
 
     return AppContext(
         base_dir=base_dir,
@@ -271,7 +305,10 @@ def bootstrap_app_context(
         transport_registry=transport_registry,
         event_bus=event_bus,
         log_store=log_store,
+        workspace_log_writer=workspace_log_writer,
         packet_inspector=packet_inspector,
+        data_tools_service=data_tools_service,
+        network_tools_service=network_tools_service,
         serial_session_service=serial_session_service,
         mqtt_client_service=mqtt_client_service,
         mqtt_server_service=mqtt_server_service,
@@ -284,6 +321,7 @@ def bootstrap_app_context(
         rule_engine_service=rule_engine_service,
         device_scan_execution_service=device_scan_execution_service,
         script_host_service=script_host_service,
+        script_console_service=script_console_service,
         timed_task_service=timed_task_service,
         channel_bridge_runtime_service=channel_bridge_runtime_service,
         capture_replay_job_service=capture_replay_job_service,

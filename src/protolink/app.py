@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 import tempfile
 import time
@@ -22,7 +23,7 @@ from protolink.core.import_export import (
     package_release_bundle,
     resolve_artifact_kind,
 )
-from protolink.core.logging import default_workspace_log_path
+from protolink.core.logging import default_workspace_log_path, load_runtime_failure_evidence
 from protolink.core.packaging import (
     build_installer_staging_plan,
     build_installer_package_plan,
@@ -42,7 +43,14 @@ from protolink.core.packaging import (
     verify_installer_package,
     verify_installer_staging_package,
 )
-from protolink.core.packet_replay import ReplayDirection, build_packet_replay_plan, default_packet_replay_path, save_packet_replay_plan
+from protolink.core.packet_replay import (
+    ReplayDirection,
+    build_packet_replay_plan,
+    default_packet_replay_path,
+    infer_replay_direction,
+    load_packet_replay_plan,
+    save_packet_replay_plan,
+)
 from protolink.core.workspace import migrate_workspace, workspace_manifest_path
 from protolink.transports.serial import list_serial_ports
 
@@ -249,6 +257,8 @@ def run_ui_smoke_check() -> str:
             window = ProtoLinkMainWindow(
                 workspace=context.workspace,
                 inspector=context.packet_inspector,
+                data_tools_service=context.data_tools_service,
+                network_tools_service=context.network_tools_service,
                 serial_service=context.serial_session_service,
                 mqtt_client_service=context.mqtt_client_service,
                 mqtt_server_service=context.mqtt_server_service,
@@ -258,6 +268,10 @@ def run_ui_smoke_check() -> str:
                 packet_replay_service=context.packet_replay_service,
                 register_monitor_service=context.register_monitor_service,
                 rule_engine_service=context.rule_engine_service,
+                auto_response_runtime_service=context.auto_response_runtime_service,
+                script_console_service=context.script_console_service,
+                timed_task_service=context.timed_task_service,
+                channel_bridge_runtime_service=context.channel_bridge_runtime_service,
             )
             window.show()
             app.processEvents()
@@ -269,28 +283,163 @@ def run_ui_smoke_check() -> str:
             context.tcp_server_service.shutdown()
             context.udp_service.shutdown()
             context.packet_replay_service.shutdown()
+            context.channel_bridge_runtime_service.shutdown()
+            context.timed_task_service.shutdown()
     finally:
         app.quit()
         qInstallMessageHandler(previous_qt_message_handler)
     return "smoke-check-ok"
 
 
+def _inspect_workspace_log_jsonl(log_file: Path) -> tuple[bool, int, str | None]:
+    if not log_file.exists():
+        return False, 0, None
+
+    line_count = 0
+    try:
+        with log_file.open("r", encoding="utf-8") as handle:
+            for line_number, raw_line in enumerate(handle, start=1):
+                if not raw_line.strip():
+                    continue
+                line_count += 1
+                payload = json.loads(raw_line)
+                if not isinstance(payload, dict):
+                    return False, line_count, f"line {line_number} must contain a JSON object"
+                required_string_fields = ("entry_id", "timestamp", "level", "category", "message")
+                if not all(isinstance(payload.get(field), str) and str(payload.get(field, "")).strip() for field in required_string_fields):
+                    return False, line_count, f"line {line_number} is missing required structured-log fields"
+                if payload.get("session_id") is not None and not isinstance(payload.get("session_id"), str):
+                    return False, line_count, f"line {line_number} has an invalid session_id field"
+                if payload.get("transport_kind") is not None and not isinstance(payload.get("transport_kind"), str):
+                    return False, line_count, f"line {line_number} has an invalid transport_kind field"
+                raw_payload_hex = payload.get("raw_payload_hex")
+                if raw_payload_hex is not None and not isinstance(raw_payload_hex, str):
+                    return False, line_count, f"line {line_number} has an invalid raw_payload_hex field"
+                if not isinstance(payload.get("metadata", {}), dict):
+                    return False, line_count, f"line {line_number} must contain an object metadata field"
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return False, line_count, str(exc)
+
+    return True, line_count, None
+
+
+def _artifact_candidates(directory: Path) -> list[Path]:
+    if not directory.exists():
+        return []
+    return [
+        path
+        for path in directory.iterdir()
+        if path.is_file() and ".invalid" not in path.name
+    ]
+
+
+def _inspect_profile_artifacts(profiles_dir: Path) -> tuple[list[Path], list[Path]]:
+    valid: list[Path] = []
+    invalid: list[Path] = []
+    for path in _artifact_candidates(profiles_dir):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            invalid.append(path)
+            continue
+        if not isinstance(payload, dict):
+            invalid.append(path)
+            continue
+        format_version = payload.get("format_version")
+        if not isinstance(format_version, str) or not format_version.startswith("protolink-"):
+            invalid.append(path)
+            continue
+        valid.append(path)
+    return valid, invalid
+
+
+def _capture_plan_has_round_trip(plan) -> bool:
+    if len(plan.steps) < 2:
+        return False
+    saw_outbound = False
+    for step in plan.steps:
+        if step.direction == ReplayDirection.OUTBOUND:
+            saw_outbound = True
+            continue
+        if saw_outbound and step.direction == ReplayDirection.INBOUND:
+            return True
+    return False
+
+
+def _inspect_capture_artifacts(captures_dir: Path) -> tuple[list[Path], list[Path]]:
+    valid: list[Path] = []
+    invalid: list[Path] = []
+    for path in _artifact_candidates(captures_dir):
+        try:
+            plan = load_packet_replay_plan(path)
+        except (OSError, ValueError, json.JSONDecodeError, TypeError):
+            invalid.append(path)
+            continue
+        if not _capture_plan_has_round_trip(plan):
+            invalid.append(path)
+            continue
+        valid.append(path)
+    return valid, invalid
+
+
+def _latest_artifact(paths: list[Path]) -> Path | None:
+    if not paths:
+        return None
+    return max(paths, key=lambda path: path.stat().st_mtime)
+
+
 def build_release_preflight_report(context) -> dict[str, object]:
     workspace = context.workspace
     log_file = default_workspace_log_path(workspace.logs)
-    profile_candidates = [path for path in workspace.profiles.iterdir() if path.is_file()] if workspace.profiles.exists() else []
-    capture_candidates = [path for path in workspace.captures.iterdir() if path.is_file()] if workspace.captures.exists() else []
+    valid_profile_candidates, invalid_profile_candidates = _inspect_profile_artifacts(workspace.profiles)
+    valid_capture_candidates, invalid_capture_candidates = _inspect_capture_artifacts(workspace.captures)
+    selected_profile_file = _latest_artifact(valid_profile_candidates)
+    selected_capture_file = _latest_artifact(valid_capture_candidates)
     smoke_result = run_ui_smoke_check()
     manifest_file = workspace_manifest_path(workspace.root)
+    runtime_log_valid, runtime_log_line_count, runtime_log_parse_error = _inspect_workspace_log_jsonl(log_file)
+    runtime_failure_evidence_file, runtime_failure_evidence_entries, runtime_failure_evidence_error = load_runtime_failure_evidence(
+        workspace.logs
+    )
+    event_handler_errors = [
+        entry for entry in runtime_failure_evidence_entries if entry.get("code") == "event_handler_error"
+    ]
+    log_write_failures = [
+        entry for entry in runtime_failure_evidence_entries if entry.get("code") == "workspace_log_write_failure"
+    ]
+    current_event_handler_errors = [
+        {
+            "event_type": error.event_type.__name__,
+            "error": error.error,
+        }
+        for error in context.event_bus.handler_errors
+    ]
+    current_log_write_failure_count = context.workspace_log_writer.failed_write_count
+    current_log_write_last_error = context.workspace_log_writer.last_error
+    effective_event_handler_errors = event_handler_errors if event_handler_errors else current_event_handler_errors
+    effective_log_write_failure_count = len(log_write_failures) if log_write_failures else current_log_write_failure_count
+    effective_log_write_last_error = (
+        log_write_failures[-1]["message"]
+        if log_write_failures
+        else current_log_write_last_error
+    )
     blocking_items: list[str] = []
     if not manifest_file.exists():
         blocking_items.append("workspace_manifest_missing")
     if not log_file.exists():
         blocking_items.append("runtime_log_missing")
-    if not profile_candidates:
+    elif not runtime_log_valid:
+        blocking_items.append("runtime_log_invalid_jsonl")
+    if not selected_profile_file:
         blocking_items.append("profile_artifacts_missing")
-    if not capture_candidates:
+    if not selected_capture_file:
         blocking_items.append("capture_artifacts_missing")
+    if runtime_failure_evidence_error is not None:
+        blocking_items.append("runtime_failure_evidence_invalid")
+    if effective_event_handler_errors:
+        blocking_items.append("event_handler_errors_present")
+    if effective_log_write_failure_count > 0:
+        blocking_items.append("runtime_log_write_failures_detected")
     if smoke_result != "smoke-check-ok":
         blocking_items.append("smoke_check_failed")
     return {
@@ -299,9 +448,23 @@ def build_release_preflight_report(context) -> dict[str, object]:
         "manifest_exists": manifest_file.exists(),
         "log_file": str(log_file),
         "log_file_exists": log_file.exists(),
-        "profile_file_count": len(profile_candidates),
-        "capture_file_count": len(capture_candidates),
+        "runtime_log_valid": runtime_log_valid,
+        "runtime_log_line_count": runtime_log_line_count,
+        "runtime_log_parse_error": runtime_log_parse_error,
+        "profile_file_count": len(valid_profile_candidates),
+        "selected_profile_file": str(selected_profile_file) if selected_profile_file is not None else None,
+        "capture_file_count": len(valid_capture_candidates),
+        "selected_capture_file": str(selected_capture_file) if selected_capture_file is not None else None,
+        "invalid_profile_artifact_files": [str(path) for path in invalid_profile_candidates],
+        "invalid_capture_artifact_files": [str(path) for path in invalid_capture_candidates],
         "exports_dir": str(workspace.exports),
+        "event_handler_error_count": len(effective_event_handler_errors),
+        "event_handler_errors": effective_event_handler_errors,
+        "workspace_log_failed_write_count": effective_log_write_failure_count,
+        "workspace_log_last_error": effective_log_write_last_error,
+        "runtime_failure_evidence_file": str(runtime_failure_evidence_file) if runtime_failure_evidence_file is not None else None,
+        "runtime_failure_evidence_count": len(runtime_failure_evidence_entries),
+        "runtime_failure_evidence_error": runtime_failure_evidence_error,
         "smoke_check": smoke_result,
         "blocking_items": blocking_items,
         "ready": not blocking_items,
@@ -313,6 +476,16 @@ def find_optional_latest_file(directory: Path) -> Path | None:
         return find_latest_artifact_file(directory)
     except ProtoLinkUserError:
         return None
+
+
+def find_optional_latest_valid_profile_file(directory: Path) -> Path | None:
+    valid, _invalid = _inspect_profile_artifacts(directory)
+    return _latest_artifact(valid)
+
+
+def find_optional_latest_valid_capture_file(directory: Path) -> Path | None:
+    valid, _invalid = _inspect_capture_artifacts(directory)
+    return _latest_artifact(valid)
 
 
 def _wait_until(predicate, timeout: float = 5.0) -> None:
@@ -332,16 +505,44 @@ def generate_smoke_artifacts(context) -> dict[str, object]:
     if service.snapshot.connection_state.name != "CONNECTED":
         raise RuntimeError(service.snapshot.last_error or "Serial smoke session failed to connect.")
 
-    log_count_before = len(context.log_store.latest(500))
+    session_id = service.snapshot.active_session_id
+    if not session_id:
+        raise RuntimeError("Serial smoke session did not expose an active session id.")
+
     service.send_replay_payload(b"\x01\x03\x00\x0A\x00\x02", {"source": "release_smoke", "protocol": "modbus_rtu"})
-    _wait_until(lambda: len(context.log_store.latest(500)) > log_count_before)
+
+    def has_round_trip_messages() -> bool:
+        entries = [
+            entry
+            for entry in context.log_store.latest(500)
+            if entry.category == "transport.message" and entry.session_id == session_id
+        ]
+        saw_outbound = False
+        for entry in entries:
+            direction = infer_replay_direction(entry)
+            if direction == ReplayDirection.OUTBOUND:
+                saw_outbound = True
+                continue
+            if saw_outbound and direction == ReplayDirection.INBOUND:
+                return True
+        return False
+
+    _wait_until(has_round_trip_messages)
     _wait_until(lambda: default_workspace_log_path(context.workspace.logs).exists())
 
+    session_entries = [
+        entry
+        for entry in context.log_store.latest(500)
+        if entry.category == "transport.message" and entry.session_id == session_id
+    ]
+
     plan = build_packet_replay_plan(
-        context.log_store.latest(500),
+        session_entries,
         name="release-smoke-capture",
         include_directions={ReplayDirection.OUTBOUND, ReplayDirection.INBOUND},
     )
+    if not _capture_plan_has_round_trip(plan):
+        raise RuntimeError("Smoke capture did not produce a valid outbound/inbound round trip.")
     capture_path = default_packet_replay_path(context.workspace.captures, plan.name, created_at=plan.created_at)
     save_packet_replay_plan(capture_path, plan)
 
@@ -362,7 +563,7 @@ def prepare_release_bundle(context, name: str) -> dict[str, object]:
     generated_artifacts: dict[str, object] | None = None
 
     log_file = default_workspace_log_path(context.workspace.logs)
-    capture_file = find_optional_latest_file(context.workspace.captures)
+    capture_file = find_optional_latest_valid_capture_file(context.workspace.captures)
     if not log_file.exists() or capture_file is None:
         generated_artifacts = generate_smoke_artifacts(context)
 
@@ -379,8 +580,8 @@ def prepare_release_bundle(context, name: str) -> dict[str, object]:
         context.workspace,
         name,
         runtime_log_file=default_workspace_log_path(context.workspace.logs),
-        latest_capture_file=find_optional_latest_file(context.workspace.captures),
-        latest_profile_file=find_optional_latest_file(context.workspace.profiles),
+        latest_capture_file=find_optional_latest_valid_capture_file(context.workspace.captures),
+        latest_profile_file=find_optional_latest_valid_profile_file(context.workspace.profiles),
     )
     manifest = materialize_release_bundle(plan, preflight_report=preflight_report)
     return {
@@ -593,8 +794,8 @@ def main(argv: list[str] | None = None) -> int:
                 context.workspace,
                 args.export_release_bundle,
                 runtime_log_file=default_workspace_log_path(context.workspace.logs) if default_workspace_log_path(context.workspace.logs).exists() else None,
-                latest_capture_file=find_optional_latest_file(context.workspace.captures),
-                latest_profile_file=find_optional_latest_file(context.workspace.profiles),
+                latest_capture_file=find_optional_latest_valid_capture_file(context.workspace.captures),
+                latest_profile_file=find_optional_latest_valid_profile_file(context.workspace.profiles),
             )
             manifest = materialize_release_bundle(plan, preflight_report=preflight_report)
             print(
@@ -987,10 +1188,14 @@ def main(argv: list[str] | None = None) -> int:
     app.aboutToQuit.connect(context.tcp_server_service.shutdown)
     app.aboutToQuit.connect(context.udp_service.shutdown)
     app.aboutToQuit.connect(context.packet_replay_service.shutdown)
+    app.aboutToQuit.connect(context.channel_bridge_runtime_service.shutdown)
+    app.aboutToQuit.connect(context.timed_task_service.shutdown)
 
     window = ProtoLinkMainWindow(
         workspace=context.workspace,
         inspector=context.packet_inspector,
+        data_tools_service=context.data_tools_service,
+        network_tools_service=context.network_tools_service,
         serial_service=context.serial_session_service,
         mqtt_client_service=context.mqtt_client_service,
         mqtt_server_service=context.mqtt_server_service,
@@ -1000,6 +1205,10 @@ def main(argv: list[str] | None = None) -> int:
         packet_replay_service=context.packet_replay_service,
         register_monitor_service=context.register_monitor_service,
         rule_engine_service=context.rule_engine_service,
+        auto_response_runtime_service=context.auto_response_runtime_service,
+        script_console_service=context.script_console_service,
+        timed_task_service=context.timed_task_service,
+        channel_bridge_runtime_service=context.channel_bridge_runtime_service,
     )
     window.show()
     return app.exec()

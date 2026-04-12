@@ -1,124 +1,94 @@
 # ProtoLink Mainline Status
 
-Last rebuilt: 2026-04-10
+Last rebuilt: 2026-04-12
 
 ## Single active mainline
 
-- ID: `BL-002`
-- Title: Packaging / release / workspace migration
+- ID: `PL-011`
+- Title: Carry-over dirty workspace reconciliation
 
 ## Direct product requirement served
 
-This mainline directly serves the product-core requirement that ProtoLink must move from “verified development surface” toward “release-preparable product”.
+This mainline directly serves the current product-core requirement:
 
-The current repository already contains:
+> Restore one trustworthy release-ready baseline and handoff truth after the verified owner-surface and delivery stack has accumulated above the original delivery baseline.
 
-- validated transport breadth
-- packet inspection and raw-byte truth retention
-- Modbus RTU/TCP decode baselines
-- register-monitor baseline
-- replay baseline
-- automation/runtime baselines
+Why this is now the current product-core requirement:
 
-What is still missing now is explicit release preparation, smoke discipline, and packaging-readiness truth around the workflows that already exist.
-
-Current round update:
-
-- `ML-001` is closed at the workflow-surface level and has been archived
-- `NX-001` is closed at the runtime-truth level for the core path and has been archived
-- `NX-002` is closed at the acceptance-freeze level and has been archived
-- `NX-003` is closed at the implemented-surface drift-cleanup level and has been archived
-- `BL-001` is closed at the Modbus TCP workflow-productization level and has been archived
-- release-preparation checklist artifacts now exist through `docs/SMOKE_CHECKLIST.md` and `docs/RELEASE_CHECKLIST.md`
-- `uv run protolink --smoke-check` now provides an executable smoke-check path
-- `uv run protolink --generate-smoke-artifacts` now provides an executable path to materialize runtime artifacts into the active workspace
-- `uv run protolink --export-latest-profile` now provides a real profile export path for workspace migration preparation
-- `uv run protolink --migrate-workspace` now provides a workspace-migration baseline command
-- `uv run protolink --release-preflight` now provides an executable release-preparation report
-- `uv run protolink --export-release-bundle` now provides a multi-artifact release bundle path
-- `uv run protolink --prepare-release` now provides a one-shot release-preparation orchestration path
-- `uv run protolink --package-release` now provides an archive packaging path
-- `uv run protolink --build-portable-package` now provides a portable package archive path
-- `uv run protolink --install-portable-package` now provides a portable package extraction/install path
-- `uv run protolink --verify-portable-package` now provides a portable package verification path
-- `uv run protolink --build-distribution-package` now provides a distribution package archive path
-- `uv run protolink --install-distribution-package` now provides a distribution package extraction/install path
-- `uv run protolink --build-installer-staging` now provides an installer-staging archive path
-- `uv run protolink --install-installer-staging` now provides an installer-staging extraction/install path
-- `uv run protolink --verify-installer-staging` now provides an installer-staging verification path
-- `uv run protolink --verify-installer-package` now provides a top-level installer-package verification path
-- release preflight now blocks when capture artifacts are missing instead of reporting a false-positive ready state
-- portable package build/install now has a manifest-backed checksum truth surface instead of only loose copied payloads
-- distribution / installer install paths now validate nested archive checksums before installation proceeds
-- portable / distribution / installer install paths now reject zip path-traversal and symlink entries during extraction
-- portable package output now excludes `__pycache__` / `.pyc` residue from copied source payloads
-- the current verification baseline is `uv run pytest` -> 209 passed plus targeted RTU/runtime/acceptance/drift/TCP workflow coverage
+- trusted release truth now exists
+- bundled-runtime clean-machine delivery now exists
+- runtime/session truth unification now exists
+- engineering-quality gates now exist beyond compileall + pytest
+- clean release-staging sign-off now exists as an executable path
+- automation runtime safety controls now exist
+- Script Console owner surface now exists
+- Data Tools owner surface now exists
+- Network Tools owner surface now exists
+- `PL-010` now has explicit regression protection and closure evidence
+- the next highest-priority gap is repository baseline reconciliation and handoff truth
 
 ## Why this is first priority
 
-- It is the next biggest delivery step after the second owned workflow is in place.
-- It directly converts verified workflows into explicit release-preparation truth.
-- It is required before executable packaging work can be trusted.
+- It is the highest-value step after the release-gate, clean-machine delivery, runtime/session truth, verification-gate, clean release-staging sign-off, safe automation-expansion, Script Console owner-surface, Data Tools owner-surface, Network Tools owner-surface, and `PL-010` consistency-closure slices closed.
+- It directly protects delivery confidence, handoff trust, and the integrity of all subsequent iterations.
+- It prevents more feature or polish work from piling onto an unreconciled mixed baseline.
 
-## Why not other tasks first
+## Why not another task first
 
-- Not packaging first:
-  - release-preparation is now exactly the highest-value task because the second owned workflow exists
-- Not wider automation UI first:
-  - more automation UI before release-preparation truth would widen surface area faster than delivery readiness
+- Not further sign-off work first:
+  - clean release-staging validation now exists as an executable path
+- Not more feature expansion first:
+  - new surface work on top of a mixed baseline would widen drift and weaken handoff truth
+- Not more polish first:
+  - polish no longer outranks establishing one trustworthy baseline for the already-verified stack
+- Not archive-only cleanup first:
+  - historical cleanup should follow baseline establishment, not replace it
 
-## Current blockers to starting the mainline
+## Previous mainline results
 
-- No technical blocker is evidenced in the current codebase.
-- The only open blocker is packaging depth: distribution/package archives and install-time checksum gates now exist, but installer-grade packaging/distribution mechanics are still not implemented.
+- `PL-001` — release-gate hardening completed
+- `PL-002` — bundled-runtime delivery completed
+- `PL-003` — runtime/session truth completed
+- `PL-004` — verification and engineering standards completed
+- `PL-005` — clean release-staging sign-off completed
+- `PL-006` — safe automation-expansion completed
+- `PL-007` — Script Console owner surface completed
+- `PL-008` — Data Tools owner surface completed
+- `PL-009` — Network Tools owner surface completed
+- `PL-010` — owner-surface consistency closure completed
 
-## Tasks blocked by this mainline
+## Current implementation slice
 
-- `BL-003` — Script Console UI, Data Tools, and Network Tools boundary
+`PL-011` now continues through:
 
-## Next implementation entry
+- establishing one verified post-PL-010 baseline handoff point
+- synchronizing canonical docs, CI, validation, and git truth around that baseline
+- preventing future iterations from starting on top of an unreconciled mixed stack
 
-The next iteration must enter through the new release/smoke checklist path, not through unrelated feature expansion.
+## Blocked follow-on tasks
 
-`Script Console`, `Data Tools`, and `Network Tools` remain explicitly non-blocking for the active release-preparation mainline. They become the next product-expansion boundary only after BL-002 exits with clean release evidence.
+`PL-011` currently blocks:
 
-BL-003 acceptance must include:
+- `PL-012` — legacy alias cleanup in commentary and planning references
+- any new feature-expansion line that would otherwise build on top of an unreconciled baseline
 
-- script execution through the existing whitelisted script host, with stdout/result/error surfaced in the workspace-owned UI
-- an obvious stop/disable path before exposing timed tasks, channel bridges, or automation-driven script execution
-- deterministic Data Tools unit tests that run without transport or UI state
-- Network Tools read-only-first behavior, explicit privileged-command separation, and rollback documentation before any write operation is exposed
-- catalog/main-window drift tests when any of the three surfaces move into implemented UI status
+## Next iteration entry
 
-Expected entry points:
-
-- `docs/SMOKE_CHECKLIST.md`
-- `docs/RELEASE_CHECKLIST.md`
-- `docs/VALIDATION.md`
-- `src/protolink/app.py`
-- packaging/release scripts or commands when they are introduced
-
-## Verification gate for mainline exit
-
-At mainline exit, the repository must pass:
-
-- targeted release/smoke verification
-- `uv run pytest`
-- offscreen Qt smoke
-- updated current-state/status/backlog/docs synchronization
-
-BL-003 must additionally preserve these verification paths once it becomes active:
-
-- `uv run pytest tests/test_script_host_service.py tests/test_rule_engine_service.py tests/test_channel_bridge_runtime_service.py -q`
-- focused Data Tools tests for conversion/checksum determinism
-- focused Network Tools tests proving privileged operations are not invoked by default
-- `uv run pytest tests/test_catalog.py tests/test_ui_main_window.py -q`
-
-## Documents that must be synchronized when the mainline moves
-
-- `docs/CURRENT_STATE.md`
-- `docs/PROJECT_STATUS.md`
-- `docs/ENGINEERING_TASKLIST.md`
-- `docs/VALIDATION.md`
 - `README.md`
-- `docs/ARCHITECTURE.md` if the owner boundary changes
+- `docs/CURRENT_STATE.md`
+- `docs/ENGINEERING_TASKLIST.md`
+- `docs/PROJECT_STATUS.md`
+- `docs/MAINLINE_STATUS.md`
+- `docs/WORKTREE_RECONCILIATION.md`
+- `docs/TASK_ARCHIVE.md`
+- `docs/VALIDATION.md`
+- `.github/workflows/ci.yml`
+- `git status`, `git diff`, and recent commit history
+
+## Mainline exit evidence
+
+`PL-011` exits only when:
+
+- canonical docs stay synchronized
+- the repository has one verified post-PL-010 baseline handoff point
+- future iterations no longer start from an unreconciled mixed stack

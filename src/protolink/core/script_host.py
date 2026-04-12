@@ -15,6 +15,7 @@ class ScriptExecutionRequest:
     language: ScriptLanguage
     code: str
     context: Mapping[str, Any] = field(default_factory=dict)
+    timeout_seconds: float | None = 2.0
 
 
 @dataclass(frozen=True, slots=True)

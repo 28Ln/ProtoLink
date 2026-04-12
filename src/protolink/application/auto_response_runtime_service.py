@@ -7,7 +7,7 @@ from typing import Protocol
 
 from protolink.core.auto_response import AutoResponseRule, select_auto_response_action
 from protolink.core.event_bus import EventBus
-from protolink.core.logging import StructuredLogEntry
+from protolink.core.logging import LogLevel, StructuredLogEntry, create_log_entry
 from protolink.core.transport import TransportKind
 
 
@@ -25,6 +25,8 @@ class AutoResponseRuntimeSnapshot:
     rule_count: int = 0
     matched_count: int = 0
     last_rule_name: str | None = None
+    last_session_id: str | None = None
+    last_peer: str | None = None
     last_action_at: datetime | None = None
     last_error: str | None = None
 
@@ -84,6 +86,12 @@ class AutoResponseRuntimeService:
             return
         if not hasattr(target, "send_replay_payload"):
             return
+        target_session_id = _target_active_session_id(target)
+        if target_session_id and entry.session_id != target_session_id:
+            return
+        target_peer = _target_selected_peer(target)
+        if target_peer and entry.metadata.get("peer") != target_peer:
+            return
 
         action = select_auto_response_action(self._rules, entry.raw_payload)
         if action is None:
@@ -99,12 +107,23 @@ class AutoResponseRuntimeService:
                 },
             )
         except Exception as exc:
-            self._set_snapshot(last_error=f"Auto response send failed: {exc}")
+            error_message = f"Auto response send failed: {exc}"
+            self._publish_error_log(
+                error_message,
+                metadata={
+                    "rule_name": action.rule_name,
+                    "protocol": action.protocol.value,
+                    "transport_kind": transport_kind.value,
+                },
+            )
+            self._set_snapshot(last_error=error_message)
             return
 
         self._set_snapshot(
             matched_count=self._snapshot.matched_count + 1,
             last_rule_name=action.rule_name,
+            last_session_id=entry.session_id,
+            last_peer=entry.metadata.get("peer"),
             last_action_at=datetime.now(UTC),
             last_error=None,
         )
@@ -113,7 +132,29 @@ class AutoResponseRuntimeService:
         self._snapshot = replace(self._snapshot, **changes)
         self._notify()
 
+    def _publish_error_log(self, message: str, *, metadata: Mapping[str, str] | None = None) -> None:
+        self._event_bus.publish(
+            create_log_entry(
+                level=LogLevel.ERROR,
+                category="automation.auto_response.error",
+                message=message,
+                metadata=metadata,
+            )
+        )
+
     def _notify(self) -> None:
         snapshot = self._snapshot
         for listener in list(self._listeners):
             listener(snapshot)
+
+
+def _target_active_session_id(target: object) -> str | None:
+    snapshot = getattr(target, "snapshot", None)
+    session_id = getattr(snapshot, "active_session_id", None)
+    return session_id if isinstance(session_id, str) and session_id else None
+
+
+def _target_selected_peer(target: object) -> str | None:
+    snapshot = getattr(target, "snapshot", None)
+    peer = getattr(snapshot, "selected_client_peer", None)
+    return peer if isinstance(peer, str) and peer else None

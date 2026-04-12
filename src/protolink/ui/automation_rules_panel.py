@@ -13,19 +13,43 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from protolink.application.auto_response_runtime_service import AutoResponseRuntimeService, AutoResponseRuntimeSnapshot
+from protolink.application.channel_bridge_runtime_service import (
+    ChannelBridgeRuntimeService,
+    ChannelBridgeRuntimeSnapshot,
+)
 from protolink.application.rule_engine_service import RuleEngineService, RuleEngineSnapshot
+from protolink.application.timed_task_service import TimedTaskService, TimedTaskSnapshot
 from protolink.core.device_scan import DeviceScanConfig, DeviceScanTransportKind
 from protolink.core.rule_engine import AutomationAction, AutomationActionKind, AutomationRule
 from protolink.core.transport import TransportKind
 
 
 class AutomationRulesPanel(QWidget):
-    def __init__(self, service: RuleEngineService) -> None:
+    def __init__(
+        self,
+        service: RuleEngineService,
+        auto_response_service: AutoResponseRuntimeService | None = None,
+        timed_task_service: TimedTaskService | None = None,
+        channel_bridge_service: ChannelBridgeRuntimeService | None = None,
+    ) -> None:
         super().__init__()
         self.service = service
+        self.auto_response_service = auto_response_service
+        self.timed_task_service = timed_task_service
+        self.channel_bridge_service = channel_bridge_service
         self._syncing_controls = False
         self._build_ui()
         self.service.subscribe(self.refresh)
+        if self.auto_response_service is not None:
+            self.auto_response_service.subscribe(self._refresh_auto_response_status)
+            self._refresh_auto_response_status(self.auto_response_service.snapshot)
+        if self.timed_task_service is not None:
+            self.timed_task_service.subscribe(self._refresh_timed_task_status)
+            self._refresh_timed_task_status(self.timed_task_service.snapshot)
+        if self.channel_bridge_service is not None:
+            self.channel_bridge_service.subscribe(self._refresh_channel_bridge_status)
+            self._refresh_channel_bridge_status(self.channel_bridge_service.snapshot)
         self.refresh(self.service.snapshot)
 
     def _build_ui(self) -> None:
@@ -49,6 +73,11 @@ class AutomationRulesPanel(QWidget):
         header.addWidget(title)
         header.addStretch(1)
         header.addWidget(self.status_label)
+        self.notice_label = QLabel(
+            "Controlled automation only. Stop/disable boundaries remain explicit before broader automation expansion."
+        )
+        self.notice_label.setObjectName("MetaLabel")
+        self.notice_label.setWordWrap(True)
 
         grid = QGridLayout()
         grid.setHorizontalSpacing(10)
@@ -127,9 +156,12 @@ class AutomationRulesPanel(QWidget):
 
         frame_layout.addLayout(header)
         frame_layout.addWidget(self.profile_path_label)
+        frame_layout.addWidget(self.notice_label)
         frame_layout.addLayout(grid)
         frame_layout.addWidget(self.error_label)
         layout.addWidget(frame)
+        if any(service is not None for service in (self.auto_response_service, self.timed_task_service, self.channel_bridge_service)):
+            layout.addWidget(self._build_runtime_safety_frame())
         self._refresh_action_specific_controls()
 
     def refresh(self, snapshot: RuleEngineSnapshot) -> None:
@@ -146,12 +178,85 @@ class AutomationRulesPanel(QWidget):
         profile_path = self.service.profile_path
         self.profile_path_label.setText(f"Profile: {profile_path}" if profile_path is not None else "Profile: in-memory only")
         self.error_label.setText(snapshot.last_error or "Ready.")
-        self.delete_button.setEnabled(self.rule_combo.currentData() is not None)
+        self._refresh_primary_actions(snapshot)
+
+    def _build_runtime_safety_frame(self) -> QFrame:
+        frame = QFrame()
+        frame.setObjectName("Panel")
+        layout = QGridLayout(frame)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setHorizontalSpacing(10)
+        layout.setVerticalSpacing(8)
+
+        row = 0
+        title = QLabel("Automation Runtime Safety")
+        title.setObjectName("SectionTitle")
+        layout.addWidget(title, row, 0, 1, 4)
+        row += 1
+
+        self.auto_response_status_label = QLabel("Auto Response: unavailable")
+        self.enable_auto_response_button = QPushButton("Enable Auto Response")
+        self.disable_auto_response_button = QPushButton("Disable Auto Response")
+        if self.auto_response_service is not None:
+            self.enable_auto_response_button.clicked.connect(lambda: self.auto_response_service.set_enabled(True))
+            self.disable_auto_response_button.clicked.connect(lambda: self.auto_response_service.set_enabled(False))
+        else:
+            self.enable_auto_response_button.setEnabled(False)
+            self.disable_auto_response_button.setEnabled(False)
+        layout.addWidget(self.auto_response_status_label, row, 0, 1, 2)
+        layout.addWidget(self.enable_auto_response_button, row, 2)
+        layout.addWidget(self.disable_auto_response_button, row, 3)
+        row += 1
+
+        self.timed_task_status_label = QLabel("Timed Tasks: unavailable")
+        self.start_timed_tasks_button = QPushButton("Start Timed Tasks")
+        self.stop_timed_tasks_button = QPushButton("Stop Timed Tasks")
+        if self.timed_task_service is not None:
+            self.start_timed_tasks_button.clicked.connect(self.timed_task_service.start)
+            self.stop_timed_tasks_button.clicked.connect(self.timed_task_service.stop)
+        else:
+            self.start_timed_tasks_button.setEnabled(False)
+            self.stop_timed_tasks_button.setEnabled(False)
+        layout.addWidget(self.timed_task_status_label, row, 0, 1, 2)
+        layout.addWidget(self.start_timed_tasks_button, row, 2)
+        layout.addWidget(self.stop_timed_tasks_button, row, 3)
+        row += 1
+
+        self.channel_bridge_status_label = QLabel("Channel Bridges: unavailable")
+        self.clear_bridges_button = QPushButton("Clear Bridges")
+        if self.channel_bridge_service is not None:
+            self.clear_bridges_button.clicked.connect(self.channel_bridge_service.clear_bridges)
+        else:
+            self.clear_bridges_button.setEnabled(False)
+        layout.addWidget(self.channel_bridge_status_label, row, 0, 1, 3)
+        layout.addWidget(self.clear_bridges_button, row, 3)
+        return frame
+
+    def _refresh_auto_response_status(self, snapshot: AutoResponseRuntimeSnapshot) -> None:
+        self.auto_response_status_label.setText(
+            f"Auto Response: enabled={snapshot.enabled} rules={snapshot.rule_count} matched={snapshot.matched_count}"
+        )
+        self.enable_auto_response_button.setEnabled(self.auto_response_service is not None and not snapshot.enabled)
+        self.disable_auto_response_button.setEnabled(self.auto_response_service is not None and snapshot.enabled)
+
+    def _refresh_timed_task_status(self, snapshot: TimedTaskSnapshot) -> None:
+        self.timed_task_status_label.setText(
+            f"Timed Tasks: running={snapshot.running} tasks={len(snapshot.task_names)} runs={snapshot.execution_count}"
+        )
+        self.start_timed_tasks_button.setEnabled(self.timed_task_service is not None and not snapshot.running)
+        self.stop_timed_tasks_button.setEnabled(self.timed_task_service is not None and snapshot.running)
+
+    def _refresh_channel_bridge_status(self, snapshot: ChannelBridgeRuntimeSnapshot) -> None:
+        self.channel_bridge_status_label.setText(
+            f"Channel Bridges: total={len(snapshot.bridge_names)} enabled={len(snapshot.enabled_bridge_names)} bridged={snapshot.bridged_count}"
+        )
+        self.clear_bridges_button.setEnabled(self.channel_bridge_service is not None and bool(snapshot.bridge_names))
 
     def _on_rule_selected(self) -> None:
         if self._syncing_controls:
             return
         name = self.rule_combo.currentData()
+        self._refresh_primary_actions()
         rule = self.service.get_rule(name) if name else None
         if rule is None:
             return
@@ -169,6 +274,7 @@ class AutomationRulesPanel(QWidget):
             self.scan_unit_start.setValue(action.device_scan_config.unit_id_start)
             self.scan_unit_end.setValue(action.device_scan_config.unit_id_end)
         self._refresh_action_specific_controls()
+        self._refresh_primary_actions()
 
     def _on_save_rule(self) -> None:
         name = " ".join(self.name_input.text().strip().split())
@@ -252,6 +358,13 @@ class AutomationRulesPanel(QWidget):
         self.scan_target_input.setEnabled(is_scan)
         self.scan_unit_start.setEnabled(is_scan)
         self.scan_unit_end.setEnabled(is_scan)
+
+    def _refresh_primary_actions(self, snapshot: RuleEngineSnapshot | None = None) -> None:
+        snapshot = snapshot or self.service.snapshot
+        has_selected_rule = self.rule_combo.currentData() is not None
+        self.delete_button.setEnabled(has_selected_rule)
+        self.run_button.setEnabled(has_selected_rule)
+        self.clear_jobs_button.setEnabled(snapshot.prepared_device_scan_job_count > 0)
 
     def _set_combo_to_data(self, combo: QComboBox, value: object | None) -> None:
         index = combo.findData(value)

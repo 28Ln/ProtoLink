@@ -228,6 +228,10 @@ class ModbusRtuLabPanel(QWidget):
         state_label = snapshot.connection_state.value.upper()
         session_label = snapshot.active_session_id[:8] if snapshot.active_session_id else "-"
         target_label = snapshot.target or "-"
+        self.register_monitor_service.set_live_scope(
+            transport_kind=TransportKind.SERIAL.value if snapshot.connection_state == ConnectionState.CONNECTED else None,
+            session_id=snapshot.active_session_id if snapshot.connection_state == ConnectionState.CONNECTED else None,
+        )
         self.status_label.setText(
             f"Serial: {state_label}    Target: {target_label}    Session: {session_label}"
         )
@@ -260,6 +264,10 @@ class ModbusRtuLabPanel(QWidget):
     def _on_send_request(self) -> None:
         payload = self._build_request_payload()
         function_code = self._current_function_code()
+        self.register_monitor_service.set_live_scope(
+            transport_kind=TransportKind.SERIAL.value,
+            session_id=self.serial_service.snapshot.active_session_id,
+        )
         self.serial_service.send_replay_payload(
             payload,
             {

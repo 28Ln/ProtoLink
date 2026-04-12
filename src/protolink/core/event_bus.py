@@ -17,9 +17,10 @@ class EventHandlerError:
 
 
 class EventBus:
-    def __init__(self) -> None:
+    def __init__(self, *, failure_recorder: Callable[[EventHandlerError], None] | None = None) -> None:
         self._handlers: dict[type[Any], list[EventHandler]] = defaultdict(list)
         self._handler_errors: list[EventHandlerError] = []
+        self._failure_recorder = failure_recorder
 
     @property
     def handler_errors(self) -> tuple[EventHandlerError, ...]:
@@ -40,10 +41,14 @@ class EventBus:
             try:
                 handler(event)
             except Exception as exc:
-                self._handler_errors.append(
-                    EventHandlerError(
-                        event_type=type(event),
-                        handler=handler,
-                        error=str(exc),
-                    )
+                handler_error = EventHandlerError(
+                    event_type=type(event),
+                    handler=handler,
+                    error=str(exc),
                 )
+                self._handler_errors.append(handler_error)
+                if self._failure_recorder is not None:
+                    try:
+                        self._failure_recorder(handler_error)
+                    except Exception:
+                        pass

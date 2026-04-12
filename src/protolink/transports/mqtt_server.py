@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
 from amqtt.broker import Broker
 from amqtt.contexts import BrokerConfig
@@ -38,17 +39,18 @@ def _default_mqtt_server_descriptor() -> TransportDescriptor:
 class MqttServerConnectionSettings:
     host: str
     port: int
-    internal_client_id: str = "protolink-broker-monitor"
+    internal_client_id: str
     open_timeout: float = 5.0
 
     @classmethod
     def from_transport_config(cls, config: TransportConfig) -> "MqttServerConnectionSettings":
         host, port = parse_mqtt_server_target(config.target)
         options = dict(config.options)
+        internal_client_id = str(options.get("client_id", "") or "").strip() or f"protolink-broker-monitor-{uuid4().hex[:8]}"
         return cls(
             host=host,
             port=port,
-            internal_client_id=str(options.get("client_id", "protolink-broker-monitor") or "protolink-broker-monitor"),
+            internal_client_id=internal_client_id,
             open_timeout=float(options.get("open_timeout", 5.0) or 5.0),
         )
 
@@ -70,6 +72,7 @@ class MqttServerTransportAdapter(TransportAdapter):
         self._loop: asyncio.AbstractEventLoop | None = None
         self._broker: Broker | None = None
         self._client: mqtt.Client | None = None
+        self._settings: MqttServerConnectionSettings | None = None
         self._closing = False
         self._open_future: asyncio.Future[None] | None = None
         self._disconnect_future: asyncio.Future[None] | None = None
@@ -80,6 +83,7 @@ class MqttServerTransportAdapter(TransportAdapter):
             raise RuntimeError("MQTT server transport is already open.")
 
         settings = MqttServerConnectionSettings.from_transport_config(config)
+        self._settings = settings
         self.bind_session(config)
         self._loop = asyncio.get_running_loop()
         self._closing = False
@@ -140,6 +144,7 @@ class MqttServerTransportAdapter(TransportAdapter):
         self._open_future = None
         self._disconnect_future = None
         self._subscribe_future = None
+        self._settings = None
 
         broker = self._broker
         self._broker = None
@@ -148,8 +153,10 @@ class MqttServerTransportAdapter(TransportAdapter):
 
         if self.session is not None and self.session.state != ConnectionState.DISCONNECTED:
             self.emit_state(ConnectionState.DISCONNECTED)
+        self._loop = None
 
     async def send(self, payload: bytes, metadata: Mapping[str, str] | None = None) -> None:
+        await self._ensure_connected()
         client = self._require_client()
         outbound_metadata = dict(metadata or {})
         topic = outbound_metadata.get("topic")
@@ -160,6 +167,26 @@ class MqttServerTransportAdapter(TransportAdapter):
         info = client.publish(topic, payload=payload, qos=int(outbound_metadata.get("qos", "0") or 0))
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             raise RuntimeError(mqtt.error_string(info.rc))
+        await asyncio.to_thread(info.wait_for_publish)
+        if not info.is_published():
+            raise RuntimeError("MQTT broker publish did not complete.")
+
+    async def _ensure_connected(self) -> None:
+        client = self._require_client()
+        settings = self._settings
+        loop = self._loop
+        if settings is None or loop is None:
+            raise RuntimeError("MQTT server transport is not ready.")
+        if client.is_connected():
+            return
+
+        self._open_future = loop.create_future()
+        self._subscribe_future = loop.create_future()
+        await asyncio.to_thread(client.reconnect)
+        await asyncio.wait_for(self._open_future, timeout=settings.open_timeout)
+        await asyncio.wait_for(self._subscribe_future, timeout=settings.open_timeout)
+        if self.session is not None and self.session.state != ConnectionState.CONNECTED:
+            self.emit_state(ConnectionState.CONNECTED)
 
     def _require_client(self) -> mqtt.Client:
         if self._client is None:
@@ -174,7 +201,8 @@ class MqttServerTransportAdapter(TransportAdapter):
         reason_code: Any,
         properties: Any = None,
     ) -> None:
-        if self._loop is None:
+        loop = self._loop
+        if loop is None or loop.is_closed():
             return
 
         def handle_connect() -> None:
@@ -190,7 +218,10 @@ class MqttServerTransportAdapter(TransportAdapter):
                     self.emit_error(message)
                     self._open_future.set_exception(RuntimeError(message))
 
-        self._loop.call_soon_threadsafe(handle_connect)
+        try:
+            loop.call_soon_threadsafe(handle_connect)
+        except RuntimeError:
+            return
 
     def _on_disconnect(
         self,
@@ -200,7 +231,8 @@ class MqttServerTransportAdapter(TransportAdapter):
         reason_code: Any,
         properties: Any = None,
     ) -> None:
-        if self._loop is None:
+        loop = self._loop
+        if loop is None or loop.is_closed():
             return
 
         def handle_disconnect() -> None:
@@ -209,17 +241,24 @@ class MqttServerTransportAdapter(TransportAdapter):
             if not self._closing and self.session is not None and self.session.state != ConnectionState.DISCONNECTED:
                 self.emit_state(ConnectionState.DISCONNECTED)
 
-        self._loop.call_soon_threadsafe(handle_disconnect)
+        try:
+            loop.call_soon_threadsafe(handle_disconnect)
+        except RuntimeError:
+            return
 
     def _on_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:
-        if self._loop is None:
+        loop = self._loop
+        if loop is None or loop.is_closed():
             return
-        self._loop.call_soon_threadsafe(
-            self.emit_message,
-            MessageDirection.INBOUND,
-            bytes(msg.payload),
-            {"topic": msg.topic, "qos": str(msg.qos), "retain": str(int(msg.retain))},
-        )
+        try:
+            loop.call_soon_threadsafe(
+                self.emit_message,
+                MessageDirection.INBOUND,
+                bytes(msg.payload),
+                {"topic": msg.topic, "qos": str(msg.qos), "retain": str(int(msg.retain))},
+            )
+        except RuntimeError:
+            return
 
     def _on_subscribe(
         self,
@@ -229,7 +268,8 @@ class MqttServerTransportAdapter(TransportAdapter):
         reason_codes: Any,
         properties: Any = None,
     ) -> None:
-        if self._loop is None:
+        loop = self._loop
+        if loop is None or loop.is_closed():
             return
 
         def handle_subscribe() -> None:
@@ -237,4 +277,7 @@ class MqttServerTransportAdapter(TransportAdapter):
                 self._subscribe_future.set_result(None)
             self.emit_message(MessageDirection.INTERNAL, b"", {"event": "subscribed", "topic": "#"})
 
-        self._loop.call_soon_threadsafe(handle_subscribe)
+        try:
+            loop.call_soon_threadsafe(handle_subscribe)
+        except RuntimeError:
+            return

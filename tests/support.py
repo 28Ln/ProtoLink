@@ -7,6 +7,7 @@ import socket
 import asyncio
 import warnings
 import queue
+from uuid import uuid4
 
 from amqtt.broker import Broker
 from amqtt.contexts import BrokerConfig
@@ -174,9 +175,10 @@ class MqttExternalClient:
         self._messages: "queue.Queue[tuple[str, bytes]]" = queue.Queue()
         self._connected = threading.Event()
         self._subscribed = threading.Event()
+        unique_client_id = f"{client_id}-{uuid4().hex[:8]}"
         self._client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-            client_id=client_id,
+            client_id=unique_client_id,
             protocol=mqtt.MQTTv311,
         )
         self._client.on_connect = self._on_connect

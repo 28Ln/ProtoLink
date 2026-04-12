@@ -1,4 +1,5 @@
 import asyncio
+import socket
 import time
 
 from protolink.core.transport import ConnectionState, MessageDirection, TransportConfig, TransportEventType, TransportKind
@@ -10,20 +11,27 @@ def test_parse_mqtt_server_target_splits_host_and_port() -> None:
     assert parse_mqtt_server_target("127.0.0.1:1883") == ("127.0.0.1", 1883)
 
 
+def _find_unused_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
 def test_mqtt_server_transport_start_publish_receive_and_close() -> None:
     adapter = MqttServerTransportAdapter()
     events = []
     adapter.set_event_handler(events.append)
+    port = _find_unused_port()
 
     async def scenario() -> None:
         await adapter.open(
             TransportConfig(
                 kind=TransportKind.MQTT_SERVER,
                 name="Bench MQTT Server",
-                target="127.0.0.1:18831",
+                target=f"127.0.0.1:{port}",
             )
         )
-        with MqttExternalClient("127.0.0.1", 18831, client_id="external-mqtt") as client:
+        with MqttExternalClient("127.0.0.1", port, client_id=f"external-mqtt-{port}") as client:
             client.subscribe("bench/topic")
             await asyncio.sleep(1.0)
             await adapter.send(b"READY", {"topic": "bench/topic"})

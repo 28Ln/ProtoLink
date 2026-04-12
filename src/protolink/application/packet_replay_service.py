@@ -26,6 +26,8 @@ class PacketReplayExecutionSnapshot:
     running: bool = False
     plan_name: str | None = None
     target_kind: TransportKind | None = None
+    target_session_id: str | None = None
+    target_peer: str | None = None
     total_steps: int = 0
     dispatched_steps: int = 0
     skipped_steps: int = 0
@@ -84,10 +86,14 @@ class PacketReplayExecutionService:
             return
 
         started_at = datetime.now(UTC)
+        target_session_id = _target_active_session_id(target)
+        target_peer = _target_selected_peer(target)
         self._set_snapshot(
             running=True,
             plan_name=plan.name,
             target_kind=target_kind,
+            target_session_id=target_session_id,
+            target_peer=target_peer,
             total_steps=len(target_steps),
             dispatched_steps=0,
             skipped_steps=max(len(plan.steps) - len(target_steps), 0),
@@ -129,6 +135,14 @@ class PacketReplayExecutionService:
         for index, step in enumerate(steps, start=1):
             if step.delay_ms > 0:
                 await asyncio.sleep(step.delay_ms / 1000)
+            current_target_session_id = _target_active_session_id(target)
+            if current_target_session_id != self._snapshot.target_session_id:
+                if current_target_session_id is not None or self._snapshot.target_session_id is not None:
+                    raise RuntimeError("Replay target session changed during execution.")
+            current_target_peer = _target_selected_peer(target)
+            if current_target_peer != self._snapshot.target_peer:
+                if current_target_peer is not None or self._snapshot.target_peer is not None:
+                    raise RuntimeError("Replay target peer changed during execution.")
 
             metadata = {
                 **dict(step.metadata),
@@ -143,6 +157,10 @@ class PacketReplayExecutionService:
                 metadata.setdefault("source_session_id", step.session_id)
             if step.transport_kind:
                 metadata.setdefault("source_transport_kind", step.transport_kind)
+            if self._snapshot.target_session_id:
+                metadata.setdefault("replay_target_session_id", self._snapshot.target_session_id)
+            if self._snapshot.target_peer:
+                metadata.setdefault("replay_target_peer", self._snapshot.target_peer)
 
             target.send_replay_payload(step.payload, metadata)
             self._set_snapshot(dispatched_steps=index)
@@ -182,3 +200,15 @@ class PacketReplayExecutionService:
         if self._runtime is None:
             self._runtime = AsyncTaskRunner()
         return self._runtime
+
+
+def _target_active_session_id(target: object) -> str | None:
+    snapshot = getattr(target, "snapshot", None)
+    session_id = getattr(snapshot, "active_session_id", None)
+    return session_id if isinstance(session_id, str) and session_id else None
+
+
+def _target_selected_peer(target: object) -> str | None:
+    snapshot = getattr(target, "snapshot", None)
+    peer = getattr(snapshot, "selected_client_peer", None)
+    return peer if isinstance(peer, str) and peer else None

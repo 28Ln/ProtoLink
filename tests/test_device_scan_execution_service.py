@@ -9,9 +9,17 @@ from protolink.core.transport import TransportKind
 
 
 class _FakeScanTarget:
-    def __init__(self, *, connected: bool = True) -> None:
+    def __init__(self, *, connected: bool = True, session_id: str | None = None, peer: str | None = None) -> None:
         self.connected = connected
         self.sent: list[tuple[bytes, dict[str, str]]] = []
+        self.snapshot = type(
+            "Snapshot",
+            (),
+            {
+                "active_session_id": session_id,
+                "selected_client_peer": peer,
+            },
+        )()
 
     def is_connected(self) -> bool:
         return self.connected
@@ -98,3 +106,41 @@ def test_device_scan_execution_service_handles_rtu_and_connection_errors() -> No
     summary = service.finalize_current_scan()
     assert summary is not None
     assert summary.discovered_units == (1,)
+
+
+def test_device_scan_execution_service_filters_inbound_matches_by_active_session() -> None:
+    event_bus = EventBus()
+    target = _FakeScanTarget(session_id="session-a")
+    service = DeviceScanExecutionService(event_bus, {TransportKind.TCP_CLIENT: target})
+    config = DeviceScanConfig(
+        transport_kind=DeviceScanTransportKind.MODBUS_TCP,
+        target="127.0.0.1:502",
+        unit_id_start=1,
+        unit_id_end=1,
+    )
+
+    service.execute_scan(config, TransportKind.TCP_CLIENT)
+
+    event_bus.publish(
+        create_log_entry(
+            level=LogLevel.INFO,
+            category="transport.message",
+            message="Inbound payload (11 bytes)",
+            transport_kind=TransportKind.TCP_CLIENT.value,
+            session_id="session-b",
+            raw_payload=bytes([0x00, 0x01, 0x00, 0x00, 0x00, 0x05, 0x01, 0x03, 0x02, 0x00, 0x2A]),
+        )
+    )
+    assert service.snapshot.discovered_unit_ids == ()
+
+    event_bus.publish(
+        create_log_entry(
+            level=LogLevel.INFO,
+            category="transport.message",
+            message="Inbound payload (11 bytes)",
+            transport_kind=TransportKind.TCP_CLIENT.value,
+            session_id="session-a",
+            raw_payload=bytes([0x00, 0x01, 0x00, 0x00, 0x00, 0x05, 0x01, 0x03, 0x02, 0x00, 0x2A]),
+        )
+    )
+    assert service.snapshot.discovered_unit_ids == (1,)

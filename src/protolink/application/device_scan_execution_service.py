@@ -32,6 +32,8 @@ class DeviceScanExecutionSnapshot:
     running: bool = False
     transport_kind: DeviceScanTransportKind | None = None
     target_transport_kind: TransportKind | None = None
+    target_session_id: str | None = None
+    target_peer: str | None = None
     total_requests: int = 0
     dispatched_requests: int = 0
     pending_unit_ids: tuple[int, ...] = ()
@@ -51,6 +53,8 @@ class DeviceScanExecutionService:
         self._snapshot = DeviceScanExecutionSnapshot()
         self._active_config: DeviceScanConfig | None = None
         self._active_target_kind: TransportKind | None = None
+        self._active_target_session_id: str | None = None
+        self._active_target_peer: str | None = None
         self._outcomes_by_unit: dict[int, DeviceScanOutcome] = {}
         self._event_bus.subscribe(StructuredLogEntry, self._on_log_entry)
 
@@ -84,12 +88,16 @@ class DeviceScanExecutionService:
 
         self._active_config = config
         self._active_target_kind = target_transport_kind
+        self._active_target_session_id = _target_active_session_id(target)
+        self._active_target_peer = _target_selected_peer(target)
         self._outcomes_by_unit.clear()
         started_at = datetime.now(UTC)
         self._set_snapshot(
             running=True,
             transport_kind=config.transport_kind,
             target_transport_kind=target_transport_kind,
+            target_session_id=self._active_target_session_id,
+            target_peer=self._active_target_peer,
             total_requests=len(requests),
             dispatched_requests=0,
             pending_unit_ids=tuple(request.unit_id for request in requests),
@@ -147,6 +155,10 @@ class DeviceScanExecutionService:
             return
         if entry.transport_kind != self._active_target_kind.value:
             return
+        if self._active_target_session_id and entry.session_id != self._active_target_session_id:
+            return
+        if self._active_target_peer and entry.metadata.get("peer") != self._active_target_peer:
+            return
 
         outcome = self._match_outcome(entry.raw_payload)
         if outcome is None:
@@ -187,3 +199,15 @@ class DeviceScanExecutionService:
         snapshot = self._snapshot
         for listener in list(self._listeners):
             listener(snapshot)
+
+
+def _target_active_session_id(target: object) -> str | None:
+    snapshot = getattr(target, "snapshot", None)
+    session_id = getattr(snapshot, "active_session_id", None)
+    return session_id if isinstance(session_id, str) and session_id else None
+
+
+def _target_selected_peer(target: object) -> str | None:
+    snapshot = getattr(target, "snapshot", None)
+    peer = getattr(snapshot, "selected_client_peer", None)
+    return peer if isinstance(peer, str) and peer else None

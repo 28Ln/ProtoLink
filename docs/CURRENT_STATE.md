@@ -1,56 +1,64 @@
 # ProtoLink Current State
 
-Last rebuilt: 2026-04-10
+Last rebuilt: 2026-04-12
 
 ## Canonical scope
 
 This file is the current-state truth for ProtoLink.
 
-- It replaces the current-state role previously carried by legacy `docs/STATUS.md`.
-- It records only conclusions that are still supported by repository facts.
-- Historical task history is moved out of the active path and summarized in `docs/TASK_ARCHIVE.md`.
+- It records only conclusions still supported by repository facts.
+- It does not preserve legacy task ordering or stale milestone narration.
+- Historical stages and retired aliases live in `docs/TASK_ARCHIVE.md`.
 
 ## Evidence basis
 
-This state summary is rebuilt only from:
+This rebuild uses only:
 
 - `README.md`
 - `docs/ARCHITECTURE.md`
+- `docs/PROJECT_STATUS.md`
+- `docs/ENGINEERING_TASKLIST.md`
+- `docs/MAINLINE_STATUS.md`
+- `docs/TASK_ARCHIVE.md`
 - current repository structure and key entry files under `src/protolink/`
-- parent-repository git facts visible from this workspace
-- validation commands run on 2026-04-10
+- `git status`, `git diff --stat`, and recent project-local commits
+- validation commands and results executed on 2026-04-12
 
-## Facts
+## Repository / git truth
 
-### Repository / git truth
+- ProtoLink has a project-local Git repository rooted at `C:/Users/Administrator/Desktop/ProtoLink`.
+- ProtoLink originally established the project-local delivery baseline at commit `0fbaec6` (`Establish a verified ProtoLink delivery baseline`).
+- `PL-011` now exists because a long-lived verified post-baseline stack accumulated above that original baseline and must be reconciled into one trustworthy handoff point.
+- `ref/` remains reference-only local material and is excluded from the formal delivery baseline.
 
-- No `AGENT.md` or `AGENTS.md` file exists in the project root.
-- The ProtoLink directory now contains a project-local `.git` directory.
-- `git rev-parse --show-toplevel` from the ProtoLink workspace returns `C:/Users/Administrator/Desktop/ProtoLink`.
-- The project-local baseline excludes generated/runtime directories via `.gitignore`, including `.omx/`, `.protolink/`, `workspace/`, `dist/`, and `audit_tmp*/`.
-- `ref/` remains a local reference-asset directory and is excluded from the project-local delivery baseline because its child projects are embedded Git repositories.
+## Product shell truth
 
-### Product shell truth
-
-- The official product line is the root Python project under `src/protolink/`.
-- `ref/llcom` and `ref/Wu.CommTool` are reference-only assets, not the delivery baseline.
+- The formal product lives under `src/protolink/`.
 - The executable entry chain is:
   - `src/protolink/__main__.py`
   - `src/protolink/app.py`
   - `src/protolink/core/bootstrap.py`
   - `src/protolink/ui/main_window.py`
+- The stack remains Windows-first, Python 3.11, PySide6, `uv`, and pytest.
 
-### Runtime composition truth
+## Runtime composition truth
 
-- `bootstrap_app_context()` constructs:
+- `bootstrap_app_context()` currently constructs:
   - workspace and settings layouts
   - transport registry
   - event bus
   - in-memory log store
+  - workspace log writer
   - packet inspector state
   - session services for Serial / TCP Client / TCP Server / UDP / MQTT Client / MQTT Server
   - runtime services for replay, register monitor, auto response, rule engine, device scan execution, script host, timed tasks, channel bridge, and capture/replay jobs
-- The registered transport kinds are:
+- runtime consumers that depend on an active session now have explicit session/peer truth hooks in the current dirty-mainline slice:
+  - register monitor live scope
+  - device scan target session/peer scope
+  - auto response target session/peer scope
+  - channel bridge source session/peer scope
+  - packet replay target session/peer scope
+- Registered transport kinds are:
   - `serial`
   - `tcp_client`
   - `tcp_server`
@@ -58,9 +66,9 @@ This state summary is rebuilt only from:
   - `mqtt_client`
   - `mqtt_server`
 
-### Implemented GUI truth
+## Implemented owner-surface truth
 
-- The main window currently renders dedicated panels for:
+- The main window currently exposes dedicated panels for:
   - Serial Studio
   - Modbus RTU Lab
   - Modbus TCP Lab
@@ -71,140 +79,71 @@ This state summary is rebuilt only from:
   - UDP Lab
   - Register Monitor
   - Automation Rules
-- The packet inspector is exposed as a dock through `PacketConsoleWidget`.
-- `Modbus RTU Lab` now has a dedicated workflow panel for read-request composition, serial dispatch, register-monitor seeding, and packet-inspector decode linkage.
-- `Modbus TCP Lab` now has a dedicated workflow panel for request composition, TCP client dispatch, register-monitor seeding, and packet-inspector decode linkage.
-- `Modbus TCP Lab` now also supports replay-plan export, replay execution, and capture-bundle export from the owned workflow surface.
-- `Modbus TCP Lab` now has a dedicated acceptance path through `tests/test_modbus_tcp_workflow_acceptance.py`.
-- `Script Console`, `Data Tools`, and `Network Tools` still exist in the module catalog without dedicated main-window workflow panels.
+  - Script Console
+  - Data Tools
+  - Network Tools
+- The packet inspector is exposed through a docked `PacketConsoleWidget`.
+- `Automation Rules` now also exposes runtime safety controls for:
+  - auto-response enable / disable
+  - timed-task start / stop
+  - channel-bridge clear
+- `Network Tools` is now exposed as a read-only-first owner surface in the main window.
 
-### Data / logging / export truth
+## Delivery truth
 
-- Transport events are normalized into `StructuredLogEntry`.
-- Raw payload bytes are retained in memory and fed into `PacketInspectorState`.
-- Transport log entries are now also materialized into `workspace/logs/transport-events.jsonl`.
-- EventBus handler failures are isolated and retained as handler-error evidence instead of stopping later subscribers.
-- Workspace JSONL log writes now record write-failure counters instead of throwing through the transport path.
-- Invalid workspace/settings/profile/rules JSON files are now backed up to `.invalid` files before fallback/rebuild behavior runs.
-- Replay-plan files can be written under `workspace/captures/`.
-- Export scaffold bundles can be written under `workspace/exports/`.
-- Runtime log bundles can now be exported from real workspace log files instead of placeholder payloads.
-- Latest workspace profile artifacts can now be exported into real profile bundles.
-- Multi-artifact release bundles can now be exported from the active workspace.
-- Release preflight now treats missing capture artifacts as a blocking condition instead of a ready-state warning gap.
-- Portable package archives can now be built on top of packaged release bundles.
-- Portable package archives can now be extracted into a target directory.
-- Portable package archives now carry a manifest-backed checksum truth surface and an explicit verification path.
-- Portable package archives now exclude `__pycache__` / `.pyc` residue from copied source payloads.
-- Distribution package archives can now be built on top of portable and release archives.
-- Distribution package archives can now be extracted into staging and target directories.
-- Distribution / installer install flows now validate manifest-declared nested archive checksums before installation continues.
-- Portable / distribution / installer install flows now reject zip path-traversal and symlink entries during extraction.
-- Installer-staging package archives can now be built on top of distribution packages.
-- Portable/distribution/installer installation flows now emit install receipts into the final install target.
-- Installer package archives can now be built on top of installer-staging packages.
-- Installer package archives can now be verified through an explicit top-level CLI path.
-- Packet replay execution snapshot notifications now flow through the UI dispatcher when one is configured, so replay state changes do not bypass the main-thread scheduler in GUI entry points.
-- The Python inline script host now uses a builtins whitelist rather than exposing the full interpreter builtins surface by default.
-- MQTT server broker configuration now uses amqtt's explicit `plugins` configuration path, avoiding the deprecated EntryPoint plugin-loading path.
-- Offscreen UI smoke now sets a Windows font directory and filters the known offscreen-only `propagateSizeHints` Qt message, so smoke output stays clean while preserving the window show path.
-- A project-local CI workflow now exists at `.github/workflows/ci.yml` and mirrors compileall, pytest, headless summary, and build validation.
-- Runtime truth is now only partially materialized:
-  - logs are continuously written into the workspace
-  - replay-plan captures can be written into the workspace
-  - log export packaging can now package a real runtime artifact
-  - capture/export packaging is still incomplete for the broader runtime artifact set
+- ProtoLink already has executable commands for:
+  - headless summary
+  - smoke check
+  - workspace migration
+  - release preflight
+  - release bundle export
+  - release archive packaging
+  - portable / distribution / installer package build
+  - package verification
+  - package install / uninstall
+- Portable/distribution/installer payloads now bundle a Python runtime plus application/runtime dependencies.
+- Installed payloads can now run `protolink --headless-summary` through the bundled runtime without requiring preinstalled `uv` or Python.
+- Current delivery capability is now “bundled-runtime clean-machine runnable delivery”, but not yet a native self-contained Windows installer/executable product line.
+- The current engineering-quality gate now includes:
+  - canonical truth verification via `scripts/verify_canonical_truth.py`
+  - targeted regression suites via `scripts/run_targeted_regressions.py`
+  - clean release-staging verification via `scripts/verify_release_staging.py`
 
-### Workspace truth
+## Validation truth (executed 2026-04-12)
 
-- Verification-time active workspace: `C:\Users\Administrator\Desktop\ProtoLink\workspace\lab-a`
-- Persisted settings file: `C:\Users\Administrator\Desktop\ProtoLink\.protolink\app_settings.json`
-- Workspace manifest file: `workspace_manifest.json`
-- Runtime-generated artifacts currently exist under:
-  - `workspace/lab-a/exports/`
-  - `workspace/lab-a/profiles/`
-
-### Validation truth (2026-04-10)
-
-- `uv run protolink --headless-summary` -> passed
-- `uv run protolink --list-serial-ports` -> passed; no ports reported in this environment
-- `uv run protolink --workspace .\\workspace\\lab-a --print-workspace` -> passed
-- `uv run protolink --create-export-scaffold log demo .json` -> passed
-- `uv run protolink --workspace <temp-workspace> --export-runtime-log bench-runtime` -> passed
-- `uv run protolink --workspace <temp-workspace> --export-latest-profile bench-profile` -> passed
-- `uv run protolink --workspace .\\workspace\\lab-a --generate-smoke-artifacts` -> passed
-- `uv run protolink --smoke-check` -> passed
-- `uv run protolink --migrate-workspace` -> passed
-- `uv run protolink --release-preflight` -> passed
-- `uv run protolink --workspace <temp-workspace> --export-release-bundle bench-release` -> passed
-- `uv run protolink --workspace .\\workspace\\lab-a --prepare-release bench-release` -> passed
-- `uv run protolink --workspace .\\workspace\\lab-a --package-release bench-release` -> passed
-- `uv run protolink --workspace .\\workspace\\lab-a --build-portable-package bench-portable` -> passed
-- `uv run protolink --install-portable-package <archive> <target-dir>` -> passed
-- `uv run protolink --verify-portable-package <archive>` -> passed
-- `uv run protolink --workspace .\\workspace\\lab-a --build-distribution-package bench-distribution` -> passed
-- `uv run protolink --install-distribution-package <archive> <staging-dir> <target-dir>` -> passed
-- `uv run protolink --workspace .\\workspace\\lab-a --build-installer-staging bench-installer` -> passed
-- `uv run protolink --install-installer-staging <archive> <staging-dir> <target-dir>` -> passed
-- `uv run protolink --verify-installer-staging <archive>` -> passed
-- `uv run protolink --workspace .\\workspace\\lab-a --build-installer-package bench-installer-package` -> passed
-- `uv run protolink --verify-installer-package <archive>` -> passed
-- `uv run pytest` -> 229 passed
+- `uv run pytest -q` -> `263 passed`
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count 263` -> passed
+- `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
+- `uv run python scripts/verify_release_staging.py --name ci` -> passed
+- `uv run pytest tests/test_script_console_service.py tests/test_ui_script_console_panel.py tests/test_ui_main_window.py tests/test_script_host_service.py -q` -> passed
+- `uv run pytest tests/test_data_tools_service.py tests/test_ui_data_tools_panel.py tests/test_ui_main_window.py -q` -> passed
+- `uv run pytest tests/test_network_tools_service.py tests/test_ui_network_tools_panel.py tests/test_ui_main_window.py tests/test_bootstrap.py -q` -> passed
 - `uv build` -> passed
-- `uv run protolink --workspace .\\workspace\\lab-a --build-installer-package audit-fix` -> passed
-- `uv run protolink --verify-installer-package .\\workspace\\lab-a\\exports\\20260410-114315-installer-package-audit-fix.zip` -> passed
-- Offscreen Qt smoke -> `smoke-check-ok` with clean output
-- Targeted Modbus RTU workflow UI validation passes through `tests/test_ui_modbus_rtu_panel.py`
-- Targeted Modbus TCP workflow UI validation passes through `tests/test_ui_modbus_tcp_panel.py`
-- Targeted workspace logging validation passes through `tests/test_logging.py` and `tests/test_wiring.py`
-- Runtime log export CLI validation passes through `tests/test_app.py` / `tests/test_import_export.py`
-- Latest profile export CLI validation passes through `tests/test_app.py`
-- Workspace migration baseline validation passes through `tests/test_workspace.py` / `tests/test_app.py`
-- Release preflight and release bundle validation now pass through `tests/test_app.py` / `tests/test_import_export.py`
-- Smoke-artifact generation validation now passes through `tests/test_app.py`
-- Release preparation orchestration validation now passes through `tests/test_app.py`
-- Release package archive validation now passes through `tests/test_app.py` / `tests/test_import_export.py`
-- Portable package validation now passes through `tests/test_packaging.py` / `tests/test_app.py`
-- Portable package install validation now passes through `tests/test_packaging.py` / `tests/test_app.py`
-- Distribution package validation now passes through `tests/test_packaging.py` / `tests/test_app.py`
-- Distribution package install validation now passes through `tests/test_packaging.py` / `tests/test_app.py`
-- Installer-staging package validation now passes through `tests/test_packaging.py` / `tests/test_app.py`
-- Installer-staging install validation now passes through `tests/test_packaging.py` / `tests/test_app.py`
-- Installer-staging verification validation now passes through `tests/test_packaging.py` / `tests/test_app.py`
-- Installer-package validation now passes through `tests/test_packaging.py` / `tests/test_app.py`
-- Install-receipt validation now passes through `tests/test_packaging.py` / `tests/test_app.py`
-- Dedicated RTU workflow acceptance validation passes through `tests/test_modbus_rtu_workflow_acceptance.py`
-- Dedicated TCP workflow acceptance validation passes through `tests/test_modbus_tcp_workflow_acceptance.py`
-- Drift-regression validation passes through `tests/test_catalog.py` / `tests/test_ui_main_window.py`
-- Executable smoke-check validation passes through `--smoke-check`
-- Full-suite validation now covers 229 tests and includes the script-host whitelist, config backup, logging isolation, packet replay dispatcher, and packaging schema updates.
+- `uv run protolink --headless-summary` -> passed
+- `uv run protolink --smoke-check` -> `smoke-check-ok`
+- `uv run protolink --workspace .\\workspace\\audit-tmp-verification --generate-smoke-artifacts` -> passed
+- `uv run protolink --workspace .\\workspace\\audit-tmp-verification --release-preflight` -> passed
+- `uv run protolink --workspace .\\workspace\\audit-tmp-verification --build-installer-package audit` -> passed
+- `uv run protolink --verify-installer-package <generated-archive>` -> passed
+- `uv run protolink --install-installer-package <generated-archive> <staging-dir> <install-dir>` -> passed
+- `<install-dir>\\runtime\\python.exe -m protolink --headless-summary` -> passed for the installed bundled-runtime payload
+- `uv run protolink --uninstall-portable-package <install-dir>` -> passed
 
-## Current judgments (inference from facts)
+## Baseline-reconciliation truth
 
-- Transport foundation is no longer the primary delivery bottleneck.
-- The first explicit Modbus RTU product workflow is now closed at the workflow-surface level:
-  - explicit owned GUI entry
-  - request dispatch
-  - packet-inspector linkage
-  - decode linkage
-  - register-monitor linkage
-  - replay-plan export/replay linkage
-- The core runtime-truth path for that RTU workflow now exists:
-  - workspace-backed logs
-  - replay/capture files
-  - real log export bundle
-  - real capture export bundle from the RTU workflow path
-- A dedicated RTU workflow acceptance path now exists.
-- A dedicated TCP workflow acceptance path now also exists.
-- Code-visible truth drift is reduced but not fully eliminated:
-  - implemented transport surfaces are now marked `Bootstrapped`
-  - the main-window badge now points at the canonical mainline document instead of a stale hardcoded ID
-- The currently active `workspace/lab-a` can now be driven to a preflight-green state through executable release-prep commands.
-- The currently active `workspace/lab-a` can now complete a full `--package-release` flow successfully.
-- The currently active `workspace/lab-a` can now complete a full `--build-portable-package` flow successfully.
-- The currently active `workspace/lab-a` can now complete a full `--build-distribution-package` flow successfully.
-- The currently active `workspace/lab-a` can now complete a full installer-staging build/install flow successfully.
-- The currently active `workspace/lab-a` can now complete a full installer-package build flow successfully.
-- The currently active `workspace/lab-a` can now verify the top-level installer-package archive successfully.
-- The packaging line now includes release prep, archive packaging, portable package build/extract/verify, distribution package build/extract, installer-staging package build/extract, installer-package build, install receipts, checksum-validated nested archive installation, safe archive extraction guards, portable manifest-backed checksum truth, and top-level installer-package verification.
-- The remaining highest-value product gap is no longer RTU closure, status drift, TCP owned-surface bootstrap, preflight artifact absence, or warning noise; it is proving the installer flow on a clean release-staging machine.
+- `PL-011` exists because release hardening, runtime hardening, owner-surface expansion, and canonical doc/CI truth accumulated in one long-lived post-baseline stack.
+- The active reconciliation line now treats that verified stack as one baseline candidate instead of as unrelated local residue.
+- The current handoff goal is one trustworthy post-PL-010 baseline with canonical docs, CI, and validation all pointing at the same mainline truth.
+- The current reconciliation anchor is still the original local baseline commit `0fbaec6`, plus a verified worktree that currently spans `50` tracked modified paths, `16` untracked paths, and `3273` insertions / `1864` deletions.
+- Authoritative validation for this reconciliation scope is the `uv`-managed environment; ad-hoc system-Python collection failures are not canonical truth.
+
+## Current judgment
+
+- Transport breadth and basic owned workflow coverage are no longer the first-order gap.
+- The completed release-gate slice established:
+  - one canonical backlog
+  - one canonical mainline
+  - one clean baseline or explicitly classified dirty baseline
+  - one trustworthy release gate tied to real validation evidence
+- Owner-surface consistency is no longer the first-order gap; `PL-010` now has explicit regression evidence and closure proof.
+- The current first-order gap is baseline reconciliation, canonical handoff truth, and a trustworthy post-PL-010 mainline baseline.

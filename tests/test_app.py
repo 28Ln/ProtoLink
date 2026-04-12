@@ -1,10 +1,13 @@
 import hashlib
 import json
+import os
 from pathlib import Path
+import tempfile
 
 from protolink.app import main
+from protolink.core.logging import create_log_entry, LogLevel
 from protolink.core.errors import CliExitCode, ProtoLinkUserError
-from protolink.core.logging import default_workspace_log_path
+from protolink.core.logging import default_workspace_log_path, serialize_log_entry
 from protolink.core.packaging import (
     DISTRIBUTION_PACKAGE_FORMAT_VERSION,
     INSTALLER_PACKAGE_FORMAT_VERSION,
@@ -47,6 +50,113 @@ def _write_portable_archive(archive_file: Path) -> None:
             archive.writestr(name, payload)
         archive.writestr("demo-release.zip", b"release-bytes")
         archive.writestr(PORTABLE_MANIFEST_FILE, json.dumps(manifest, ensure_ascii=False, indent=2))
+
+
+def _write_valid_runtime_log(workspace) -> Path:
+    runtime_log = default_workspace_log_path(workspace.logs)
+    session_id = "bench-session"
+    entries = [
+        create_log_entry(
+            level=LogLevel.INFO,
+            category="transport.message",
+            message="Outbound payload (6 bytes)",
+            session_id=session_id,
+            transport_kind="serial",
+            raw_payload=b"\x01\x03\x00\x0A\x00\x02",
+            metadata={"source": "release_smoke", "protocol": "modbus_rtu"},
+        ),
+        create_log_entry(
+            level=LogLevel.INFO,
+            category="transport.message",
+            message="Inbound payload (6 bytes)",
+            session_id=session_id,
+            transport_kind="serial",
+            raw_payload=b"\x01\x03\x00\x0A\x00\x02",
+            metadata={"source": "serial"},
+        ),
+    ]
+    runtime_log.write_text(
+        "".join(json.dumps(serialize_log_entry(entry), ensure_ascii=False) + "\n" for entry in entries),
+        encoding="utf-8",
+    )
+    return runtime_log
+
+
+def _write_valid_serial_profile(workspace) -> Path:
+    profile_file = workspace.profiles / "serial_studio.json"
+    profile_file.write_text(
+        json.dumps(
+            {
+                "format_version": "protolink-serial-studio-v1",
+                "selected_preset_name": None,
+                "draft": {
+                    "target": "loop://",
+                    "baudrate": 9600,
+                    "send_mode": "hex",
+                    "line_ending": "none",
+                    "send_text": "",
+                    "selected_preset_name": None,
+                },
+                "presets": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return profile_file
+
+
+def _write_valid_capture(workspace, *, name: str = "replay.json") -> Path:
+    capture_file = workspace.captures / name
+    capture_file.write_text(
+        json.dumps(
+            {
+                "format_version": "protolink-packet-replay-v1",
+                "name": "release-smoke-capture",
+                "created_at": "2026-04-11T00:00:00+00:00",
+                "steps": [
+                    {
+                        "delay_ms": 0,
+                        "direction": "outbound",
+                        "session_id": "bench-session",
+                        "transport_kind": "serial",
+                        "payload_hex": "01 03 00 0a 00 02",
+                        "metadata": {"source": "release_smoke", "protocol": "modbus_rtu"},
+                        "source_message": "Outbound payload (6 bytes)",
+                    },
+                    {
+                        "delay_ms": 5,
+                        "direction": "inbound",
+                        "session_id": "bench-session",
+                        "transport_kind": "serial",
+                        "payload_hex": "01 03 00 0a 00 02",
+                        "metadata": {"source": "serial"},
+                        "source_message": "Inbound payload (6 bytes)",
+                    },
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return capture_file
+
+
+def _configure_fake_bundled_runtime(monkeypatch, tmp_path: Path) -> None:
+    runtime_root = tmp_path / "runtime-src"
+    site_packages = tmp_path / "site-packages-src"
+    (runtime_root / "DLLs").mkdir(parents=True, exist_ok=True)
+    (runtime_root / "Lib" / "encodings").mkdir(parents=True, exist_ok=True)
+    (site_packages / "demo_pkg").mkdir(parents=True, exist_ok=True)
+    for file_name in ("python.exe", "pythonw.exe", "python3.dll", "python311.dll", "vcruntime140.dll", "vcruntime140_1.dll"):
+        (runtime_root / file_name).write_bytes(b"runtime")
+    (runtime_root / "DLLs" / "libcrypto-3.dll").write_bytes(b"dll")
+    (runtime_root / "Lib" / "encodings" / "__init__.py").write_text("# encodings\n", encoding="utf-8")
+    (site_packages / "demo_pkg" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
+    monkeypatch.setenv("PROTOLINK_BUNDLED_RUNTIME_ROOT", str(runtime_root))
+    monkeypatch.setenv("PROTOLINK_BUNDLED_SITE_PACKAGES", str(site_packages))
 
 
 def test_main_lists_serial_ports_without_bootstrap(monkeypatch, capsys) -> None:
@@ -207,10 +317,9 @@ def test_main_migrates_workspace_and_prints_report(monkeypatch, tmp_path, capsys
 def test_main_runs_release_preflight(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
-    runtime_log = default_workspace_log_path(workspace.logs)
-    runtime_log.write_text('{"category":"transport.message"}\n', encoding="utf-8")
-    (workspace.captures / "replay.json").write_text('{"steps":[]}\n', encoding="utf-8")
-    (workspace.profiles / "serial_studio.json").write_text('{"format_version":"protolink-serial-studio-v1"}\n', encoding="utf-8")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
     monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
 
     exit_code = main(["--release-preflight"])
@@ -230,9 +339,8 @@ def test_main_runs_release_preflight(monkeypatch, tmp_path, capsys) -> None:
 def test_main_release_preflight_reports_missing_capture_artifacts(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
-    runtime_log = default_workspace_log_path(workspace.logs)
-    runtime_log.write_text('{"category":"transport.message"}\n', encoding="utf-8")
-    (workspace.profiles / "serial_studio.json").write_text('{"format_version":"protolink-serial-studio-v1"}\n', encoding="utf-8")
+    _write_valid_runtime_log(workspace)
+    _write_valid_serial_profile(workspace)
     monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
 
     exit_code = main(["--release-preflight"])
@@ -244,13 +352,130 @@ def test_main_release_preflight_reports_missing_capture_artifacts(monkeypatch, t
     assert payload["ready"] is False
 
 
-def test_main_exports_release_bundle(monkeypatch, tmp_path, capsys) -> None:
+def test_main_release_preflight_rejects_invalid_runtime_log(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
     runtime_log = default_workspace_log_path(workspace.logs)
-    runtime_log.write_text('{"category":"transport.message"}\n', encoding="utf-8")
-    (workspace.captures / "replay.json").write_text('{"steps":[]}\n', encoding="utf-8")
-    (workspace.profiles / "serial_studio.json").write_text('{"format_version":"protolink-serial-studio-v1"}\n', encoding="utf-8")
+    runtime_log.write_text("{not-json\n", encoding="utf-8")
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "runtime_log_invalid_jsonl" in payload["blocking_items"]
+    assert payload["runtime_log_valid"] is False
+    assert payload["ready"] is False
+
+
+def test_main_release_preflight_rejects_junk_profile_and_capture_artifacts(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    (workspace.profiles / "junk.txt").write_text("not-a-profile", encoding="utf-8")
+    (workspace.captures / "junk.bin").write_text("not-a-capture", encoding="utf-8")
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "capture_artifacts_missing" in payload["blocking_items"]
+    assert any(path.endswith("junk.txt") for path in payload["invalid_profile_artifact_files"])
+    assert any(path.endswith("junk.bin") for path in payload["invalid_capture_artifact_files"])
+    assert payload["ready"] is False
+
+
+def test_main_release_preflight_uses_latest_valid_capture_and_profile(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_serial_profile(workspace)
+    _write_valid_capture(workspace, name="20260411-valid-capture.json")
+    (workspace.captures / "20260411-stale-invalid.json").write_text('{"steps":[]}\n', encoding="utf-8")
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert payload["selected_capture_file"].endswith("20260411-valid-capture.json")
+    assert payload["selected_profile_file"].endswith("serial_studio.json")
+    assert payload["ready"] is True
+
+
+def test_main_release_preflight_rejects_event_handler_errors(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    def inject_handler_error(base_dir, *args, **kwargs):
+        from protolink.core.bootstrap import bootstrap_app_context
+
+        context = bootstrap_app_context(base_dir, *args, **kwargs)
+
+        def fail(entry) -> None:
+            raise RuntimeError("handler failed")
+
+        context.event_bus.subscribe(type(create_log_entry(level=LogLevel.INFO, category="audit", message="x")), fail)
+        context.event_bus.publish(create_log_entry(level=LogLevel.INFO, category="audit", message="x"))
+        return context
+
+    monkeypatch.setattr("protolink.app.bootstrap_app_context", inject_handler_error)
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "event_handler_errors_present" in payload["blocking_items"]
+    assert payload["event_handler_error_count"] == 1
+    assert payload["ready"] is False
+
+
+def test_main_release_preflight_rejects_runtime_log_write_failures(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    def inject_writer_failure(base_dir, *args, **kwargs):
+        from protolink.core.bootstrap import bootstrap_app_context
+
+        context = bootstrap_app_context(base_dir, *args, **kwargs)
+        context.workspace_log_writer.failed_write_count = 2
+        context.workspace_log_writer.last_error = "disk full"
+        return context
+
+    monkeypatch.setattr("protolink.app.bootstrap_app_context", inject_writer_failure)
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "runtime_log_write_failures_detected" in payload["blocking_items"]
+    assert payload["workspace_log_failed_write_count"] == 2
+    assert payload["workspace_log_last_error"] == "disk full"
+    assert payload["ready"] is False
+
+
+def test_main_exports_release_bundle(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
     monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
 
     exit_code = main(["--export-release-bundle", "bench release"])
@@ -274,25 +499,23 @@ def test_main_generates_smoke_artifacts(monkeypatch, tmp_path, capsys) -> None:
     assert exit_code == int(CliExitCode.OK)
     assert Path(payload["log_file"]).exists()
     assert Path(payload["capture_file"]).exists()
-    assert payload["replay_step_count"] >= 1
+    assert payload["replay_step_count"] >= 2
 
 
 def test_main_prepares_release_bundle(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
-    (workspace.profiles / "serial_studio.json").write_text('{"format_version":"protolink-serial-studio-v1"}\n', encoding="utf-8")
+    _write_valid_serial_profile(workspace)
     monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
 
     def _fake_generate_smoke_artifacts(context):
-        runtime_log = default_workspace_log_path(context.workspace.logs)
-        runtime_log.write_text('{"category":"transport.message"}\n', encoding="utf-8")
-        capture_file = context.workspace.captures / "release-smoke.json"
-        capture_file.write_text('{"steps":[]}\n', encoding="utf-8")
+        runtime_log = _write_valid_runtime_log(context.workspace)
+        capture_file = _write_valid_capture(context.workspace, name="release-smoke.json")
         return {
             "workspace": str(context.workspace.root),
             "log_file": str(runtime_log),
             "capture_file": str(capture_file),
-            "replay_step_count": 1,
+            "replay_step_count": 2,
         }
 
     monkeypatch.setattr("protolink.app.generate_smoke_artifacts", _fake_generate_smoke_artifacts)
@@ -303,7 +526,7 @@ def test_main_prepares_release_bundle(monkeypatch, tmp_path, capsys) -> None:
 
     assert exit_code == int(CliExitCode.OK)
     assert payload["preflight"]["ready"] is True
-    assert payload["generated_artifacts"]["replay_step_count"] == 1
+    assert payload["generated_artifacts"]["replay_step_count"] == 2
     bundle_dir = Path(payload["bundle_dir"])
     assert bundle_dir.exists()
     assert (bundle_dir / "release-preflight.json").exists()
@@ -313,19 +536,17 @@ def test_main_prepares_release_bundle(monkeypatch, tmp_path, capsys) -> None:
 def test_main_packages_release_bundle(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
-    (workspace.profiles / "serial_studio.json").write_text('{"format_version":"protolink-serial-studio-v1"}\n', encoding="utf-8")
+    _write_valid_serial_profile(workspace)
     monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
 
     def _fake_generate_smoke_artifacts(context):
-        runtime_log = default_workspace_log_path(context.workspace.logs)
-        runtime_log.write_text('{"category":"transport.message"}\n', encoding="utf-8")
-        capture_file = context.workspace.captures / "release-smoke.json"
-        capture_file.write_text('{"steps":[]}\n', encoding="utf-8")
+        runtime_log = _write_valid_runtime_log(context.workspace)
+        capture_file = _write_valid_capture(context.workspace, name="release-smoke.json")
         return {
             "workspace": str(context.workspace.root),
             "log_file": str(runtime_log),
             "capture_file": str(capture_file),
-            "replay_step_count": 1,
+            "replay_step_count": 2,
         }
 
     monkeypatch.setattr("protolink.app.generate_smoke_artifacts", _fake_generate_smoke_artifacts)
@@ -342,20 +563,19 @@ def test_main_packages_release_bundle(monkeypatch, tmp_path, capsys) -> None:
 
 def test_main_builds_portable_package(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
+    _configure_fake_bundled_runtime(monkeypatch, tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
-    (workspace.profiles / "serial_studio.json").write_text('{"format_version":"protolink-serial-studio-v1"}\n', encoding="utf-8")
+    _write_valid_serial_profile(workspace)
     monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
 
     def _fake_generate_smoke_artifacts(context):
-        runtime_log = default_workspace_log_path(context.workspace.logs)
-        runtime_log.write_text('{"category":"transport.message"}\n', encoding="utf-8")
-        capture_file = context.workspace.captures / "release-smoke.json"
-        capture_file.write_text('{"steps":[]}\n', encoding="utf-8")
+        runtime_log = _write_valid_runtime_log(context.workspace)
+        capture_file = _write_valid_capture(context.workspace, name="release-smoke.json")
         return {
             "workspace": str(context.workspace.root),
             "log_file": str(runtime_log),
             "capture_file": str(capture_file),
-            "replay_step_count": 1,
+            "replay_step_count": 2,
         }
 
     monkeypatch.setattr("protolink.app.generate_smoke_artifacts", _fake_generate_smoke_artifacts)
@@ -369,6 +589,47 @@ def test_main_builds_portable_package(monkeypatch, tmp_path, capsys) -> None:
     assert Path(payload["portable_archive_file"]).exists()
     assert Path(payload["portable_archive_file"]).suffix == ".zip"
     assert payload["portable_manifest"]["format_version"] == "protolink-portable-package-v1"
+
+
+def test_main_portable_bundle_installs_bundled_runtime_and_launch_scripts(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    _configure_fake_bundled_runtime(monkeypatch, tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "w")
+    _write_valid_serial_profile(workspace)
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    def _fake_generate_smoke_artifacts(context):
+        runtime_log = _write_valid_runtime_log(context.workspace)
+        capture_file = _write_valid_capture(context.workspace, name="release-smoke.json")
+        return {
+            "workspace": str(context.workspace.root),
+            "log_file": str(runtime_log),
+            "capture_file": str(capture_file),
+            "replay_step_count": 2,
+        }
+
+    monkeypatch.setattr("protolink.app.generate_smoke_artifacts", _fake_generate_smoke_artifacts)
+
+    exit_code = main(["--build-portable-package", "p"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    install_dir = tmp_path / "i"
+    exit_code = main(["--install-portable-package", str(payload["portable_archive_file"]), str(install_dir)])
+    captured = capsys.readouterr()
+    install_payload = json.loads(captured.out)
+    assert exit_code == int(CliExitCode.OK)
+    runtime_python = install_dir / "runtime" / "python.exe"
+    assert runtime_python.exists()
+    assert (install_dir / "runtime" / "pythonw.exe").exists()
+    assert (install_dir / "sp").exists()
+    assert (install_dir / "Launch-ProtoLink.ps1").exists()
+    assert (install_dir / "Launch-ProtoLink.bat").exists()
+    install_script = (install_dir / "INSTALL.ps1").read_text(encoding="utf-8")
+    assert "runtime\\python.exe" in install_script
+    assert "PYTHONPATH" in install_script
+    assert install_payload["target_dir"] == str(install_dir)
 
 
 def test_main_installs_portable_package(monkeypatch, tmp_path, capsys) -> None:
@@ -390,20 +651,19 @@ def test_main_installs_portable_package(monkeypatch, tmp_path, capsys) -> None:
 
 def test_main_builds_distribution_package(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
+    _configure_fake_bundled_runtime(monkeypatch, tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
-    (workspace.profiles / "serial_studio.json").write_text('{"format_version":"protolink-serial-studio-v1"}\n', encoding="utf-8")
+    _write_valid_serial_profile(workspace)
     monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
 
     def _fake_generate_smoke_artifacts(context):
-        runtime_log = default_workspace_log_path(context.workspace.logs)
-        runtime_log.write_text('{"category":"transport.message"}\n', encoding="utf-8")
-        capture_file = context.workspace.captures / "release-smoke.json"
-        capture_file.write_text('{"steps":[]}\n', encoding="utf-8")
+        runtime_log = _write_valid_runtime_log(context.workspace)
+        capture_file = _write_valid_capture(context.workspace, name="release-smoke.json")
         return {
             "workspace": str(context.workspace.root),
             "log_file": str(runtime_log),
             "capture_file": str(capture_file),
-            "replay_step_count": 1,
+            "replay_step_count": 2,
         }
 
     monkeypatch.setattr("protolink.app.generate_smoke_artifacts", _fake_generate_smoke_artifacts)
@@ -465,20 +725,19 @@ def test_main_installs_distribution_package(monkeypatch, tmp_path, capsys) -> No
 
 def test_main_builds_installer_staging_package(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
+    _configure_fake_bundled_runtime(monkeypatch, tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
-    (workspace.profiles / "serial_studio.json").write_text('{"format_version":"protolink-serial-studio-v1"}\n', encoding="utf-8")
+    _write_valid_serial_profile(workspace)
     monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
 
     def _fake_generate_smoke_artifacts(context):
-        runtime_log = default_workspace_log_path(context.workspace.logs)
-        runtime_log.write_text('{"category":"transport.message"}\n', encoding="utf-8")
-        capture_file = context.workspace.captures / "release-smoke.json"
-        capture_file.write_text('{"steps":[]}\n', encoding="utf-8")
+        runtime_log = _write_valid_runtime_log(context.workspace)
+        capture_file = _write_valid_capture(context.workspace, name="release-smoke.json")
         return {
             "workspace": str(context.workspace.root),
             "log_file": str(runtime_log),
             "capture_file": str(capture_file),
-            "replay_step_count": 1,
+            "replay_step_count": 2,
         }
 
     monkeypatch.setattr("protolink.app.generate_smoke_artifacts", _fake_generate_smoke_artifacts)
@@ -562,20 +821,19 @@ def test_main_installs_installer_staging_package(monkeypatch, tmp_path, capsys) 
 
 def test_main_builds_installer_package(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
+    _configure_fake_bundled_runtime(monkeypatch, tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
-    (workspace.profiles / "serial_studio.json").write_text('{"format_version":"protolink-serial-studio-v1"}\n', encoding="utf-8")
+    _write_valid_serial_profile(workspace)
     monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
 
     def _fake_generate_smoke_artifacts(context):
-        runtime_log = default_workspace_log_path(context.workspace.logs)
-        runtime_log.write_text('{"category":"transport.message"}\n', encoding="utf-8")
-        capture_file = context.workspace.captures / "release-smoke.json"
-        capture_file.write_text('{"steps":[]}\n', encoding="utf-8")
+        runtime_log = _write_valid_runtime_log(context.workspace)
+        capture_file = _write_valid_capture(context.workspace, name="release-smoke.json")
         return {
             "workspace": str(context.workspace.root),
             "log_file": str(runtime_log),
             "capture_file": str(capture_file),
-            "replay_step_count": 1,
+            "replay_step_count": 2,
         }
 
     monkeypatch.setattr("protolink.app.generate_smoke_artifacts", _fake_generate_smoke_artifacts)
@@ -754,7 +1012,8 @@ def test_main_rejects_installer_package_with_checksum_mismatch(monkeypatch, tmp_
             {
                 "format_version": INSTALLER_PACKAGE_FORMAT_VERSION,
                 "installer_staging_archive_file": "installer-staging.zip",
-                "checksum": _sha256_file(installer_staging_archive)[:-1] + "0",
+                "checksum": ("0" if _sha256_file(installer_staging_archive)[0] != "0" else "1")
+                + _sha256_file(installer_staging_archive)[1:],
             },
             ensure_ascii=False,
             indent=2,

@@ -44,6 +44,10 @@ class ReleaseBundlePlan:
     missing_artifact_labels: tuple[str, ...]
 
 
+def build_artifact_timestamp(value: datetime) -> str:
+    return value.strftime("%Y%m%d-%H%M%S-%f")
+
+
 def sanitize_artifact_name(name: str) -> str:
     collapsed = re.sub(r"[^A-Za-z0-9._-]+", "-", name.strip())
     normalized = collapsed.strip("._-")
@@ -69,7 +73,7 @@ def build_export_bundle_plan(
     exported_at = exported_at or datetime.now(UTC)
     sanitized_name = sanitize_artifact_name(name)
     normalized_extension = normalize_export_extension(extension)
-    timestamp = exported_at.strftime("%Y%m%d-%H%M%S")
+    timestamp = build_artifact_timestamp(exported_at)
     bundle_name = f"{timestamp}-{kind.value}-{sanitized_name}"
     bundle_dir = workspace.exports / bundle_name
     payload_file = bundle_dir / f"{sanitized_name}{normalized_extension}"
@@ -158,7 +162,7 @@ def build_release_bundle_plan(
     latest_profile_file: Path | None = None,
 ) -> ReleaseBundlePlan:
     exported_at = exported_at or datetime.now(UTC)
-    bundle_name = f"{exported_at.strftime('%Y%m%d-%H%M%S')}-release-{sanitize_artifact_name(name)}"
+    bundle_name = f"{build_artifact_timestamp(exported_at)}-release-{sanitize_artifact_name(name)}"
     bundle_dir = workspace.exports / bundle_name
     manifest_file = bundle_dir / "manifest.json"
 

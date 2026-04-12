@@ -1,182 +1,131 @@
 # ProtoLink Task Archive
 
-Last rebuilt: 2026-04-09
+Last rebuilt: 2026-04-12
 
 ## Scope
 
-This file holds historical task groups and invalidated historical claims that should no longer drive active planning.
+This file stores historical stages, retired aliases, and invalidated claims so they stop polluting the active mainline.
 
-Use this file for context only.
-
-The canonical backlog is `docs/ENGINEERING_TASKLIST.md`.
+It is not a second backlog.
 
 ## Archived completed groups
 
-### AR-001 — Foundation archive
+### Foundation / bootstrap baseline
 
-Archived as completed:
+- Legacy aliases:
+  - `AR-001`
+- Archived because:
+  - root project shell, workspace/settings bootstrap, CLI entry, event bus, structured logging baseline, and packet-inspector shell already exist
 
-- root-level Python project skeleton
-- workspace and settings bootstrap
-- CLI shell and non-GUI summary path
-- event bus and structured logging model
-- packet-inspector shell
+### Transport breadth baseline
 
-Why archived:
+- Legacy aliases:
+  - `AR-002`
+- Archived because:
+  - Serial / TCP Client / TCP Server / UDP / MQTT Client / MQTT Server breadth already exists
 
-- these are implemented and validated; they are not current mainline tasks anymore
+### Shared workbench baseline
 
-### AR-002 — Transport-core archive
+- Legacy aliases:
+  - `AR-003`
+- Archived because:
+  - raw packet composer, replay baseline, Modbus RTU/TCP decode baseline, register-monitor baseline, and related shared tooling already exist
 
-Archived as completed:
+### Automation infrastructure baseline
 
-- Serial transport / service / panel
-- TCP Client transport / service / panel
-- TCP Server transport / service / panel
-- UDP transport / service / panel
-- MQTT Client transport / service / panel
-- MQTT Server transport / service / panel
-- shared connection lifecycle base
-- transport profile persistence base
+- Legacy aliases:
+  - `AR-004`
+- Archived because:
+  - rule engine, script host abstraction, timed task runtime, channel bridge runtime, and capture/replay job baseline already exist
 
-Why archived:
+### RTU owned-workflow closure
 
-- transport breadth already exists and passes current validation
+- Legacy aliases:
+  - `AR-005`
+  - `ML-001`
+- Archived because:
+  - the RTU owner surface and acceptance path already exist
 
-### AR-003 — Shared workbench baseline archive
+### RTU runtime-truth materialization
 
-Archived as completed-at-baseline:
+- Legacy aliases:
+  - `AR-006`
+  - `NX-001`
+- Archived because:
+  - workspace log/capture/export paths already exist for the first RTU workflow line
 
-- raw packet composer
-- replay plan build/save/load/run baseline
-- Modbus RTU decode baseline
-- Modbus TCP decode baseline
-- register-monitor baseline
-- auto-response baseline
-- device-scan baseline
+### RTU acceptance freeze
 
-Why archived:
+- Legacy aliases:
+  - `AR-007`
+  - `NX-002`
+- Archived because:
+  - the RTU acceptance path already exists
 
-- baseline capability exists
-- follow-on work is now integration/productization, not baseline re-creation
+### Implemented-surface drift cleanup
 
-### AR-004 — Automation infrastructure archive
+- Legacy aliases:
+  - `AR-008`
+  - `NX-003`
+- Archived because:
+  - the first drift-cleanup stage has already been completed
 
-Archived as completed-at-baseline:
+### Modbus TCP owned-workflow productization
 
-- rule engine
-- script host abstraction
-- timed task service
-- channel bridge runtime service
-- capture/replay job service baseline
+- Legacy aliases:
+  - `AR-009`
+  - `BL-001`
+- Archived because:
+  - a dedicated Modbus TCP owner surface and acceptance path already exist
 
-Why archived:
+### Legacy packaging / release primitive build-out
 
-- code and tests already exist
-- current missing work is productization/UI sequencing, not baseline existence
+- Legacy aliases:
+  - `BL-002`
+- Archived because:
+  - packaging, verification, install, and uninstall primitives already exist
+  - the active work is no longer primitive creation; it is trusted release truth and baseline freeze
 
-### AR-005 — First explicit Modbus RTU workflow closure
+### Owner-surface consistency closure
 
-Archived as completed:
+- Canonical ID:
+  - `PL-010`
+- Archived because:
+  - owner-surface notices, wrapped guidance, CTA gating, and consistency regressions are now explicit and verified
 
-- dedicated `Modbus RTU Lab` GUI owner surface
-- RTU read-request composition
-- serial dispatch through the owned workflow surface
-- packet-inspector decode linkage
-- register-monitor point seeding
-- replay-plan export/replay linkage from the same workflow
+## Retired canonical aliases
 
-Why archived:
+These aliases are historical only and must not be used as current planning IDs:
 
-- the workflow-surface closure work is done
-- the next delivery gap is runtime truth materialization, not RTU workflow ownership
-
-### AR-006 — Runtime truth materialization for the first RTU workflow path
-
-Archived as completed:
-
-- workspace-backed log materialization into `workspace/logs/transport-events.jsonl`
-- real runtime log export bundle
-- real capture/export bundle path from the closed RTU workflow
-
-Why archived:
-
-- the core runtime artifact path now exists
-- the next delivery gap is acceptance freeze, not artifact-path existence
-
-### AR-007 — Acceptance freeze for the first RTU workflow path
-
-Archived as completed:
-
-- dedicated RTU workflow acceptance test
-- validation-doc entry for the acceptance path
-
-Why archived:
-
-- the acceptance contract now exists
-- the next delivery gap is code-visible truth alignment, not acceptance-path absence
-
-### AR-008 — Implemented-surface drift cleanup
-
-Archived as completed:
-
-- implemented transport surfaces marked `Bootstrapped`
-- main-window badge now points to canonical docs instead of a stale hardcoded mainline ID
-- drift-regression tests for catalog/main-window truth
-
-Why archived:
-
-- code-visible truth on implemented surfaces is now aligned enough to stop driving the active mainline
-- the next delivery gap is owned Modbus TCP productization
-
-### AR-009 — Modbus TCP workflow productization
-
-Archived as completed:
-
-- dedicated `Modbus TCP Lab` GUI surface
-- Modbus TCP request composition / dispatch / decode linkage
-- register-monitor seeding
-- replay-plan export / replay
-- capture-bundle export
-- dedicated acceptance test
-
-Why archived:
-
-- the second owned workflow now exists at a verified product level
-- the next delivery gap is release preparation rather than additional TCP surface bootstrap
-
-## Legacy open items reclassified
-
-### Legacy item: capture-and-replay job baseline
-
-- New classification: `Archived`
-- Reason: baseline code, bootstrap wiring, and tests already exist
-
-### Legacy item: automation rule persistence UI affordances beyond the current runtime editor
-
-- New classification: `Blocked`
-- Reason: automation UI expansion is not allowed to outrun the first closed Modbus RTU workflow
-
-### Legacy item: script-console workflow surface
-
-- New classification: `Blocked`
-- Reason: Script Console UI should follow a frozen automation scope after the first protocol-grade workflow is closed
-
-## Transitional sources retired from canonical use
-
-- `TASKS.md`
-- `docs/STATUS.md`
-- stale module-status labels in `src/protolink/catalog.py`
-- stale milestone badge text in `src/protolink/ui/main_window.py`
+- `ML-*`
+- `NX-*`
+- `BL-*`
+- `PK-*`
+- `TR-*`
+- `AR-*`
+- `IV-*`
 
 ## Invalidated historical claims
 
-- “`uv run pytest` = 152 passed”
-- “capture/replay jobs are still unimplemented”
-- “current milestone is M0 -> M1”
-- “transport modules are still the next engineering build line”
+These statements are no longer current truth:
+
+- “current canonical active mainline is still `BL-002`”
+- “current canonical active mainline is still `PL-010`”
+- “current validation truth is `152 passed`”
+- “current validation truth is `209 passed`”
+- “current validation truth is `229 passed`”
+- “current validation truth is `239 passed`”
+- “current validation truth is `240 passed`”
+- “current validation truth is `245 passed`”
+- “current validation truth is `246 passed`”
+- “current validation truth is `251 passed`”
+- “current validation truth is `252 passed`”
+- “current validation truth is `255 passed`”
+- “current validation truth is `261 passed`”
+- “current validation truth is `262 passed`”
+- “`TASKS.md` still carries canonical backlog duty”
+- “`docs/STATUS.md` still carries canonical current-state duty”
 
 ## Rolled-back items
 
-- No rolled-back ProtoLink tasks are evidenced from current repository-local facts.
-- Project-local git history now exists; future rollback claims should cite project-local commits and validation evidence.
+- No rolled-back ProtoLink task is evidenced from the current project-local Git history.

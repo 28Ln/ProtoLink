@@ -7,6 +7,8 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 from protolink.application.rule_engine_service import RuleEngineService
+from protolink.core.event_bus import EventBus
+from protolink.core.logging import LogLevel, create_log_entry
 from protolink.core.timed_tasks import TimedTask
 
 
@@ -21,9 +23,16 @@ class TimedTaskSnapshot:
 
 
 class TimedTaskService:
-    def __init__(self, rule_engine_service: RuleEngineService, *, poll_interval_seconds: float = 0.05) -> None:
+    def __init__(
+        self,
+        rule_engine_service: RuleEngineService,
+        *,
+        poll_interval_seconds: float = 0.05,
+        event_bus: EventBus | None = None,
+    ) -> None:
         self._rule_engine_service = rule_engine_service
         self._poll_interval_seconds = poll_interval_seconds
+        self._event_bus = event_bus
         self._tasks_by_name: dict[str, TimedTask] = {}
         self._next_run_monotonic: dict[str, float] = {}
         self._listeners: list[Callable[[TimedTaskSnapshot], None]] = []
@@ -102,7 +111,10 @@ class TimedTaskService:
                 continue
             result = self._rule_engine_service.run_rule(task.rule_name)
             if result is None:
-                self._set_snapshot(last_error=self._rule_engine_service.snapshot.last_error)
+                error_message = self._rule_engine_service.snapshot.last_error
+                if error_message:
+                    self._publish_error_log(error_message, task_name=task.name, rule_name=task.rule_name)
+                self._set_snapshot(last_error=error_message)
             else:
                 self._set_snapshot(
                     execution_count=self._snapshot.execution_count + 1,
@@ -124,3 +136,18 @@ class TimedTaskService:
         snapshot = self._snapshot
         for listener in list(self._listeners):
             listener(snapshot)
+
+    def _publish_error_log(self, message: str, *, task_name: str, rule_name: str) -> None:
+        if self._event_bus is None:
+            return
+        self._event_bus.publish(
+            create_log_entry(
+                level=LogLevel.ERROR,
+                category="automation.timed_task.error",
+                message=message,
+                metadata={
+                    "task_name": task_name,
+                    "rule_name": rule_name,
+                },
+            )
+        )

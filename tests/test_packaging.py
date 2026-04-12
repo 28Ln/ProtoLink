@@ -64,6 +64,20 @@ def _write_portable_archive(archive_file: Path) -> None:
         archive.writestr(PORTABLE_MANIFEST_FILE, json.dumps(manifest, ensure_ascii=False, indent=2))
 
 
+def _create_fake_runtime_bundle(root: Path) -> tuple[Path, Path]:
+    runtime_root = root / "runtime-src"
+    site_packages = root / "site-packages-src"
+    (runtime_root / "DLLs").mkdir(parents=True)
+    (runtime_root / "Lib" / "encodings").mkdir(parents=True)
+    (site_packages / "demo_pkg").mkdir(parents=True)
+    for file_name in ("python.exe", "pythonw.exe", "python3.dll", "python311.dll", "vcruntime140.dll", "vcruntime140_1.dll"):
+        (runtime_root / file_name).write_bytes(b"runtime")
+    (runtime_root / "DLLs" / "libcrypto-3.dll").write_bytes(b"dll")
+    (runtime_root / "Lib" / "encodings" / "__init__.py").write_text("# encodings\n", encoding="utf-8")
+    (site_packages / "demo_pkg" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
+    return runtime_root, site_packages
+
+
 def test_materialize_portable_package_copies_release_archive_and_metadata(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     (repo_root / "docs").mkdir(parents=True)
@@ -80,6 +94,7 @@ def test_materialize_portable_package_copies_release_archive_and_metadata(tmp_pa
     context = bootstrap_app_context(tmp_path / "workspace-root", persist_settings=False)
     release_archive = context.workspace.exports / "demo-release.zip"
     release_archive.write_bytes(b"demo")
+    runtime_root, site_packages_root = _create_fake_runtime_bundle(tmp_path)
 
     plan = build_portable_package_plan(
         repo_root,
@@ -88,7 +103,12 @@ def test_materialize_portable_package_copies_release_archive_and_metadata(tmp_pa
         release_archive,
         packaged_at=datetime(2026, 4, 9, 8, 0, 0, tzinfo=UTC),
     )
-    manifest = materialize_portable_package(plan, repo_root)
+    manifest = materialize_portable_package(
+        plan,
+        repo_root,
+        runtime_root=runtime_root,
+        site_packages_root=site_packages_root,
+    )
 
     assert plan.archive_file.exists()
     assert manifest["format_version"] == "protolink-portable-package-v1"
@@ -99,10 +119,19 @@ def test_materialize_portable_package_copies_release_archive_and_metadata(tmp_pa
     assert "docs/SMOKE_CHECKLIST.md" in names
     assert "docs/RELEASE_CHECKLIST.md" in names
     assert "src/protolink/__init__.py" in names
+    assert "runtime/python.exe" in names
+    assert "runtime/pythonw.exe" in names
+    assert "runtime/Lib/encodings/__init__.py" in names
+    assert "sp/demo_pkg/__init__.py" in names
+    assert "sp/protolink/__init__.py" in names
     assert "INSTALL.ps1" in names
+    assert "Launch-ProtoLink.ps1" in names
+    assert "Launch-ProtoLink.bat" in names
     assert "demo-release.zip" in names
     assert PORTABLE_MANIFEST_FILE in names
     assert "src/protolink/__pycache__/demo.cpython-311.pyc" not in names
+    assert manifest["delivery_mode"] == "bundled_python_runtime"
+    assert manifest["runtime_prerequisites"] == []
 
 
 def test_install_portable_package_extracts_archive(tmp_path: Path) -> None:
@@ -161,6 +190,36 @@ def test_uninstall_portable_package_removes_installed_files_from_receipt(tmp_pat
     assert set(result.removed_entries) == {"README.md", "INSTALL.ps1", "demo-release.zip", PORTABLE_MANIFEST_FILE}
     assert not (target_dir / "README.md").exists()
     assert not (target_dir / "INSTALL.ps1").exists()
+
+
+def test_uninstall_portable_package_rejects_receipt_path_traversal(tmp_path: Path) -> None:
+    target_dir = tmp_path / "installed"
+    target_dir.mkdir(parents=True)
+    victim = tmp_path / "victim.txt"
+    victim.write_text("do-not-delete", encoding="utf-8")
+    receipt_file = target_dir / "install-receipt.json"
+    receipt_file.write_text(
+        json.dumps(
+            {
+                "format_version": "protolink-install-receipt-v1",
+                "archive_file": "portable.zip",
+                "extracted_entries": ["..\\victim.txt"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        uninstall_portable_package(target_dir)
+    except ProtoLinkUserError as exc:
+        assert "path traversal" in str(exc)
+    else:
+        raise AssertionError("Expected tampered install receipt to be rejected.")
+
+    assert victim.exists()
+    assert receipt_file.exists()
 
 
 def test_materialize_distribution_package_creates_manifest_and_archive(tmp_path: Path) -> None:

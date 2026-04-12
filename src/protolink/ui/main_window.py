@@ -19,11 +19,17 @@ from PySide6.QtWidgets import (
 from protolink.application.packet_replay_service import PacketReplayExecutionService
 from protolink.application.register_monitor_service import RegisterMonitorService
 from protolink.application.rule_engine_service import RuleEngineService
+from protolink.application.auto_response_runtime_service import AutoResponseRuntimeService
+from protolink.application.channel_bridge_runtime_service import ChannelBridgeRuntimeService
+from protolink.application.data_tools_service import DataToolsService
+from protolink.application.network_tools_service import NetworkToolsService
+from protolink.application.script_console_service import ScriptConsoleService
 from protolink.application.serial_service import SerialSessionService
 from protolink.application.mqtt_client_service import MqttClientSessionService
 from protolink.application.mqtt_server_service import MqttServerSessionService
 from protolink.application.tcp_client_service import TcpClientSessionService
 from protolink.application.tcp_server_service import TcpServerSessionService
+from protolink.application.timed_task_service import TimedTaskService
 from protolink.application.udp_service import UdpSessionService
 from protolink.catalog import build_module_catalog
 from protolink.core.models import FeatureModule
@@ -31,10 +37,13 @@ from protolink.core.packet_inspector import PacketInspectorState
 from protolink.core.workspace import WorkspaceLayout
 from protolink.ui.packet_console import PacketConsoleWidget
 from protolink.ui.automation_rules_panel import AutomationRulesPanel
+from protolink.ui.data_tools_panel import DataToolsPanel
 from protolink.ui.modbus_tcp_panel import ModbusTcpLabPanel
 from protolink.ui.modbus_rtu_panel import ModbusRtuLabPanel
+from protolink.ui.network_tools_panel import NetworkToolsPanel
 from protolink.ui.register_monitor_panel import RegisterMonitorPanel
 from protolink.ui.serial_panel import SerialStudioPanel
+from protolink.ui.script_console_panel import ScriptConsolePanel
 from protolink.ui.mqtt_client_panel import MqttClientPanel
 from protolink.ui.mqtt_server_panel import MqttServerPanel
 from protolink.ui.tcp_client_panel import TcpClientPanel
@@ -47,6 +56,8 @@ class ProtoLinkMainWindow(QMainWindow):
         self,
         workspace: WorkspaceLayout,
         inspector: PacketInspectorState,
+        data_tools_service: DataToolsService,
+        network_tools_service: NetworkToolsService,
         serial_service: SerialSessionService,
         mqtt_client_service: MqttClientSessionService,
         mqtt_server_service: MqttServerSessionService,
@@ -56,10 +67,16 @@ class ProtoLinkMainWindow(QMainWindow):
         packet_replay_service: PacketReplayExecutionService,
         register_monitor_service: RegisterMonitorService,
         rule_engine_service: RuleEngineService,
+        auto_response_runtime_service: AutoResponseRuntimeService | None = None,
+        script_console_service: ScriptConsoleService | None = None,
+        timed_task_service: TimedTaskService | None = None,
+        channel_bridge_runtime_service: ChannelBridgeRuntimeService | None = None,
     ) -> None:
         super().__init__()
         self.workspace = workspace
         self.inspector = inspector
+        self.data_tools_service = data_tools_service
+        self.network_tools_service = network_tools_service
         self.serial_service = serial_service
         self.mqtt_client_service = mqtt_client_service
         self.mqtt_server_service = mqtt_server_service
@@ -69,6 +86,10 @@ class ProtoLinkMainWindow(QMainWindow):
         self.packet_replay_service = packet_replay_service
         self.register_monitor_service = register_monitor_service
         self.rule_engine_service = rule_engine_service
+        self.auto_response_runtime_service = auto_response_runtime_service
+        self.script_console_service = script_console_service
+        self.timed_task_service = timed_task_service
+        self.channel_bridge_runtime_service = channel_bridge_runtime_service
         self.modules = build_module_catalog()
         self._setup_window()
         self._build_ui()
@@ -200,9 +221,24 @@ class ProtoLinkMainWindow(QMainWindow):
         )
         self.modbus_tcp_panel.setVisible(False)
         content_layout.addWidget(self.modbus_tcp_panel)
-        self.automation_rules_panel = AutomationRulesPanel(self.rule_engine_service)
+        self.automation_rules_panel = AutomationRulesPanel(
+            self.rule_engine_service,
+            auto_response_service=self.auto_response_runtime_service,
+            timed_task_service=self.timed_task_service,
+            channel_bridge_service=self.channel_bridge_runtime_service,
+        )
         self.automation_rules_panel.setVisible(False)
         content_layout.addWidget(self.automation_rules_panel)
+        self.data_tools_panel = DataToolsPanel(self.data_tools_service)
+        self.data_tools_panel.setVisible(False)
+        content_layout.addWidget(self.data_tools_panel)
+        self.network_tools_panel = NetworkToolsPanel(self.network_tools_service)
+        self.network_tools_panel.setVisible(False)
+        content_layout.addWidget(self.network_tools_panel)
+        self.script_console_panel = ScriptConsolePanel(self.script_console_service) if self.script_console_service else None
+        if self.script_console_panel is not None:
+            self.script_console_panel.setVisible(False)
+            content_layout.addWidget(self.script_console_panel)
 
         layout.addWidget(sidebar, 0)
         layout.addWidget(content, 1)
@@ -260,6 +296,10 @@ class ProtoLinkMainWindow(QMainWindow):
         self.modbus_tcp_panel.setVisible(module.name == "Modbus TCP Lab")
         self.register_monitor_panel.setVisible(module.name == "Register Monitor")
         self.automation_rules_panel.setVisible(module.name == "Automation Rules")
+        self.data_tools_panel.setVisible(module.name == "Data Tools")
+        self.network_tools_panel.setVisible(module.name == "Network Tools")
+        if self.script_console_panel is not None:
+            self.script_console_panel.setVisible(module.name == "Script Console")
 
     def _build_packet_console_dock(self) -> None:
         self.packet_console = PacketConsoleWidget(

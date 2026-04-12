@@ -13,6 +13,8 @@ from protolink.core.automation_rule_profiles import (
     save_automation_rules_profile,
 )
 from protolink.core.device_scan import build_device_scan_requests
+from protolink.core.event_bus import EventBus
+from protolink.core.logging import LogLevel, create_log_entry
 from protolink.core.rule_engine import (
     AutomationAction,
     AutomationActionKind,
@@ -41,10 +43,12 @@ class RuleEngineService:
         packet_replay_service: PacketReplayExecutionService,
         auto_response_runtime_service: AutoResponseRuntimeService,
         profile_path: Path | None = None,
+        event_bus: EventBus | None = None,
     ) -> None:
         self._packet_replay_service = packet_replay_service
         self._auto_response_runtime_service = auto_response_runtime_service
         self._profile_path = profile_path
+        self._event_bus = event_bus
         self._rules_by_name: dict[str, AutomationRule] = {}
         self._prepared_device_scan_jobs: list[PreparedDeviceScanJob] = []
         self._execution_history: list[RuleExecutionRecord] = []
@@ -142,31 +146,35 @@ class RuleEngineService:
     def run_rule(self, name: str) -> AutomationRunResult | None:
         rule = self._rules_by_name.get(name)
         if rule is None:
+            error_message = f"Rule '{name}' was not found."
             self._record_execution(
                 RuleExecutionRecord(
                     rule_name=name,
                     succeeded=False,
                     executed_action_count=0,
-                    error=f"Rule '{name}' was not found.",
+                    error=error_message,
                 )
             )
+            self._publish_error_log(error_message, rule_name=name)
             self._set_snapshot(
                 execution_count=len(self._execution_history),
-                last_error=f"Rule '{name}' was not found.",
+                last_error=error_message,
             )
             return None
         if not rule.enabled:
+            error_message = f"Rule '{name}' is disabled."
             self._record_execution(
                 RuleExecutionRecord(
                     rule_name=name,
                     succeeded=False,
                     executed_action_count=0,
-                    error=f"Rule '{name}' is disabled.",
+                    error=error_message,
                 )
             )
+            self._publish_error_log(error_message, rule_name=name)
             self._set_snapshot(
                 execution_count=len(self._execution_history),
-                last_error=f"Rule '{name}' is disabled.",
+                last_error=error_message,
             )
             return None
 
@@ -185,9 +193,11 @@ class RuleEngineService:
                     error=str(exc),
                 )
             )
+            error_message = f"Rule '{name}' failed: {exc}"
+            self._publish_error_log(error_message, rule_name=rule.name)
             self._set_snapshot(
                 execution_count=len(self._execution_history),
-                last_error=f"Rule '{name}' failed: {exc}",
+                last_error=error_message,
             )
             return None
 
@@ -286,3 +296,15 @@ class RuleEngineService:
         snapshot = self._snapshot
         for listener in list(self._listeners):
             listener(snapshot)
+
+    def _publish_error_log(self, message: str, *, rule_name: str) -> None:
+        if self._event_bus is None:
+            return
+        self._event_bus.publish(
+            create_log_entry(
+                level=LogLevel.ERROR,
+                category="automation.rule_engine.error",
+                message=message,
+                metadata={"rule_name": rule_name},
+            )
+        )

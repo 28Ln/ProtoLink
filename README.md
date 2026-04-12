@@ -21,9 +21,12 @@ This repository now treats those projects as references only. The formal ProtoLi
 - `src/protolink/` contains the formal ProtoLink application shell
 - `docs/` contains the canonical current-state, project-status, backlog, mainline, architecture, archive, and validation documents
 - `TASKS.md` is now a legacy redirect stub; the canonical backlog lives under `docs/`
-- Current validation baseline: `uv run pytest` -> 229 passed
-- Project-local CI lives in `.github/workflows/ci.yml` and mirrors compileall, pytest, smoke summary, and build
+- Current validation baseline: `uv run pytest -q` -> 263 passed on 2026-04-12
+- Current canonical mainline: `PL-011` carry-over dirty workspace reconciliation (`docs/MAINLINE_STATUS.md`)
+- Project-local CI lives in `.github/workflows/ci.yml` and now runs compileall, full pytest, canonical-truth verification, targeted regression suites, headless summary, UI smoke check, release preflight, release-staging verification via `scripts/verify_release_staging.py` (including portable/distribution/installer verify + install/uninstall), and `uv build`
+- Clean release-staging sign-off is now executable through `scripts/verify_release_staging.py`
 - Release validation now includes installer-package verification through `uv run protolink --verify-installer-package <archive-path>`
+- Current portable/distribution/installer artifacts now bundle a Python runtime and can run on an install target without preinstalled `uv` or Python; they are still not native self-contained Windows executable installers/binaries yet
 
 ## Quick Start
 
@@ -41,6 +44,7 @@ uv run protolink
 - `docs/PROJECT_STATUS.md`
 - `docs/ENGINEERING_TASKLIST.md`
 - `docs/MAINLINE_STATUS.md`
+- `docs/WORKTREE_RECONCILIATION.md`
 - `docs/TASK_ARCHIVE.md`
 - `docs/SMOKE_CHECKLIST.md`
 - `docs/RELEASE_CHECKLIST.md`

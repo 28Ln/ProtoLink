@@ -20,9 +20,17 @@ def _wait_until(predicate, timeout: float = 3.0) -> None:
 
 
 class _FakeReplayTarget:
-    def __init__(self, *, connected: bool = True) -> None:
+    def __init__(self, *, connected: bool = True, session_id: str | None = None, peer: str | None = None) -> None:
         self.connected = connected
         self.sent: list[tuple[bytes, dict[str, str]]] = []
+        self.snapshot = type(
+            "Snapshot",
+            (),
+            {
+                "active_session_id": session_id,
+                "selected_client_peer": peer,
+            },
+        )()
 
     def is_connected(self) -> bool:
         return self.connected
@@ -32,7 +40,7 @@ class _FakeReplayTarget:
 
 
 def test_packet_replay_service_executes_saved_plan_against_target(tmp_path: Path) -> None:
-    target = _FakeReplayTarget()
+    target = _FakeReplayTarget(session_id="session-a")
     service = PacketReplayExecutionService({TransportKind.SERIAL: target})
     plan = PacketReplayPlan(
         name="bench",
@@ -53,6 +61,8 @@ def test_packet_replay_service_executes_saved_plan_against_target(tmp_path: Path
     assert target.sent[1][0] == b"\x10"
     assert target.sent[0][1]["replay_plan"] == "bench"
     assert target.sent[1][1]["replay_direction"] == ReplayDirection.INTERNAL.value
+    assert service.snapshot.target_session_id == "session-a"
+    assert target.sent[0][1]["replay_target_session_id"] == "session-a"
     service.shutdown()
 
 
@@ -154,3 +164,24 @@ def test_packet_replay_service_dispatches_steps_through_active_tcp_client(tmp_pa
         context.mqtt_server_service.shutdown()
         context.tcp_server_service.shutdown()
         context.udp_service.shutdown()
+
+
+def test_packet_replay_service_fails_when_target_session_changes_mid_run() -> None:
+    target = _FakeReplayTarget(session_id="session-a")
+    service = PacketReplayExecutionService({TransportKind.SERIAL: target})
+    plan = PacketReplayPlan(
+        name="bench",
+        created_at=datetime.now(UTC),
+        steps=(
+            PacketReplayStep(delay_ms=0, payload=b"\x01", direction=ReplayDirection.OUTBOUND),
+            PacketReplayStep(delay_ms=1000, payload=b"\x02", direction=ReplayDirection.OUTBOUND),
+        ),
+    )
+
+    service.execute_plan(plan, TransportKind.SERIAL)
+    _wait_until(lambda: len(target.sent) == 1)
+    target.snapshot.active_session_id = "session-b"
+    _wait_until(lambda: service.snapshot.running is False)
+
+    assert service.snapshot.last_error == "Replay execution failed: Replay target session changed during execution."
+    service.shutdown()

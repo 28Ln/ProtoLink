@@ -7,6 +7,7 @@ from protolink.core.bootstrap import bootstrap_app_context
 from protolink.core.auto_response import AutoResponseProtocol, AutoResponseRule
 from protolink.core.device_scan import DeviceScanConfig, DeviceScanTransportKind
 from protolink.core.event_bus import EventBus
+from protolink.core.logging import StructuredLogEntry
 from protolink.core.rule_engine import AutomationAction, AutomationActionKind, AutomationRule
 from protolink.core.transport import TransportKind
 
@@ -176,3 +177,42 @@ def test_rule_engine_service_persists_rules_across_bootstrap_contexts(tmp_path: 
     reloaded = bootstrap_app_context(tmp_path, persist_settings=False)
 
     assert reloaded.rule_engine_service.snapshot.rule_names == ("Persisted Rule",)
+
+
+def test_rule_engine_service_logs_missing_and_failed_rules() -> None:
+    event_bus = EventBus()
+    captured: list[StructuredLogEntry] = []
+    event_bus.subscribe(StructuredLogEntry, captured.append)
+    replay = _ReplayServiceStub()
+    replay.snapshot.running = True
+    auto_response = AutoResponseRuntimeService(EventBus(), {})
+    service = RuleEngineService(
+        packet_replay_service=replay,  # type: ignore[arg-type]
+        auto_response_runtime_service=auto_response,
+        event_bus=event_bus,
+    )
+    service.set_rules(
+        (
+            AutomationRule(
+                name="Replay Conflict",
+                actions=(
+                    AutomationAction(
+                        kind=AutomationActionKind.RUN_REPLAY_PLAN,
+                        replay_plan_path="C:/tmp/demo.json",
+                        replay_target_kind=TransportKind.TCP_CLIENT,
+                    ),
+                ),
+            ),
+        )
+    )
+
+    assert service.run_rule("Missing") is None
+    assert service.run_rule("Replay Conflict") is None
+
+    error_entries = [entry for entry in captured if entry.category == "automation.rule_engine.error"]
+    assert [entry.message for entry in error_entries] == [
+        "Rule 'Missing' was not found.",
+        "Rule 'Replay Conflict' failed: Replay service is already running.",
+    ]
+    assert error_entries[0].metadata == {"rule_name": "Missing"}
+    assert error_entries[1].metadata == {"rule_name": "Replay Conflict"}

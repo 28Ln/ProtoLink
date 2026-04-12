@@ -1,6 +1,8 @@
 import time
 
 from protolink.application.timed_task_service import TimedTaskService
+from protolink.core.event_bus import EventBus
+from protolink.core.logging import StructuredLogEntry
 from protolink.core.rule_engine import AutomationRule
 from protolink.core.timed_tasks import TimedTask
 
@@ -49,3 +51,22 @@ def test_timed_task_service_surfaces_rule_failures() -> None:
     service.tick(now_monotonic=time.monotonic() + 1.0)
 
     assert service.snapshot.last_error == "boom"
+
+
+def test_timed_task_service_logs_rule_failures_when_event_bus_is_available() -> None:
+    engine = _FailingRuleEngineStub()
+    event_bus = EventBus()
+    captured: list[StructuredLogEntry] = []
+    event_bus.subscribe(StructuredLogEntry, captured.append)
+    service = TimedTaskService(engine, poll_interval_seconds=0.01, event_bus=event_bus)
+    service.set_tasks((TimedTask(name="Broken", rule_name="Missing", interval_seconds=0.01),))
+
+    service.tick(now_monotonic=time.monotonic() + 1.0)
+
+    error_entries = [entry for entry in captured if entry.category == "automation.timed_task.error"]
+    assert len(error_entries) == 1
+    assert error_entries[0].message == "boom"
+    assert error_entries[0].metadata == {
+        "task_name": "Broken",
+        "rule_name": "Missing",
+    }

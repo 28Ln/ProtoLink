@@ -32,8 +32,11 @@ def qapp() -> QApplication:
 def cleanup_widgets(qapp: QApplication):
     yield
     for widget in QApplication.topLevelWidgets():
-        widget.close()
-        widget.deleteLater()
+        try:
+            widget.close()
+            widget.deleteLater()
+        except RuntimeError:
+            continue
     qapp.processEvents()
 
 

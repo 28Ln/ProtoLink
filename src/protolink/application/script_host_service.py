@@ -1,68 +1,162 @@
 from __future__ import annotations
 
-import contextlib
-import io
-from collections.abc import Mapping
+import pickle
+import subprocess
+import sys
 from dataclasses import dataclass
 from typing import Any
 
 from protolink.core.script_host import ScriptExecutionRequest, ScriptExecutionResult, ScriptHost, ScriptLanguage
 
-SAFE_PYTHON_BUILTINS: dict[str, object] = {
-    "abs": abs,
-    "all": all,
-    "any": any,
-    "bool": bool,
-    "bytes": bytes,
-    "bytearray": bytearray,
-    "dict": dict,
-    "enumerate": enumerate,
-    "float": float,
-    "int": int,
-    "isinstance": isinstance,
-    "len": len,
-    "list": list,
-    "max": max,
-    "min": min,
-    "print": print,
-    "range": range,
-    "reversed": reversed,
-    "round": round,
-    "RuntimeError": RuntimeError,
-    "set": set,
-    "sorted": sorted,
-    "str": str,
-    "sum": sum,
-    "tuple": tuple,
-    "ValueError": ValueError,
-    "zip": zip,
-}
+SAFE_PYTHON_BUILTIN_NAMES: tuple[str, ...] = (
+    "abs",
+    "all",
+    "any",
+    "bool",
+    "bytes",
+    "bytearray",
+    "dict",
+    "enumerate",
+    "float",
+    "int",
+    "isinstance",
+    "len",
+    "list",
+    "max",
+    "min",
+    "print",
+    "range",
+    "reversed",
+    "round",
+    "RuntimeError",
+    "set",
+    "sorted",
+    "str",
+    "sum",
+    "tuple",
+    "ValueError",
+    "zip",
+)
+
+DEFAULT_SCRIPT_TIMEOUT_SECONDS = 2.0
+
+_PYTHON_INLINE_RUNNER = """
+import builtins as _builtins
+import contextlib
+import io
+import pickle
+import sys
+
+allowed_names = {allowed_names}
+payload = pickle.loads(sys.stdin.buffer.read())
+stdout = io.StringIO()
+globals_scope = {{"__builtins__": {{name: getattr(_builtins, name) for name in allowed_names}}}}
+locals_scope = {{
+    str(name): value
+    for name, value in payload["context"].items()
+    if not str(name).startswith("__")
+}}
+try:
+    with contextlib.redirect_stdout(stdout):
+        exec(payload["code"], globals_scope, locals_scope)
+except Exception as exc:
+    result_payload = {{
+        "success": False,
+        "output": stdout.getvalue(),
+        "error": str(exc),
+        "result_pickle": None,
+    }}
+else:
+    result_payload = {{
+        "success": True,
+        "output": stdout.getvalue(),
+        "error": None,
+        "result_pickle": None,
+    }}
+    try:
+        result_payload["result_pickle"] = pickle.dumps(locals_scope.get("result"))
+    except Exception as exc:
+        result_payload["success"] = False
+        result_payload["error"] = f"Script result is not serializable: {{exc}}"
+
+sys.stdout.buffer.write(pickle.dumps(result_payload))
+""".format(allowed_names=repr(SAFE_PYTHON_BUILTIN_NAMES))
+
+
+def _normalize_timeout(timeout_seconds: float | None) -> float:
+    if timeout_seconds is None or timeout_seconds <= 0:
+        return DEFAULT_SCRIPT_TIMEOUT_SECONDS
+    return timeout_seconds
+
+
+def _build_serializable_context(context: dict[str, Any]) -> dict[str, Any]:
+    return {
+        str(name): value
+        for name, value in context.items()
+        if not str(name).startswith("__")
+    }
 
 
 class PythonInlineScriptHost:
     language = ScriptLanguage.PYTHON
 
     def execute(self, request: ScriptExecutionRequest) -> ScriptExecutionResult:
-        stdout = io.StringIO()
-        globals_scope = {"__builtins__": SAFE_PYTHON_BUILTINS}
-        locals_scope: dict[str, Any] = {
-            str(name): value
-            for name, value in request.context.items()
-            if not str(name).startswith("__")
-        }
+        timeout_seconds = _normalize_timeout(request.timeout_seconds)
         try:
-            with contextlib.redirect_stdout(stdout):
-                exec(request.code, globals_scope, locals_scope)
+            completed = subprocess.run(
+                [sys.executable, "-c", _PYTHON_INLINE_RUNNER],
+                input=pickle.dumps(
+                    {
+                        "code": request.code,
+                        "context": _build_serializable_context(dict(request.context)),
+                    }
+                ),
+                capture_output=True,
+                timeout=timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return ScriptExecutionResult(
+                success=False,
+                error=f"Script execution timed out after {timeout_seconds:.2f}s.",
+            )
         except Exception as exc:
             return ScriptExecutionResult(
                 success=False,
-                output=stdout.getvalue(),
-                error=str(exc),
+                error=f"Script execution could not start: {exc}",
             )
+
+        if not completed.stdout:
+            stderr = completed.stderr.decode("utf-8", errors="replace").strip()
+            error_message = stderr or f"Script execution exited without a result (exit code {completed.returncode})."
+            return ScriptExecutionResult(
+                success=False,
+                error=error_message,
+            )
+
+        try:
+            payload = pickle.loads(completed.stdout)
+        except Exception as exc:
+            return ScriptExecutionResult(
+                success=False,
+                error=f"Script result payload could not be decoded: {exc}",
+            )
+
+        result_pickle = payload.get("result_pickle")
+        try:
+            result_value = pickle.loads(result_pickle) if isinstance(result_pickle, bytes) else None
+        except Exception as exc:
+            return ScriptExecutionResult(
+                success=False,
+                output=str(payload.get("output", "")),
+                error=f"Script result payload could not be decoded: {exc}",
+            )
+
         return ScriptExecutionResult(
-            success=True,
-            output=stdout.getvalue(),
-            result=locals_scope.get("result"),
+            success=bool(payload.get("success")),
+            output=str(payload.get("output", "")),
+            result=result_value,
+            error=str(payload["error"]) if payload.get("error") is not None else None,
         )
 
 

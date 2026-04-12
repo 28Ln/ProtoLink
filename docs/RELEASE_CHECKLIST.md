@@ -6,6 +6,8 @@ Last created: 2026-04-09
 
 This checklist is the first release-preparation artifact for ProtoLink.
 
+It is a supporting operational checklist, not the canonical backlog or mainline tracker.
+
 It does not claim packaging is complete.
 It defines the minimum release-preparation truth that must exist before packaging is treated as a real active delivery path.
 
@@ -128,10 +130,16 @@ uv run protolink --verify-installer-package <archive-path>
 uv run protolink --install-installer-package <archive-path> <clean-staging-dir> <clean-install-dir>
 ```
 
+- executable clean release-staging validation can run:
+
+```powershell
+uv run python scripts/verify_release_staging.py --name ci
+```
+
 - clean release-staging install produces:
   - staged `installer-package-manifest.json`
   - nested installer-staging and distribution manifests
-  - portable payload files in the install dir
+  - bundled runtime payload files in the install dir, including `runtime/python.exe`, `sp/`, and launch/install scripts
   - `install-receipt.json` in the install dir
 
 - portable / distribution / installer installs reject zip path-traversal and symlink entries during extraction
@@ -171,12 +179,16 @@ Any new warning class must be triaged before a release candidate is declared.
   - MQTT Server
   - Register Monitor
   - Automation Rules
+  - Script Console
+  - Data Tools
+  - Network Tools
 
 ### 7. Open blockers before real packaging
 
 - project-local git baseline exists and `git status --short` is clean before release handoff
 - installer packaging/distribution now exists and is verified here, but should still be exercised on a clean release-staging machine before a release candidate
 - workspace migration baseline exists and now feeds release-prep flows, but release candidate sign-off still depends on a clean release environment
+- bundled-runtime delivery is now runnable on the install target, but remains a packaged Python runtime + site-packages payload rather than a native signed Windows installer/binary line
 
 ## Exit condition
 

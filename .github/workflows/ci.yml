@@ -28,10 +28,42 @@ jobs:
         run: uv run python -m compileall -q src tests
 
       - name: Run tests
-        run: uv run pytest -q
+        shell: pwsh
+        run: |
+          $pytestLog = Join-Path $env:RUNNER_TEMP "pytest-output.txt"
+          uv run pytest -q *>&1 | Tee-Object -FilePath $pytestLog
+          $pytestOutput = Get-Content -LiteralPath $pytestLog -Raw
+          if ($pytestOutput -notmatch '([0-9]+)\s+passed') { throw "Could not parse pytest passed count." }
+          "PROTO_PYTEST_PASSED=$($Matches[1])" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Smoke check
+      - name: Verify canonical truth
+        run: uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count ${{ env.PROTO_PYTEST_PASSED }}
+
+      - name: Run targeted regressions
+        run: uv run python scripts/run_targeted_regressions.py --suite all
+
+      - name: Headless summary
         run: uv run protolink --headless-summary
+
+      - name: UI smoke check
+        run: uv run protolink --smoke-check
+
+      - name: Provision clean release workspace
+        shell: pwsh
+        run: |
+          $workspace = Join-Path $env:RUNNER_TEMP "protolink-ci-workspace"
+          if (Test-Path -LiteralPath $workspace) {
+            Remove-Item -LiteralPath $workspace -Recurse -Force
+          }
+          uv run protolink --workspace $workspace --generate-smoke-artifacts | Out-Null
+          "PROTO_WORKSPACE=$workspace" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Release preflight
+        shell: pwsh
+        run: uv run protolink --workspace $env:PROTO_WORKSPACE --release-preflight
+
+      - name: Verify clean release-staging flow
+        run: uv run python scripts/verify_release_staging.py --name ci
 
       - name: Build package
         run: uv build

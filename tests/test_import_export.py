@@ -6,6 +6,7 @@ import pytest
 from protolink.core.errors import ProtoLinkUserError
 from protolink.core.import_export import (
     ArtifactKind,
+    build_artifact_timestamp,
     build_export_bundle_plan,
     build_export_manifest,
     build_release_bundle_plan,
@@ -48,10 +49,16 @@ def test_build_export_bundle_plan_creates_stable_bundle_paths(tmp_path: Path) ->
     )
 
     assert plan.source_dir == workspace.captures
-    assert plan.bundle_name == "20260408-031530-capture-Bench-Port-01"
+    assert plan.bundle_name == "20260408-031530-000000-capture-Bench-Port-01"
     assert plan.bundle_dir == workspace.exports / plan.bundle_name
     assert plan.payload_file == plan.bundle_dir / "Bench-Port-01.bin"
     assert plan.manifest_file == plan.bundle_dir / "manifest.json"
+
+
+def test_build_artifact_timestamp_includes_microseconds_for_parallel_safety() -> None:
+    value = datetime(2026, 4, 8, 3, 15, 30, 456789, tzinfo=UTC)
+
+    assert build_artifact_timestamp(value) == "20260408-031530-456789"
 
 
 def test_build_export_manifest_reflects_bundle_metadata(tmp_path: Path) -> None:

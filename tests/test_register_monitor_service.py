@@ -94,3 +94,42 @@ def test_register_monitor_service_decodes_live_modbus_tcp_and_rtu_entries() -> N
     )
     assert service.snapshot.decoded_value == "43 rpm"
     assert service.snapshot.last_live_source == "modbus_rtu"
+
+
+def test_register_monitor_service_filters_live_updates_by_bound_session_scope() -> None:
+    event_bus = EventBus()
+    service = RegisterMonitorService(event_bus)
+    service.upsert_point(
+        name="HoldingValue",
+        address=10,
+        data_type=RegisterDataType.UINT16,
+        byte_order=RegisterByteOrder.AB,
+        scale=1.0,
+        offset=0.0,
+        unit="rpm",
+    )
+    service.set_live_scope(transport_kind="tcp_client", session_id="session-a")
+
+    event_bus.publish(
+        create_log_entry(
+            level=LogLevel.INFO,
+            category="transport.message",
+            message="Inbound payload (11 bytes)",
+            transport_kind="tcp_client",
+            session_id="session-b",
+            raw_payload=bytes([0x00, 0x01, 0x00, 0x00, 0x00, 0x05, 0x11, 0x03, 0x02, 0x00, 0x2A]),
+        )
+    )
+    assert service.snapshot.decoded_value == ""
+
+    event_bus.publish(
+        create_log_entry(
+            level=LogLevel.INFO,
+            category="transport.message",
+            message="Inbound payload (11 bytes)",
+            transport_kind="tcp_client",
+            session_id="session-a",
+            raw_payload=bytes([0x00, 0x01, 0x00, 0x00, 0x00, 0x05, 0x11, 0x03, 0x02, 0x00, 0x2A]),
+        )
+    )
+    assert service.snapshot.decoded_value == "42 rpm"

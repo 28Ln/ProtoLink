@@ -29,6 +29,8 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     window = ProtoLinkMainWindow(
         workspace=context.workspace,
         inspector=context.packet_inspector,
+        data_tools_service=context.data_tools_service,
+        network_tools_service=context.network_tools_service,
         serial_service=context.serial_session_service,
         mqtt_client_service=context.mqtt_client_service,
         mqtt_server_service=context.mqtt_server_service,
@@ -38,6 +40,10 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
         packet_replay_service=context.packet_replay_service,
         register_monitor_service=context.register_monitor_service,
         rule_engine_service=context.rule_engine_service,
+        auto_response_runtime_service=context.auto_response_runtime_service,
+        script_console_service=context.script_console_service,
+        timed_task_service=context.timed_task_service,
+        channel_bridge_runtime_service=context.channel_bridge_runtime_service,
     )
     window.show()
     qapp.processEvents()
@@ -94,6 +100,22 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     qapp.processEvents()
     assert window.automation_rules_panel.isVisible() is True
     assert window.register_monitor_panel.isVisible() is False
+    data_tools_index = next(index for index, module in enumerate(window.modules) if module.name == "Data Tools")
+    window.module_list.setCurrentRow(data_tools_index)
+    qapp.processEvents()
+    assert window.data_tools_panel.isVisible() is True
+    assert window.automation_rules_panel.isVisible() is False
+    network_tools_index = next(index for index, module in enumerate(window.modules) if module.name == "Network Tools")
+    window.module_list.setCurrentRow(network_tools_index)
+    qapp.processEvents()
+    assert window.network_tools_panel.isVisible() is True
+    assert window.data_tools_panel.isVisible() is False
+    script_index = next(index for index, module in enumerate(window.modules) if module.name == "Script Console")
+    window.module_list.setCurrentRow(script_index)
+    qapp.processEvents()
+    assert window.script_console_panel is not None
+    assert window.script_console_panel.isVisible() is True
+    assert window.network_tools_panel.isVisible() is False
     context.serial_session_service.shutdown()
     context.mqtt_client_service.shutdown()
     context.mqtt_server_service.shutdown()
@@ -101,4 +123,6 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     context.tcp_server_service.shutdown()
     context.udp_service.shutdown()
     context.packet_replay_service.shutdown()
+    context.timed_task_service.shutdown()
+    context.channel_bridge_runtime_service.shutdown()
     window.close()

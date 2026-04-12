@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from protolink.core.bootstrap import bootstrap_app_context
+from protolink.core.script_host import ScriptLanguage
 from protolink.core.transport import TransportKind
 from protolink.transports.mqtt_client import MqttClientTransportAdapter
 from protolink.transports.mqtt_server import MqttServerTransportAdapter
@@ -14,6 +15,8 @@ def test_bootstrap_app_context_builds_workspace_and_transport_registry(tmp_path:
     context = bootstrap_app_context(tmp_path, persist_settings=False)
 
     assert context.workspace.root == (tmp_path / "workspace").resolve()
+    assert context.workspace_log_writer.path == context.workspace.logs / "transport-events.jsonl"
+    assert context.network_tools_service.snapshot.local_hostname
     assert TransportKind.SERIAL in context.transport_registry.registered_kinds()
     assert TransportKind.MQTT_CLIENT in context.transport_registry.registered_kinds()
     assert TransportKind.MQTT_SERVER in context.transport_registry.registered_kinds()
@@ -39,6 +42,7 @@ def test_bootstrap_app_context_builds_workspace_and_transport_registry(tmp_path:
     assert context.rule_engine_service.snapshot.rule_names == ()
     assert context.device_scan_execution_service.snapshot.running is False
     assert context.script_host_service.snapshot.available_languages
+    assert ScriptLanguage.PYTHON in context.script_console_service.snapshot.available_languages
     assert context.timed_task_service.snapshot.running is False
     assert context.channel_bridge_runtime_service.snapshot.bridge_names == ()
     assert context.capture_replay_job_service.snapshot.job_names == ()

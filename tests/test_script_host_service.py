@@ -1,3 +1,5 @@
+import time
+
 from protolink.application.script_host_service import PythonInlineScriptHost, ScriptHostService
 from protolink.core.script_host import ScriptExecutionRequest, ScriptLanguage
 
@@ -69,3 +71,38 @@ def test_python_inline_host_ignores_dunder_context_injection() -> None:
     assert isinstance(result.result, dict)
     assert "__import__" not in result.result
     assert "open" not in result.result
+
+
+def test_python_inline_host_times_out_infinite_loops() -> None:
+    service = ScriptHostService()
+    service.register_host(PythonInlineScriptHost())
+
+    result = service.execute(
+        ScriptExecutionRequest(
+            language=ScriptLanguage.PYTHON,
+            code="while True:\n    pass",
+            timeout_seconds=0.1,
+        )
+    )
+
+    assert result.success is False
+    assert result.error == "Script execution timed out after 0.10s."
+
+
+def test_python_inline_host_times_out_infinite_scripts() -> None:
+    service = ScriptHostService()
+    service.register_host(PythonInlineScriptHost())
+
+    started = time.monotonic()
+    result = service.execute(
+        ScriptExecutionRequest(
+            language=ScriptLanguage.PYTHON,
+            code="while True:\n    pass",
+            timeout_seconds=0.2,
+        )
+    )
+    elapsed = time.monotonic() - started
+
+    assert result.success is False
+    assert "timed out" in (result.error or "")
+    assert elapsed < 1.0

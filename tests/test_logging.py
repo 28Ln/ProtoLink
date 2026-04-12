@@ -3,9 +3,12 @@ import json
 from protolink.core.logging import (
     InMemoryLogStore,
     LogLevel,
+    RuntimeFailureEvidenceRecorder,
     WorkspaceJsonlLogWriter,
     create_log_entry_from_transport_event,
+    default_runtime_failure_evidence_path,
     default_workspace_log_path,
+    load_runtime_failure_evidence,
     serialize_log_entry,
 )
 from protolink.core.transport import (
@@ -91,10 +94,18 @@ def test_workspace_jsonl_log_writer_isolates_write_failures(tmp_path, monkeypatc
             message=session_message(session.session_id),
         )
     )
-    writer = WorkspaceJsonlLogWriter(default_workspace_log_path(tmp_path))
+    recorder = RuntimeFailureEvidenceRecorder(default_runtime_failure_evidence_path(tmp_path))
+    writer = WorkspaceJsonlLogWriter(
+        default_workspace_log_path(tmp_path),
+        failure_evidence_recorder=recorder,
+    )
 
-    def fail_open(*_args, **_kwargs):
-        raise OSError("disk full")
+    original_open = type(writer.path).open
+
+    def fail_open(path_obj, *args, **kwargs):
+        if path_obj == writer.path:
+            raise OSError("disk full")
+        return original_open(path_obj, *args, **kwargs)
 
     monkeypatch.setattr(type(writer.path), "open", fail_open)
 
@@ -102,6 +113,13 @@ def test_workspace_jsonl_log_writer_isolates_write_failures(tmp_path, monkeypatc
 
     assert writer.failed_write_count == 1
     assert writer.last_error == "disk full"
+    evidence_file, evidence_entries, evidence_error = load_runtime_failure_evidence(tmp_path)
+    assert evidence_file == default_runtime_failure_evidence_path(tmp_path)
+    assert evidence_error is None
+    assert len(evidence_entries) == 1
+    assert evidence_entries[0]["source"] == "workspace_log_writer"
+    assert evidence_entries[0]["code"] == "workspace_log_write_failure"
+    assert evidence_entries[0]["message"] == "disk full"
 
 
 def test_serialize_log_entry_truncates_large_raw_payload() -> None:
@@ -123,6 +141,32 @@ def test_serialize_log_entry_truncates_large_raw_payload() -> None:
         "raw_payload_original_bytes": "4",
         "raw_payload_serialized_bytes": "2",
     }
+
+
+def test_load_runtime_failure_evidence_accepts_alias_file_names(tmp_path) -> None:
+    alias_file = tmp_path / "runtime-failure-events.jsonl"
+    alias_file.write_text(
+        json.dumps(
+            {
+                "entry_id": "abc",
+                "timestamp": "2026-04-11T00:00:00+00:00",
+                "source": "event_bus",
+                "code": "event_handler_error",
+                "message": "boom",
+                "details": {"event_type": "str"},
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    evidence_file, evidence_entries, evidence_error = load_runtime_failure_evidence(tmp_path)
+
+    assert evidence_file == alias_file
+    assert evidence_error is None
+    assert len(evidence_entries) == 1
+    assert evidence_entries[0]["code"] == "event_handler_error"
 
 
 def session_message(session_id: str, *, payload: bytes = b"\x01\x03\x00\x00"):
