@@ -39,6 +39,8 @@ SAFE_PYTHON_BUILTIN_NAMES: tuple[str, ...] = (
 )
 
 DEFAULT_SCRIPT_TIMEOUT_SECONDS = 2.0
+MIN_SCRIPT_HOST_STARTUP_GRACE_SECONDS = 0.1
+MAX_SCRIPT_HOST_STARTUP_GRACE_SECONDS = 0.35
 
 _PYTHON_INLINE_RUNNER = """
 import builtins as _builtins
@@ -89,6 +91,14 @@ def _normalize_timeout(timeout_seconds: float | None) -> float:
     return timeout_seconds
 
 
+def _host_timeout_budget(timeout_seconds: float) -> float:
+    startup_grace_seconds = min(
+        MAX_SCRIPT_HOST_STARTUP_GRACE_SECONDS,
+        max(MIN_SCRIPT_HOST_STARTUP_GRACE_SECONDS, timeout_seconds * 0.5),
+    )
+    return timeout_seconds + startup_grace_seconds
+
+
 def _build_serializable_context(context: dict[str, Any]) -> dict[str, Any]:
     return {
         str(name): value
@@ -102,6 +112,7 @@ class PythonInlineScriptHost:
 
     def execute(self, request: ScriptExecutionRequest) -> ScriptExecutionResult:
         timeout_seconds = _normalize_timeout(request.timeout_seconds)
+        host_timeout_budget = _host_timeout_budget(timeout_seconds)
         try:
             completed = subprocess.run(
                 [sys.executable, "-c", _PYTHON_INLINE_RUNNER],
@@ -112,7 +123,9 @@ class PythonInlineScriptHost:
                     }
                 ),
                 capture_output=True,
-                timeout=timeout_seconds,
+                # Process launch and interpreter cold start are outside the user
+                # script body but can consume part of the wall clock budget.
+                timeout=host_timeout_budget,
                 check=False,
             )
         except subprocess.TimeoutExpired:

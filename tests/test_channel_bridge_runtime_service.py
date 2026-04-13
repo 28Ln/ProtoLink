@@ -1,7 +1,14 @@
+import pickle
+import subprocess
+import threading
 import time
 from collections.abc import Mapping
 
-from protolink.application.channel_bridge_runtime_service import ChannelBridgeRuntimeService
+from protolink.application import script_host_service as script_host_service_module
+from protolink.application.channel_bridge_runtime_service import (
+    BRIDGE_SCRIPT_TIMEOUT_SECONDS,
+    ChannelBridgeRuntimeService,
+)
 from protolink.application.script_host_service import PythonInlineScriptHost, ScriptHostService
 from protolink.core.channel_bridge import ChannelBridgeConfig
 from protolink.core.event_bus import EventBus
@@ -42,6 +49,28 @@ def _wait_until(predicate, timeout: float = 5.0) -> None:
             return
         time.sleep(0.01)
     raise AssertionError("Timed out waiting for channel bridge condition.")
+
+
+def _completed_script_run(
+    *,
+    success: bool,
+    error: str | None = None,
+    output: str = "",
+    result: object = None,
+) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.CompletedProcess(
+        args=[script_host_service_module.sys.executable, "-c", "test"],
+        returncode=0,
+        stdout=pickle.dumps(
+            {
+                "success": success,
+                "output": output,
+                "error": error,
+                "result_pickle": pickle.dumps(result) if result is not None else None,
+            }
+        ),
+        stderr=b"",
+    )
 
 
 def test_channel_bridge_runtime_service_bridges_inbound_messages() -> None:
@@ -223,7 +252,78 @@ def test_channel_bridge_runtime_service_logs_script_and_send_failures() -> None:
         service.shutdown()
 
 
-def test_channel_bridge_runtime_service_times_out_scripts_without_blocking_publish() -> None:
+def test_channel_bridge_runtime_service_preserves_script_failures_during_host_startup_jitter(
+    monkeypatch,
+) -> None:
+    observed_timeouts: list[float] = []
+
+    def fake_run(*args, **kwargs):
+        observed_timeouts.append(float(kwargs["timeout"]))
+        if float(kwargs["timeout"]) <= BRIDGE_SCRIPT_TIMEOUT_SECONDS:
+            raise subprocess.TimeoutExpired(cmd=args[0], timeout=float(kwargs["timeout"]))
+        return _completed_script_run(success=False, error="boom")
+
+    monkeypatch.setattr(script_host_service_module.subprocess, "run", fake_run)
+
+    event_bus = EventBus()
+    script_host = ScriptHostService()
+    script_host.register_host(PythonInlineScriptHost())
+    captured: list[StructuredLogEntry] = []
+    event_bus.subscribe(StructuredLogEntry, captured.append)
+    service = ChannelBridgeRuntimeService(
+        event_bus,
+        script_host,
+        {TransportKind.TCP_CLIENT: _FakeBridgeTarget()},
+    )
+    service.set_bridges(
+        (
+            ChannelBridgeConfig(
+                name="Broken Script",
+                source_transport_kind=TransportKind.UDP,
+                target_transport_kind=TransportKind.TCP_CLIENT,
+                script_language=ScriptLanguage.PYTHON,
+                script_code="raise RuntimeError('boom')",
+            ),
+        )
+    )
+
+    try:
+        event_bus.publish(
+            create_log_entry(
+                level=LogLevel.INFO,
+                category="transport.message",
+                message="Inbound payload (4 bytes)",
+                transport_kind=TransportKind.UDP.value,
+                raw_payload=b"PING",
+            )
+        )
+
+        _wait_until(lambda: service.snapshot.last_error is not None)
+
+        assert observed_timeouts and observed_timeouts[0] > BRIDGE_SCRIPT_TIMEOUT_SECONDS
+        assert service.snapshot.last_error == "Bridge 'Broken Script' script failed: boom"
+        assert any(
+            entry.message == "Bridge 'Broken Script' script failed: boom"
+            for entry in captured
+            if entry.category == "automation.channel_bridge.error"
+        )
+    finally:
+        service.shutdown()
+
+
+def test_channel_bridge_runtime_service_times_out_scripts_without_blocking_publish(
+    monkeypatch,
+) -> None:
+    run_started = threading.Event()
+    allow_timeout = threading.Event()
+
+    def fake_run(*args, **kwargs):
+        run_started.set()
+        allow_timeout.wait(timeout=1.0)
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=float(kwargs["timeout"]))
+
+    monkeypatch.setattr(script_host_service_module.subprocess, "run", fake_run)
+
     event_bus = EventBus()
     script_host = ScriptHostService()
     script_host.register_host(PythonInlineScriptHost())
@@ -241,13 +341,12 @@ def test_channel_bridge_runtime_service_times_out_scripts_without_blocking_publi
                 source_transport_kind=TransportKind.UDP,
                 target_transport_kind=TransportKind.TCP_CLIENT,
                 script_language=ScriptLanguage.PYTHON,
-                script_code="while True:\n    pass",
+                script_code="result = payload",
             ),
         )
     )
 
     try:
-        started = time.monotonic()
         event_bus.publish(
             create_log_entry(
                 level=LogLevel.INFO,
@@ -257,11 +356,22 @@ def test_channel_bridge_runtime_service_times_out_scripts_without_blocking_publi
                 raw_payload=b"PING",
             )
         )
-        elapsed = time.monotonic() - started
+        assert run_started.wait(timeout=1.0)
+        assert not allow_timeout.is_set()
 
+        event_bus.publish(
+            create_log_entry(
+                level=LogLevel.INFO,
+                category="transport.message",
+                message="operator heartbeat",
+                transport_kind=TransportKind.UDP.value,
+                raw_payload=b"",
+            )
+        )
+
+        allow_timeout.set()
         _wait_until(lambda: any(entry.category == "automation.channel_bridge.error" for entry in captured))
 
-        assert elapsed < 0.2
         assert "timed out" in (service.snapshot.last_error or "")
         assert any("timed out" in entry.message for entry in captured if entry.category == "automation.channel_bridge.error")
     finally:
