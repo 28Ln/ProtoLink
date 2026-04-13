@@ -7,7 +7,14 @@ import tempfile
 from protolink.app import main
 from protolink.core.logging import create_log_entry, LogLevel
 from protolink.core.errors import CliExitCode, ProtoLinkUserError
-from protolink.core.logging import default_workspace_log_path, serialize_log_entry
+from protolink.core.logging import (
+    default_config_failure_evidence_path,
+    default_runtime_failure_evidence_path,
+    default_workspace_log_path,
+    load_config_failure_evidence,
+    load_runtime_failure_evidence,
+    serialize_log_entry,
+)
 from protolink.core.packaging import (
     DISTRIBUTION_PACKAGE_FORMAT_VERSION,
     INSTALLER_PACKAGE_FORMAT_VERSION,
@@ -237,6 +244,57 @@ def test_main_returns_user_error_for_invalid_export_kind(monkeypatch, tmp_path, 
 
     assert exit_code == int(CliExitCode.USER_ERROR)
     assert "create export scaffold failed: Unsupported export kind 'badkind'." in captured.out
+
+
+def test_main_records_cli_user_error_to_workspace_evidence(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(["--export-latest-capture", "bench capture"])
+    captured = capsys.readouterr()
+    workspace_logs = tmp_path / "workspace" / "logs"
+    workspace_log = default_workspace_log_path(workspace_logs)
+    evidence_file, evidence_entries, evidence_error = load_runtime_failure_evidence(workspace_logs)
+
+    assert exit_code == int(CliExitCode.USER_ERROR)
+    assert "locate workspace artifact failed:" in captured.out
+    assert workspace_log.exists()
+    log_lines = workspace_log.read_text(encoding="utf-8").strip().splitlines()
+    assert '"category": "cli.error"' in log_lines[-1]
+    assert evidence_error is None
+    assert evidence_file == default_runtime_failure_evidence_path(workspace_logs)
+    assert len(evidence_entries) == 1
+    assert evidence_entries[0]["source"] == "cli"
+    assert evidence_entries[0]["code"] == "cli_user_error"
+
+
+def test_main_records_cli_user_error_to_explicit_workspace_without_context(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace_root = tmp_path / "portable-workspace"
+
+    def fail_bootstrap(*args, **kwargs):
+        raise ProtoLinkUserError(
+            "Workspace bootstrap failed.",
+            action="bootstrap workspace",
+            recovery="Repair the workspace configuration and retry.",
+        )
+
+    monkeypatch.setattr("protolink.app.bootstrap_app_context", fail_bootstrap)
+
+    exit_code = main(["--workspace", str(workspace_root), "--headless-summary"])
+    captured = capsys.readouterr()
+    workspace_logs = workspace_root / "logs"
+    workspace_log = default_workspace_log_path(workspace_logs)
+    evidence_file, evidence_entries, evidence_error = load_runtime_failure_evidence(workspace_logs)
+
+    assert exit_code == int(CliExitCode.USER_ERROR)
+    assert "bootstrap workspace failed: Workspace bootstrap failed." in captured.out
+    assert workspace_log.exists()
+    assert '"category": "cli.error"' in workspace_log.read_text(encoding="utf-8")
+    assert evidence_error is None
+    assert evidence_file == default_runtime_failure_evidence_path(workspace_logs)
+    assert len(evidence_entries) == 1
+    assert evidence_entries[0]["code"] == "cli_user_error"
+    assert evidence_entries[0]["details"]["workspace"] == str(workspace_root.resolve())
 
 
 def test_main_exports_runtime_log_bundle_from_workspace(monkeypatch, tmp_path, capsys) -> None:
@@ -470,6 +528,60 @@ def test_main_release_preflight_rejects_runtime_log_write_failures(monkeypatch, 
     assert payload["ready"] is False
 
 
+def test_main_release_preflight_rejects_settings_config_failures(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    settings_dir = tmp_path / ".protolink"
+    settings_dir.mkdir(parents=True, exist_ok=True)
+    (settings_dir / "app_settings.json").write_text("{not-json", encoding="utf-8")
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    evidence_file, evidence_entries, evidence_error = load_config_failure_evidence(settings_dir)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "settings_config_failures_present" in payload["blocking_items"]
+    assert payload["settings_config_failure_count"] == 1
+    assert payload["settings_config_failure_entries"][0]["code"] == "settings_load_failed"
+    assert payload["settings_invalid_backup_files"]
+    assert payload["ready"] is False
+    assert evidence_error is None
+    assert evidence_file == default_config_failure_evidence_path(settings_dir)
+    assert len(evidence_entries) == 1
+    assert evidence_entries[0]["code"] == "settings_load_failed"
+
+
+def test_main_release_preflight_rejects_workspace_config_failures(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    (workspace.root / WORKSPACE_MANIFEST_FILE).write_text("{not-json", encoding="utf-8")
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    evidence_file, evidence_entries, evidence_error = load_config_failure_evidence(workspace.root)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "workspace_config_failures_present" in payload["blocking_items"]
+    assert payload["workspace_config_failure_count"] == 1
+    assert payload["workspace_config_failure_entries"][0]["code"] == "workspace_manifest_load_failed"
+    assert payload["workspace_invalid_backup_files"]
+    assert payload["ready"] is False
+    assert evidence_error is None
+    assert evidence_file == default_config_failure_evidence_path(workspace.root)
+    assert len(evidence_entries) == 1
+    assert evidence_entries[0]["code"] == "workspace_manifest_load_failed"
+
+
 def test_main_exports_release_bundle(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
@@ -627,8 +739,21 @@ def test_main_portable_bundle_installs_bundled_runtime_and_launch_scripts(monkey
     assert (install_dir / "Launch-ProtoLink.ps1").exists()
     assert (install_dir / "Launch-ProtoLink.bat").exists()
     install_script = (install_dir / "INSTALL.ps1").read_text(encoding="utf-8")
+    launch_ps1 = (install_dir / "Launch-ProtoLink.ps1").read_text(encoding="utf-8")
+    launch_bat = (install_dir / "Launch-ProtoLink.bat").read_text(encoding="utf-8")
     assert "runtime\\python.exe" in install_script
     assert "PYTHONPATH" in install_script
+    assert "PROTOLINK_BASE_DIR" in install_script
+    assert "ProtoLinkArgs" in launch_ps1
+    assert "python.exe" in launch_ps1
+    assert "pythonw.exe" in launch_ps1
+    assert "@ProtoLinkArgs" in launch_ps1
+    assert "PROTOLINK_BASE_DIR" in launch_ps1
+    assert 'if not "%~1"==""' in launch_bat
+    assert "python.exe" in launch_bat
+    assert "pythonw.exe" in launch_bat
+    assert "%*" in launch_bat
+    assert "PROTOLINK_BASE_DIR" in launch_bat
     assert install_payload["target_dir"] == str(install_dir)
 
 

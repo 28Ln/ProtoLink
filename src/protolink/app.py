@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -10,7 +11,7 @@ import time
 
 from protolink import __version__
 from protolink.catalog import build_module_catalog
-from protolink.core.bootstrap import bootstrap_app_context
+from protolink.core.bootstrap import AppContext, bootstrap_app_context
 from protolink.core.errors import CliExitCode, ProtoLinkUserError, format_cli_error, format_unexpected_cli_error
 from protolink.core.import_export import (
     ArtifactKind,
@@ -23,7 +24,16 @@ from protolink.core.import_export import (
     package_release_bundle,
     resolve_artifact_kind,
 )
-from protolink.core.logging import default_workspace_log_path, load_runtime_failure_evidence
+from protolink.core.logging import (
+    LogLevel,
+    RuntimeFailureEvidenceRecorder,
+    WorkspaceJsonlLogWriter,
+    create_log_entry,
+    default_runtime_failure_evidence_path,
+    default_workspace_log_path,
+    load_config_failure_evidence,
+    load_runtime_failure_evidence,
+)
 from protolink.core.packaging import (
     build_installer_staging_plan,
     build_installer_package_plan,
@@ -51,6 +61,7 @@ from protolink.core.packet_replay import (
     load_packet_replay_plan,
     save_packet_replay_plan,
 )
+from protolink.core.settings import resolve_application_base_dir
 from protolink.core.workspace import migrate_workspace, workspace_manifest_path
 from protolink.transports.serial import list_serial_ports
 
@@ -291,6 +302,72 @@ def run_ui_smoke_check() -> str:
     return "smoke-check-ok"
 
 
+def _invalid_config_backups(directory: Path, file_name: str) -> list[str]:
+    return sorted(
+        str(path)
+        for path in directory.glob(f"{file_name}.invalid*")
+        if path.is_file()
+    )
+
+
+def _record_cli_failure(
+    context: AppContext | None,
+    *,
+    code: str,
+    message: str,
+    command_args: list[str],
+    workspace_override: Path | None = None,
+    recovery: str | None = None,
+) -> None:
+    workspace_root: Path | None = None
+    if context is not None:
+        workspace_root = context.workspace.root
+    elif workspace_override is not None:
+        workspace_root = workspace_override.expanduser().resolve()
+
+    metadata = {
+        "argv": " ".join(command_args),
+    }
+    if workspace_root is not None:
+        metadata["workspace"] = str(workspace_root)
+    if recovery:
+        metadata["recovery"] = recovery
+
+    entry = create_log_entry(
+        level=LogLevel.ERROR,
+        category="cli.error",
+        message=message,
+        metadata=metadata,
+    )
+    if context is not None:
+        context.log_store.append(entry)
+        context.event_bus.publish(entry)
+        context.runtime_failure_evidence_recorder.append(
+            source="cli",
+            code=code,
+            message=message,
+            details=metadata,
+        )
+        return
+
+    if workspace_root is None:
+        return
+
+    logs_dir = workspace_root / "logs"
+    recorder = RuntimeFailureEvidenceRecorder(default_runtime_failure_evidence_path(logs_dir))
+    writer = WorkspaceJsonlLogWriter(
+        default_workspace_log_path(logs_dir),
+        failure_evidence_recorder=recorder,
+    )
+    writer.append(entry)
+    recorder.append(
+        source="cli",
+        code=code,
+        message=message,
+        details=metadata,
+    )
+
+
 def _inspect_workspace_log_jsonl(log_file: Path) -> tuple[bool, int, str | None]:
     if not log_file.exists():
         return False, 0, None
@@ -397,9 +474,17 @@ def build_release_preflight_report(context) -> dict[str, object]:
     selected_capture_file = _latest_artifact(valid_capture_candidates)
     smoke_result = run_ui_smoke_check()
     manifest_file = workspace_manifest_path(workspace.root)
+    settings_invalid_backup_files = _invalid_config_backups(context.settings_layout.root, context.settings_layout.settings_file.name)
+    workspace_invalid_backup_files = _invalid_config_backups(workspace.root, manifest_file.name)
     runtime_log_valid, runtime_log_line_count, runtime_log_parse_error = _inspect_workspace_log_jsonl(log_file)
     runtime_failure_evidence_file, runtime_failure_evidence_entries, runtime_failure_evidence_error = load_runtime_failure_evidence(
         workspace.logs
+    )
+    settings_config_failure_file, settings_config_failure_entries, settings_config_failure_error = load_config_failure_evidence(
+        context.settings_layout.root
+    )
+    workspace_config_failure_file, workspace_config_failure_entries, workspace_config_failure_error = load_config_failure_evidence(
+        workspace.root
     )
     event_handler_errors = [
         entry for entry in runtime_failure_evidence_entries if entry.get("code") == "event_handler_error"
@@ -436,6 +521,14 @@ def build_release_preflight_report(context) -> dict[str, object]:
         blocking_items.append("capture_artifacts_missing")
     if runtime_failure_evidence_error is not None:
         blocking_items.append("runtime_failure_evidence_invalid")
+    if settings_config_failure_error is not None:
+        blocking_items.append("settings_config_failure_evidence_invalid")
+    if workspace_config_failure_error is not None:
+        blocking_items.append("workspace_config_failure_evidence_invalid")
+    if settings_config_failure_entries:
+        blocking_items.append("settings_config_failures_present")
+    if workspace_config_failure_entries:
+        blocking_items.append("workspace_config_failures_present")
     if effective_event_handler_errors:
         blocking_items.append("event_handler_errors_present")
     if effective_log_write_failure_count > 0:
@@ -457,13 +550,24 @@ def build_release_preflight_report(context) -> dict[str, object]:
         "selected_capture_file": str(selected_capture_file) if selected_capture_file is not None else None,
         "invalid_profile_artifact_files": [str(path) for path in invalid_profile_candidates],
         "invalid_capture_artifact_files": [str(path) for path in invalid_capture_candidates],
+        "settings_invalid_backup_files": settings_invalid_backup_files,
+        "workspace_invalid_backup_files": workspace_invalid_backup_files,
         "exports_dir": str(workspace.exports),
         "event_handler_error_count": len(effective_event_handler_errors),
         "event_handler_errors": effective_event_handler_errors,
         "workspace_log_failed_write_count": effective_log_write_failure_count,
         "workspace_log_last_error": effective_log_write_last_error,
+        "settings_config_failure_file": str(settings_config_failure_file) if settings_config_failure_file is not None else None,
+        "settings_config_failure_count": len(settings_config_failure_entries),
+        "settings_config_failure_entries": settings_config_failure_entries,
+        "settings_config_failure_error": settings_config_failure_error,
+        "workspace_config_failure_file": str(workspace_config_failure_file) if workspace_config_failure_file is not None else None,
+        "workspace_config_failure_count": len(workspace_config_failure_entries),
+        "workspace_config_failure_entries": workspace_config_failure_entries,
+        "workspace_config_failure_error": workspace_config_failure_error,
         "runtime_failure_evidence_file": str(runtime_failure_evidence_file) if runtime_failure_evidence_file is not None else None,
         "runtime_failure_evidence_count": len(runtime_failure_evidence_entries),
+        "runtime_failure_evidence_entries": runtime_failure_evidence_entries,
         "runtime_failure_evidence_error": runtime_failure_evidence_error,
         "smoke_check": smoke_result,
         "blocking_items": blocking_items,
@@ -603,8 +707,11 @@ def prepare_release_bundle(context, name: str) -> dict[str, object]:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    command_args = list(argv if argv is not None else sys.argv[1:])
+    context: AppContext | None = None
+    workspace_override = Path(args.workspace) if args.workspace else None
 
-    base_dir = Path.cwd()
+    base_dir = resolve_application_base_dir(Path.cwd())
 
     if args.version:
         print(__version__)
@@ -647,7 +754,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         context = bootstrap_app_context(
             base_dir,
-            workspace_override=Path(args.workspace) if args.workspace else None,
+            workspace_override=workspace_override,
             persist_settings=not read_only_mode,
         )
 
@@ -1154,10 +1261,27 @@ def main(argv: list[str] | None = None) -> int:
             )
             return int(CliExitCode.OK)
     except ProtoLinkUserError as exc:
-        print(format_cli_error(exc, fallback_action="CLI command"))
+        formatted_error = format_cli_error(exc, fallback_action="CLI command")
+        _record_cli_failure(
+            context,
+            code="cli_user_error",
+            message=formatted_error,
+            command_args=command_args,
+            workspace_override=workspace_override,
+            recovery=exc.recovery,
+        )
+        print(formatted_error)
         return int(CliExitCode.USER_ERROR)
     except Exception as exc:
-        print(format_unexpected_cli_error("CLI command", exc))
+        formatted_error = format_unexpected_cli_error("CLI command", exc)
+        _record_cli_failure(
+            context,
+            code="cli_runtime_error",
+            message=formatted_error,
+            command_args=command_args,
+            workspace_override=workspace_override,
+        )
+        print(formatted_error)
         return int(CliExitCode.RUNTIME_ERROR)
 
     try:

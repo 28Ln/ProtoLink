@@ -8,6 +8,7 @@ from protolink.core.logging import (
     create_log_entry_from_transport_event,
     default_runtime_failure_evidence_path,
     default_workspace_log_path,
+    failure_evidence_fallback_path,
     load_runtime_failure_evidence,
     serialize_log_entry,
 )
@@ -120,6 +121,30 @@ def test_workspace_jsonl_log_writer_isolates_write_failures(tmp_path, monkeypatc
     assert evidence_entries[0]["source"] == "workspace_log_writer"
     assert evidence_entries[0]["code"] == "workspace_log_write_failure"
     assert evidence_entries[0]["message"] == "disk full"
+
+
+def test_runtime_failure_evidence_recorder_falls_back_when_primary_file_is_unwritable(tmp_path, monkeypatch) -> None:
+    primary_path = default_runtime_failure_evidence_path(tmp_path)
+    fallback_path = failure_evidence_fallback_path(primary_path)
+    recorder = RuntimeFailureEvidenceRecorder(primary_path)
+
+    original_open = type(primary_path).open
+
+    def fail_primary_open(path_obj, *args, **kwargs):
+        if path_obj == primary_path:
+            raise OSError("primary unavailable")
+        return original_open(path_obj, *args, **kwargs)
+
+    monkeypatch.setattr(type(primary_path), "open", fail_primary_open)
+
+    recorder.append(source="event_bus", code="event_handler_error", message="boom", details={"event_type": "str"})
+
+    evidence_file, evidence_entries, evidence_error = load_runtime_failure_evidence(tmp_path)
+
+    assert evidence_error is None
+    assert evidence_file == fallback_path
+    assert len(evidence_entries) == 1
+    assert evidence_entries[0]["message"] == "boom"
 
 
 def test_serialize_log_entry_truncates_large_raw_payload() -> None:

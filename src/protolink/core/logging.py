@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
+import tempfile
 import threading
 from collections import deque
 from collections.abc import Iterable, Mapping
@@ -19,6 +21,7 @@ RUNTIME_FAILURE_EVIDENCE_FILE_ALIASES = (
     "runtime-failure-events.jsonl",
     "runtime-failures.jsonl",
 )
+CONFIG_FAILURE_EVIDENCE_FILE = "config-failure-evidence.jsonl"
 
 
 class LogLevel(StrEnum):
@@ -203,55 +206,90 @@ def default_runtime_failure_evidence_path(logs_dir: Path) -> Path:
     return logs_dir / RUNTIME_FAILURE_EVIDENCE_FILE
 
 
+def default_config_failure_evidence_path(root: Path) -> Path:
+    return root / CONFIG_FAILURE_EVIDENCE_FILE
+
+
+def failure_evidence_fallback_path(path: Path) -> Path:
+    digest = hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()[:16]
+    return Path(tempfile.gettempdir()) / "protolink-failure-evidence" / f"{digest}-{path.name}"
+
+
 def runtime_failure_evidence_candidate_paths(logs_dir: Path) -> tuple[Path, ...]:
-    return tuple(logs_dir / name for name in RUNTIME_FAILURE_EVIDENCE_FILE_ALIASES)
+    primary_paths = tuple(logs_dir / name for name in RUNTIME_FAILURE_EVIDENCE_FILE_ALIASES)
+    fallback_paths = tuple(failure_evidence_fallback_path(path) for path in primary_paths)
+    return primary_paths + fallback_paths
+
+
+def config_failure_evidence_candidate_paths(root: Path) -> tuple[Path, ...]:
+    primary = default_config_failure_evidence_path(root)
+    return (primary, failure_evidence_fallback_path(primary))
+
+
+def _load_failure_evidence_file(path: Path) -> tuple[Path | None, list[dict[str, object]], str | None]:
+    if not path.exists():
+        return None, [], None
+
+    entries: list[dict[str, object]] = []
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for line_number, raw_line in enumerate(handle, start=1):
+                if not raw_line.strip():
+                    continue
+                payload = json.loads(raw_line)
+                if not isinstance(payload, dict):
+                    return path, [], f"line {line_number} must contain a JSON object"
+                if not all(
+                    isinstance(payload.get(key), str) and str(payload.get(key, "")).strip()
+                    for key in ("entry_id", "timestamp", "source", "code", "message")
+                ):
+                    return path, [], f"line {line_number} is missing required failure-evidence fields"
+                details = payload.get("details", {})
+                if not isinstance(details, dict):
+                    return path, [], f"line {line_number} must contain an object details field"
+                entries.append(
+                    {
+                        "entry_id": str(payload["entry_id"]),
+                        "timestamp": str(payload["timestamp"]),
+                        "source": str(payload["source"]),
+                        "code": str(payload["code"]),
+                        "message": str(payload["message"]),
+                        "details": {str(key): str(value) for key, value in details.items()},
+                    }
+                )
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return path, [], str(exc)
+
+    return path, entries, None
 
 
 def load_runtime_failure_evidence(logs_dir: Path) -> tuple[Path | None, list[dict[str, object]], str | None]:
     for candidate in runtime_failure_evidence_candidate_paths(logs_dir):
-        if not candidate.exists():
+        evidence_file, entries, error = _load_failure_evidence_file(candidate)
+        if evidence_file is None:
             continue
+        return evidence_file, entries, error
 
-        entries: list[dict[str, object]] = []
-        try:
-            with candidate.open("r", encoding="utf-8") as handle:
-                for line_number, raw_line in enumerate(handle, start=1):
-                    if not raw_line.strip():
-                        continue
-                    payload = json.loads(raw_line)
-                    if not isinstance(payload, dict):
-                        return candidate, [], f"line {line_number} must contain a JSON object"
-                    if not all(
-                        isinstance(payload.get(key), str) and str(payload.get(key, "")).strip()
-                        for key in ("entry_id", "timestamp", "source", "code", "message")
-                    ):
-                        return candidate, [], f"line {line_number} is missing required failure-evidence fields"
-                    details = payload.get("details", {})
-                    if not isinstance(details, dict):
-                        return candidate, [], f"line {line_number} must contain an object details field"
-                    entries.append(
-                        {
-                            "entry_id": str(payload["entry_id"]),
-                            "timestamp": str(payload["timestamp"]),
-                            "source": str(payload["source"]),
-                            "code": str(payload["code"]),
-                            "message": str(payload["message"]),
-                            "details": {str(key): str(value) for key, value in details.items()},
-                        }
-                    )
-        except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
-            return candidate, [], str(exc)
+    return None, [], None
 
-        return candidate, entries, None
+
+def load_config_failure_evidence(root: Path) -> tuple[Path | None, list[dict[str, object]], str | None]:
+    for candidate in config_failure_evidence_candidate_paths(root):
+        evidence_file, entries, error = _load_failure_evidence_file(candidate)
+        if evidence_file is None:
+            continue
+        return evidence_file, entries, error
 
     return None, [], None
 
 
 class RuntimeFailureEvidenceRecorder:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, fallback_path: Path | None = None) -> None:
         self.path = path
+        self.fallback_path = fallback_path or failure_evidence_fallback_path(path)
         self._lock = threading.Lock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.fallback_path.parent.mkdir(parents=True, exist_ok=True)
 
     def append(
         self,
@@ -269,12 +307,14 @@ class RuntimeFailureEvidenceRecorder:
         )
         payload = json.dumps(serialize_runtime_failure_evidence(entry), ensure_ascii=False)
         with self._lock:
-            try:
-                with self.path.open("a", encoding="utf-8") as handle:
-                    handle.write(payload)
-                    handle.write("\n")
-            except OSError:
-                return
+            for destination in (self.path, self.fallback_path):
+                try:
+                    with destination.open("a", encoding="utf-8") as handle:
+                        handle.write(payload)
+                        handle.write("\n")
+                    return
+                except OSError:
+                    continue
 
     def append_handler_error(self, *, event_type: str, handler_name: str, error: str) -> None:
         self.append(

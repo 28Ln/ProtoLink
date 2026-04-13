@@ -156,6 +156,11 @@ def _default_runtime_site_packages() -> Path:
     return Path(override) if override else Path(sysconfig.get_path("purelib"))
 
 
+def _package_staging_dir(exports_dir: Path, package_kind: str, package_name: str) -> Path:
+    package_digest = hashlib.sha256(package_name.encode("utf-8")).hexdigest()[:10]
+    return exports_dir / ".pkg" / f"{package_kind}-{package_digest}"
+
+
 def _copy_file(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
@@ -239,7 +244,7 @@ def build_portable_package_plan(
 ) -> PortablePackagePlan:
     packaged_at = packaged_at or datetime.now(UTC)
     package_name = f"{build_artifact_timestamp(packaged_at)}-portable-{sanitize_artifact_name(name)}"
-    package_dir = workspace.exports / package_name
+    package_dir = _package_staging_dir(workspace.exports, "portable", package_name)
     archive_file = workspace.exports / f"{package_name}.zip"
     return PortablePackagePlan(
         package_dir=package_dir,
@@ -304,9 +309,11 @@ def materialize_portable_package(
     install_script.write_text(
         "\n".join(
             (
+                "$ErrorActionPreference = 'Stop'",
                 '$runtime = Join-Path $PSScriptRoot "runtime\\python.exe"',
                 'if (-not (Test-Path -LiteralPath $runtime)) { throw "Bundled runtime is missing." }',
                 '$env:PYTHONPATH = Join-Path $PSScriptRoot "sp"',
+                '$env:PROTOLINK_BASE_DIR = $PSScriptRoot',
                 '& $runtime -m protolink --headless-summary',
             )
         )
@@ -319,10 +326,13 @@ def materialize_portable_package(
     launch_ps1.write_text(
         "\n".join(
             (
-                '$runtime = Join-Path $PSScriptRoot "runtime\\pythonw.exe"',
-                'if (-not (Test-Path -LiteralPath $runtime)) { throw "Bundled GUI runtime is missing." }',
+                "param([Parameter(ValueFromRemainingArguments = $true)][string[]]$ProtoLinkArgs = @())",
+                "$runtimeName = if ($ProtoLinkArgs.Count -gt 0) { 'python.exe' } else { 'pythonw.exe' }",
+                '$runtime = Join-Path $PSScriptRoot ("runtime\\" + $runtimeName)',
+                'if (-not (Test-Path -LiteralPath $runtime)) { throw "Bundled runtime is missing." }',
                 '$env:PYTHONPATH = Join-Path $PSScriptRoot "sp"',
-                '& $runtime -m protolink',
+                '$env:PROTOLINK_BASE_DIR = $PSScriptRoot',
+                '& $runtime -m protolink @ProtoLinkArgs',
             )
         )
         + "\n",
@@ -335,10 +345,13 @@ def materialize_portable_package(
         "\n".join(
             (
                 "@echo off",
-                "set RUNTIME=%~dp0runtime\\pythonw.exe",
-                "set PYTHONPATH=%~dp0sp",
-                'if not exist "%RUNTIME%" ( echo Bundled GUI runtime is missing. & exit /b 1 )',
-                '"%RUNTIME%" -m protolink',
+                "setlocal",
+                'set "RUNTIME=%~dp0runtime\\pythonw.exe"',
+                'if not "%~1"=="" set "RUNTIME=%~dp0runtime\\python.exe"',
+                'set "PYTHONPATH=%~dp0sp"',
+                'set "PROTOLINK_BASE_DIR=%~dp0"',
+                'if not exist "%RUNTIME%" ( echo Bundled runtime is missing. & exit /b 1 )',
+                '"%RUNTIME%" -m protolink %*',
             )
         )
         + "\n",
@@ -558,7 +571,7 @@ def build_distribution_package_plan(
 ) -> DistributionPackagePlan:
     packaged_at = packaged_at or datetime.now(UTC)
     package_name = f"{build_artifact_timestamp(packaged_at)}-distribution-{sanitize_artifact_name(name)}"
-    package_dir = workspace.exports / package_name
+    package_dir = _package_staging_dir(workspace.exports, "distribution", package_name)
     archive_file = workspace.exports / f"{package_name}.zip"
     manifest_file = package_dir / "distribution-manifest.json"
     return DistributionPackagePlan(
@@ -1132,7 +1145,7 @@ def build_installer_staging_plan(
 ) -> InstallerStagingPlan:
     packaged_at = packaged_at or datetime.now(UTC)
     package_name = f"{build_artifact_timestamp(packaged_at)}-installer-{sanitize_artifact_name(name)}"
-    package_dir = workspace.exports / package_name
+    package_dir = _package_staging_dir(workspace.exports, "installer", package_name)
     archive_file = workspace.exports / f"{package_name}.zip"
     manifest_file = package_dir / "installer-manifest.json"
     return InstallerStagingPlan(
@@ -1386,7 +1399,7 @@ def build_installer_package_plan(
 ) -> InstallerPackagePlan:
     packaged_at = packaged_at or datetime.now(UTC)
     package_name = f"{build_artifact_timestamp(packaged_at)}-installer-package-{sanitize_artifact_name(name)}"
-    package_dir = workspace.exports / package_name
+    package_dir = _package_staging_dir(workspace.exports, "installer-package", package_name)
     archive_file = workspace.exports / f"{package_name}.zip"
     manifest_file = package_dir / "installer-package-manifest.json"
     return InstallerPackagePlan(

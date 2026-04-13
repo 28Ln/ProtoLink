@@ -78,6 +78,55 @@ def _create_fake_runtime_bundle(root: Path) -> tuple[Path, Path]:
     return runtime_root, site_packages
 
 
+def test_package_plan_builders_use_short_staging_directories(tmp_path: Path) -> None:
+    context = bootstrap_app_context(tmp_path / "workspace-root", persist_settings=False)
+    release_archive = context.workspace.exports / "release.zip"
+    portable_archive = context.workspace.exports / "portable.zip"
+    distribution_archive = context.workspace.exports / "distribution.zip"
+    installer_staging_archive = context.workspace.exports / "installer-staging.zip"
+    release_archive.write_bytes(b"release")
+    portable_archive.write_bytes(b"portable")
+    distribution_archive.write_bytes(b"distribution")
+    installer_staging_archive.write_bytes(b"installer-staging")
+
+    portable_plan = build_portable_package_plan(
+        tmp_path / "repo",
+        context.workspace,
+        "portable demo",
+        release_archive,
+        packaged_at=datetime(2026, 4, 9, 8, 0, 0, tzinfo=UTC),
+    )
+    distribution_plan = build_distribution_package_plan(
+        context.workspace,
+        "distribution demo",
+        portable_archive,
+        release_archive,
+        packaged_at=datetime(2026, 4, 9, 9, 0, 0, tzinfo=UTC),
+    )
+    installer_staging_plan = build_installer_staging_plan(
+        context.workspace,
+        "installer demo",
+        distribution_archive,
+        packaged_at=datetime(2026, 4, 9, 10, 0, 0, tzinfo=UTC),
+    )
+    installer_package_plan = build_installer_package_plan(
+        context.workspace,
+        "installer package demo",
+        installer_staging_archive,
+        packaged_at=datetime(2026, 4, 9, 11, 0, 0, tzinfo=UTC),
+    )
+
+    for plan, expected_prefix in (
+        (portable_plan, "portable-"),
+        (distribution_plan, "distribution-"),
+        (installer_staging_plan, "installer-"),
+        (installer_package_plan, "installer-package-"),
+    ):
+        assert plan.package_dir.parent.name == ".pkg"
+        assert plan.package_dir.name.startswith(expected_prefix)
+        assert plan.package_name == plan.archive_file.stem
+
+
 def test_materialize_portable_package_copies_release_archive_and_metadata(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     (repo_root / "docs").mkdir(parents=True)
@@ -130,6 +179,20 @@ def test_materialize_portable_package_copies_release_archive_and_metadata(tmp_pa
     assert "demo-release.zip" in names
     assert PORTABLE_MANIFEST_FILE in names
     assert "src/protolink/__pycache__/demo.cpython-311.pyc" not in names
+    install_script = (plan.package_dir / "INSTALL.ps1").read_text(encoding="utf-8")
+    launch_ps1 = (plan.package_dir / "Launch-ProtoLink.ps1").read_text(encoding="utf-8")
+    launch_bat = (plan.package_dir / "Launch-ProtoLink.bat").read_text(encoding="utf-8")
+    assert "PROTOLINK_BASE_DIR" in install_script
+    assert "ProtoLinkArgs" in launch_ps1
+    assert "python.exe" in launch_ps1
+    assert "pythonw.exe" in launch_ps1
+    assert "@ProtoLinkArgs" in launch_ps1
+    assert "PROTOLINK_BASE_DIR" in launch_ps1
+    assert 'if not "%~1"==""' in launch_bat
+    assert "python.exe" in launch_bat
+    assert "pythonw.exe" in launch_bat
+    assert "%*" in launch_bat
+    assert "PROTOLINK_BASE_DIR" in launch_bat
     assert manifest["delivery_mode"] == "bundled_python_runtime"
     assert manifest["runtime_prerequisites"] == []
 

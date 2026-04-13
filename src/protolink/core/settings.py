@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 
 MAX_RECENT_WORKSPACES = 8
+PROTOLINK_BASE_DIR_ENV = "PROTOLINK_BASE_DIR"
+ConfigLoadErrorReporter = Callable[[str, str, Mapping[str, str]], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,12 +28,28 @@ def default_settings_root(base_dir: Path) -> Path:
     return base_dir / ".protolink"
 
 
+def resolve_application_base_dir(cwd: Path) -> Path:
+    override = os.environ.get(PROTOLINK_BASE_DIR_ENV, "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+
+    bundled_root = _detect_bundled_application_root()
+    if bundled_root is not None:
+        return bundled_root
+
+    return cwd.resolve()
+
+
 def ensure_settings_layout(root: Path) -> SettingsLayout:
     root.mkdir(parents=True, exist_ok=True)
     return SettingsLayout(root=root, settings_file=root / "app_settings.json")
 
 
-def load_app_settings(layout: SettingsLayout) -> AppSettings:
+def load_app_settings(
+    layout: SettingsLayout,
+    *,
+    on_error: ConfigLoadErrorReporter | None = None,
+) -> AppSettings:
     if not layout.settings_file.exists():
         return AppSettings()
 
@@ -40,8 +60,18 @@ def load_app_settings(layout: SettingsLayout) -> AppSettings:
         data = json.loads(raw_text)
         if not isinstance(data, dict):
             raise ValueError("settings file must contain a JSON object")
-    except (OSError, ValueError, json.JSONDecodeError, TypeError):
-        _backup_invalid_config_file(layout.settings_file)
+    except (OSError, ValueError, json.JSONDecodeError, TypeError) as exc:
+        backup_path = _backup_invalid_config_file(layout.settings_file)
+        if on_error is not None:
+            on_error(
+                "settings_load_failed",
+                str(exc),
+                {
+                    "settings_file": str(layout.settings_file),
+                    "backup_file": str(backup_path) if backup_path is not None else "",
+                    "error_type": type(exc).__name__,
+                },
+            )
         return AppSettings()
 
     recent_raw = data.get("recent_workspaces", [])
@@ -97,4 +127,16 @@ def _backup_invalid_config_file(path: Path) -> Path | None:
         except OSError:
             return None
         return backup_path
+    return None
+
+
+def _detect_bundled_application_root() -> Path | None:
+    module_path = Path(__file__).resolve()
+    for candidate in module_path.parents:
+        if candidate.name != "sp":
+            continue
+        bundled_root = candidate.parent
+        runtime_dir = bundled_root / "runtime"
+        if (runtime_dir / "python.exe").exists() or (runtime_dir / "pythonw.exe").exists():
+            return bundled_root.resolve()
     return None

@@ -27,6 +27,7 @@ from protolink.core.logging import (
     RuntimeFailureEvidenceRecorder,
     StructuredLogEntry,
     WorkspaceJsonlLogWriter,
+    default_config_failure_evidence_path,
     default_runtime_failure_evidence_path,
     default_workspace_log_path,
 )
@@ -69,6 +70,7 @@ class AppContext:
     transport_registry: TransportRegistry
     event_bus: EventBus
     log_store: InMemoryLogStore
+    runtime_failure_evidence_recorder: RuntimeFailureEvidenceRecorder
     workspace_log_writer: WorkspaceJsonlLogWriter
     packet_inspector: PacketInspectorState
     data_tools_service: DataToolsService
@@ -198,13 +200,32 @@ def bootstrap_app_context(
     *,
     workspace_override: Path | None = None,
     persist_settings: bool = False,
+    remember_workspace_override: bool = True,
 ) -> AppContext:
     settings_layout = ensure_settings_layout(default_settings_root(base_dir))
-    settings = load_app_settings(settings_layout)
+    settings_failure_recorder = RuntimeFailureEvidenceRecorder(default_config_failure_evidence_path(settings_layout.root))
+    settings = load_app_settings(
+        settings_layout,
+        on_error=lambda code, message, details: settings_failure_recorder.append(
+            source="settings",
+            code=code,
+            message=message,
+            details=details,
+        ),
+    )
     workspace_root = resolve_workspace_root(base_dir, settings, workspace_override)
-    workspace = ensure_workspace_layout(workspace_root)
+    workspace_failure_recorder = RuntimeFailureEvidenceRecorder(default_config_failure_evidence_path(workspace_root))
+    workspace = ensure_workspace_layout(
+        workspace_root,
+        on_error=lambda code, message, details: workspace_failure_recorder.append(
+            source="workspace",
+            code=code,
+            message=message,
+            details=details,
+        ),
+    )
 
-    if workspace_override is not None or persist_settings:
+    if persist_settings or (workspace_override is not None and remember_workspace_override):
         settings = remember_workspace(settings, workspace.root)
         save_app_settings(settings_layout, settings)
 
@@ -305,6 +326,7 @@ def bootstrap_app_context(
         transport_registry=transport_registry,
         event_bus=event_bus,
         log_store=log_store,
+        runtime_failure_evidence_recorder=runtime_failure_evidence_recorder,
         workspace_log_writer=workspace_log_writer,
         packet_inspector=packet_inspector,
         data_tools_service=data_tools_service,

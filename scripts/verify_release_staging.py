@@ -20,10 +20,15 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _run_command(command: list[str], *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _run_command(
+    command: list[str],
+    *,
+    cwd: Path = ROOT,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     completed = subprocess.run(
         command,
-        cwd=ROOT,
+        cwd=cwd,
         text=True,
         capture_output=True,
         env=env,
@@ -52,6 +57,39 @@ def _run_json(command: list[str]) -> dict[str, object]:
 
 def _uv(*args: str) -> list[str]:
     return ["uv", "run", *args]
+
+
+def _parse_headless_summary(label: str, output: str, install_root: Path) -> dict[str, object]:
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if not lines or lines[0] != "ProtoLink":
+        raise SystemExit(f"{label} did not produce the expected headless summary output.\n\nstdout:\n{output}")
+
+    fields: dict[str, str] = {}
+    for line in lines[1:]:
+        if ": " not in line:
+            continue
+        key, value = line.split(": ", 1)
+        fields[key] = value
+
+    workspace = Path(fields.get("Workspace", "")).resolve()
+    settings = Path(fields.get("Settings", "")).resolve()
+    install_root = install_root.resolve()
+    if not workspace.exists():
+        raise SystemExit(f"{label} reported a workspace that does not exist: {workspace}")
+    if not workspace.is_relative_to(install_root):
+        raise SystemExit(
+            f"{label} escaped the install root.\nworkspace: {workspace}\ninstall_root: {install_root}"
+        )
+    if not settings.is_relative_to(install_root):
+        raise SystemExit(
+            f"{label} escaped the install root.\nsettings: {settings}\ninstall_root: {install_root}"
+        )
+
+    return {
+        "workspace": str(workspace),
+        "settings": str(settings),
+        "summary_lines": lines,
+    }
 
 
 def main() -> int:
@@ -95,6 +133,15 @@ def main() -> int:
             if not Path(str(path_value)).exists():
                 raise SystemExit(f"Release-staging verification is missing expected file: {label} -> {path_value}")
 
+        installed_scripts = {
+            "install_script": install_dir / "INSTALL.ps1",
+            "launch_ps1": install_dir / "Launch-ProtoLink.ps1",
+            "launch_bat": install_dir / "Launch-ProtoLink.bat",
+        }
+        for label, path_value in installed_scripts.items():
+            if not path_value.exists():
+                raise SystemExit(f"Release-staging verification is missing expected installed script: {label} -> {path_value}")
+
         runtime_python = install_dir / "runtime" / "python.exe"
         site_packages = install_dir / "sp"
         if not runtime_python.exists():
@@ -107,9 +154,43 @@ def main() -> int:
         installed_summary = _run_command(
             [str(runtime_python), "-m", "protolink", "--headless-summary"],
             env=runtime_env,
+            cwd=temp_root,
         ).stdout
-        if "ProtoLink" not in installed_summary:
-            raise SystemExit("Installed bundled runtime did not produce the expected headless summary output.")
+        installed_summary_details = _parse_headless_summary(
+            "runtime/python.exe -m protolink --headless-summary",
+            installed_summary,
+            install_dir,
+        )
+
+        launcher_env = os.environ.copy()
+        launcher_env.pop("PYTHONPATH", None)
+        launcher_env.pop("PYTHONHOME", None)
+        launcher_env.pop("PROTOLINK_BASE_DIR", None)
+        install_script_summary = _run_command(
+            ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(installed_scripts["install_script"])],
+            env=launcher_env,
+            cwd=temp_root,
+        ).stdout
+        install_script_details = _parse_headless_summary("INSTALL.ps1", install_script_summary, install_dir)
+        launch_ps1_summary = _run_command(
+            [
+                "powershell",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(installed_scripts["launch_ps1"]),
+                "--headless-summary",
+            ],
+            env=launcher_env,
+            cwd=temp_root,
+        ).stdout
+        launch_ps1_details = _parse_headless_summary("Launch-ProtoLink.ps1", launch_ps1_summary, install_dir)
+        launch_bat_summary = _run_command(
+            ["cmd", "/c", str(installed_scripts["launch_bat"]), "--headless-summary"],
+            env=launcher_env,
+            cwd=temp_root,
+        ).stdout
+        launch_bat_details = _parse_headless_summary("Launch-ProtoLink.bat", launch_bat_summary, install_dir)
 
         uninstall_payload = _run_json(_uv("protolink", "--uninstall-portable-package", str(install_dir)))
         if not uninstall_payload.get("removed_receipt"):
@@ -146,7 +227,10 @@ def main() -> int:
                 "install_dir": install_payload["install_dir"],
                 "portable_receipt_file": install_payload["portable_receipt_file"],
             },
-            "installed_headless_summary": installed_summary.strip(),
+            "installed_headless_summary": installed_summary_details,
+            "install_script_headless_summary": install_script_details,
+            "launch_ps1_headless_summary": launch_ps1_details,
+            "launch_bat_headless_summary": launch_bat_details,
             "uninstall_portable_package": {
                 "target_dir": uninstall_payload["target_dir"],
                 "removed_receipt": uninstall_payload["removed_receipt"],

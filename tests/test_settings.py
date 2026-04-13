@@ -1,11 +1,15 @@
+import protolink.core.settings as settings_module
 from pathlib import Path
 
+from protolink.core.logging import RuntimeFailureEvidenceRecorder, default_config_failure_evidence_path, load_config_failure_evidence
 from protolink.app import main
 from protolink.core.settings import (
     AppSettings,
+    PROTOLINK_BASE_DIR_ENV,
     ensure_settings_layout,
     load_app_settings,
     remember_workspace,
+    resolve_application_base_dir,
     resolve_workspace_root,
     save_app_settings,
 )
@@ -71,6 +75,34 @@ def test_load_settings_backs_up_malformed_file_and_returns_defaults(tmp_path: Pa
     assert (layout.settings_file.parent / "app_settings.json.invalid").read_text(encoding="utf-8") == "{not-json"
 
 
+def test_load_settings_records_failure_evidence_when_error_reporter_is_configured(tmp_path: Path) -> None:
+    layout = ensure_settings_layout(tmp_path / ".protolink")
+    layout.settings_file.write_text("{not-json", encoding="utf-8")
+    recorder = RuntimeFailureEvidenceRecorder(default_config_failure_evidence_path(layout.root))
+
+    loaded = load_app_settings(
+        layout,
+        on_error=lambda code, message, details: recorder.append(
+            source="settings",
+            code=code,
+            message=message,
+            details=details,
+        ),
+    )
+
+    evidence_file, evidence_entries, evidence_error = load_config_failure_evidence(layout.root)
+
+    assert loaded == AppSettings()
+    assert evidence_error is None
+    assert evidence_file is not None
+    assert len(evidence_entries) == 1
+    assert evidence_entries[0]["source"] == "settings"
+    assert evidence_entries[0]["code"] == "settings_load_failed"
+    assert evidence_entries[0]["details"]["settings_file"] == str(layout.settings_file)
+    assert evidence_entries[0]["details"]["backup_file"].endswith("app_settings.json.invalid")
+    assert evidence_entries[0]["details"]["error_type"] == "JSONDecodeError"
+
+
 def test_load_settings_backs_up_non_object_file_and_returns_defaults(tmp_path: Path) -> None:
     layout = ensure_settings_layout(tmp_path / ".protolink")
     layout.settings_file.write_text("[]", encoding="utf-8")
@@ -80,3 +112,22 @@ def test_load_settings_backs_up_non_object_file_and_returns_defaults(tmp_path: P
     assert loaded == AppSettings()
     assert not layout.settings_file.exists()
     assert (layout.settings_file.parent / "app_settings.json.invalid").exists()
+
+
+def test_resolve_application_base_dir_prefers_env_override(tmp_path: Path, monkeypatch) -> None:
+    override = tmp_path / "portable-root"
+    monkeypatch.setenv(PROTOLINK_BASE_DIR_ENV, str(override))
+
+    assert resolve_application_base_dir(tmp_path / "cwd") == override.resolve()
+
+
+def test_resolve_application_base_dir_detects_bundled_layout(tmp_path: Path, monkeypatch) -> None:
+    bundled_root = tmp_path / "bundle"
+    fake_settings_file = bundled_root / "sp" / "protolink" / "core" / "settings.py"
+    fake_settings_file.parent.mkdir(parents=True, exist_ok=True)
+    fake_settings_file.write_text("# test\n", encoding="utf-8")
+    (bundled_root / "runtime").mkdir(parents=True, exist_ok=True)
+    (bundled_root / "runtime" / "python.exe").write_bytes(b"runtime")
+    monkeypatch.setattr(settings_module, "__file__", str(fake_settings_file))
+
+    assert resolve_application_base_dir(tmp_path / "cwd") == bundled_root.resolve()

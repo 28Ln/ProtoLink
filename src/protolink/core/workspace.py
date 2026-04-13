@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 
 WORKSPACE_FORMAT_VERSION = "protolink-workspace-v1"
 WORKSPACE_MANIFEST_FILE = "workspace_manifest.json"
+WorkspaceLoadErrorReporter = Callable[[str, str, Mapping[str, str]], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +42,11 @@ def default_workspace_root(base_dir: Path) -> Path:
     return base_dir / "workspace"
 
 
-def ensure_workspace_layout(root: Path) -> WorkspaceLayout:
+def ensure_workspace_layout(
+    root: Path,
+    *,
+    on_error: WorkspaceLoadErrorReporter | None = None,
+) -> WorkspaceLayout:
     root.mkdir(parents=True, exist_ok=True)
 
     layout = WorkspaceLayout(
@@ -67,7 +73,7 @@ def ensure_workspace_layout(root: Path) -> WorkspaceLayout:
     ):
         path.mkdir(parents=True, exist_ok=True)
 
-    ensure_workspace_manifest(layout)
+    ensure_workspace_manifest(layout, on_error=on_error)
     return layout
 
 
@@ -82,7 +88,11 @@ def build_workspace_manifest(layout: WorkspaceLayout) -> WorkspaceManifest:
     )
 
 
-def load_workspace_manifest(root: Path) -> WorkspaceManifest | None:
+def load_workspace_manifest(
+    root: Path,
+    *,
+    on_error: WorkspaceLoadErrorReporter | None = None,
+) -> WorkspaceManifest | None:
     manifest_file = workspace_manifest_path(root)
     if not manifest_file.exists():
         return None
@@ -93,8 +103,18 @@ def load_workspace_manifest(root: Path) -> WorkspaceManifest | None:
         data = json.loads(raw_text)
         if not isinstance(data, dict):
             raise ValueError("workspace manifest must contain a JSON object")
-    except (OSError, ValueError, json.JSONDecodeError, TypeError):
-        _backup_invalid_config_file(manifest_file)
+    except (OSError, ValueError, json.JSONDecodeError, TypeError) as exc:
+        backup_path = _backup_invalid_config_file(manifest_file)
+        if on_error is not None:
+            on_error(
+                "workspace_manifest_load_failed",
+                str(exc),
+                {
+                    "manifest_file": str(manifest_file),
+                    "backup_file": str(backup_path) if backup_path is not None else "",
+                    "error_type": type(exc).__name__,
+                },
+            )
         return None
 
     directories_raw = data.get("directories", ())
@@ -121,8 +141,12 @@ def save_workspace_manifest(layout: WorkspaceLayout, manifest: WorkspaceManifest
     return manifest_file
 
 
-def ensure_workspace_manifest(layout: WorkspaceLayout) -> Path:
-    manifest = load_workspace_manifest(layout.root)
+def ensure_workspace_manifest(
+    layout: WorkspaceLayout,
+    *,
+    on_error: WorkspaceLoadErrorReporter | None = None,
+) -> Path:
+    manifest = load_workspace_manifest(layout.root, on_error=on_error)
     if manifest is not None and manifest.format_version == WORKSPACE_FORMAT_VERSION:
         return workspace_manifest_path(layout.root)
     return save_workspace_manifest(layout, build_workspace_manifest(layout))
