@@ -22,7 +22,7 @@ class VerificationError(RuntimeError):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Verify ProtoLink wheel and sdist can fresh-install from dist/ and run the console entry point."
+        description="Verify ProtoLink wheel and sdist can fresh-install from dist/ and run headless summary in isolation."
     )
     parser.add_argument(
         "--dist-dir",
@@ -39,7 +39,23 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _print_step(kind: str, message: str) -> None:
-    print(f"[{kind}] {message}", file=sys.stderr)
+    print(f"[{kind}] {message}", file=sys.stderr, flush=True)
+
+
+def _sanitized_environment(*, isolated_base_dir: Path | None = None) -> dict[str, str]:
+    env = os.environ.copy()
+    for variable in (
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "VIRTUAL_ENV",
+        "UV_PROJECT_ENVIRONMENT",
+        "__PYVENV_LAUNCHER__",
+        PROTOLINK_BASE_DIR_ENV,
+    ):
+        env.pop(variable, None)
+    if isolated_base_dir is not None:
+        env[PROTOLINK_BASE_DIR_ENV] = str(isolated_base_dir)
+    return env
 
 
 def _run_command(
@@ -94,6 +110,37 @@ def _find_console_script(venv_dir: Path) -> Path:
         if candidate.exists():
             return candidate
     raise VerificationError(f"ProtoLink console entry point was not installed under {script_dir}.")
+
+
+def _probe_installed_module(python_executable: Path, *, cwd: Path, env: dict[str, str], venv_dir: Path) -> str:
+    probe = _run_command(
+        [
+            str(python_executable),
+            "-c",
+            (
+                "import json; "
+                "from pathlib import Path; "
+                "import protolink; "
+                "print(json.dumps({'module_file': str(Path(protolink.__file__).resolve())}))"
+            ),
+        ],
+        label="module origin probe",
+        cwd=cwd,
+        env=env,
+    )
+    try:
+        payload = json.loads(probe.stdout)
+    except json.JSONDecodeError as exc:
+        raise VerificationError(f"Installed module probe did not return JSON.\n\nstdout:\n{probe.stdout}") from exc
+
+    module_file = Path(str(payload["module_file"])).resolve()
+    if not module_file.is_relative_to(venv_dir.resolve()):
+        raise VerificationError(
+            "Installed module origin escaped the fresh virtualenv.\n"
+            f"module_file: {module_file}\n"
+            f"venv_dir: {venv_dir.resolve()}"
+        )
+    return str(module_file)
 
 
 def _parse_headless_summary(kind: str, output: str, isolated_base_dir: Path) -> dict[str, object]:
@@ -168,31 +215,40 @@ def _verify_artifact(kind: str, artifact_file: Path, temp_root: Path) -> dict[st
     work_dir.mkdir(parents=True, exist_ok=True)
     isolated_base_dir.mkdir(parents=True, exist_ok=True)
 
+    install_env = _sanitized_environment()
+
     _print_step(label, f"installing {artifact_file.name}")
     _run_command(
         [str(python_executable), "-m", "pip", "install", "--no-cache-dir", str(artifact_file)],
         label=f"[{label}] pip install",
-        cwd=ROOT,
+        cwd=temp_root,
+        env=install_env,
     )
 
     console_script = _find_console_script(venv_dir)
-    _print_step(label, f"running {console_script.name} --headless-summary")
-
-    runtime_env = os.environ.copy()
-    runtime_env.pop("PYTHONPATH", None)
-    runtime_env.pop("PYTHONHOME", None)
-    runtime_env[PROTOLINK_BASE_DIR_ENV] = str(isolated_base_dir)
+    runtime_env = _sanitized_environment(isolated_base_dir=isolated_base_dir)
+    module_file = _probe_installed_module(
+        python_executable,
+        cwd=work_dir,
+        env=runtime_env,
+        venv_dir=venv_dir,
+    )
+    _print_step(label, f"running {python_executable.name} -m protolink --headless-summary")
 
     summary_completed = _run_command(
-        [str(console_script), "--headless-summary"],
-        label=f"[{label}] protolink --headless-summary",
+        [str(python_executable), "-m", "protolink", "--headless-summary"],
+        label=f"[{label}] python -m protolink --headless-summary",
         cwd=work_dir,
         env=runtime_env,
     )
     summary_details = _parse_headless_summary(label, summary_completed.stdout, isolated_base_dir)
     _print_step(
         label,
-        f"verified workspace {summary_details['workspace']} and settings {summary_details['settings']}",
+        (
+            "verified fresh install at "
+            f"{module_file}, workspace {summary_details['workspace']}, "
+            f"settings {summary_details['settings']}"
+        ),
     )
 
     return {
@@ -202,6 +258,7 @@ def _verify_artifact(kind: str, artifact_file: Path, temp_root: Path) -> dict[st
         "isolated_base_dir": str(isolated_base_dir),
         "python_executable": str(python_executable),
         "console_script": str(console_script),
+        "module_file": module_file,
         **summary_details,
     }
 
