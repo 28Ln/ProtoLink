@@ -67,3 +67,6 @@ jobs:
 
       - name: Build package
         run: uv build
+
+      - name: Verify dist fresh-install artifacts
+        run: uv run python scripts/verify_dist_install.py
