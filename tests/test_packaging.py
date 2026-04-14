@@ -1,5 +1,6 @@
 import hashlib
 import json
+import runpy
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,6 +36,11 @@ from protolink.core.packaging import (
 
 def _sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
+
+
+def _load_verify_dist_install_namespace() -> dict[str, object]:
+    script_file = Path(__file__).resolve().parents[1] / "scripts" / "verify_dist_install.py"
+    return runpy.run_path(str(script_file), run_name="verify_dist_install_test_module")
 
 
 def _write_portable_archive(archive_file: Path) -> None:
@@ -865,3 +871,76 @@ def test_verify_installer_package_rejects_non_string_checksum(tmp_path: Path) ->
         assert "checksum" in str(exc)
     else:
         raise AssertionError("Expected invalid installer package checksum type to be rejected.")
+
+
+def test_verify_dist_install_selects_latest_complete_version_when_dist_contains_multiple_versions(
+    tmp_path: Path,
+) -> None:
+    namespace = _load_verify_dist_install_namespace()
+    select_artifact_pair = namespace["_select_artifact_pair"]
+
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir(parents=True)
+    for name in (
+        "protolink-0.1.0-py3-none-any.whl",
+        "protolink-0.1.0.tar.gz",
+        "protolink-0.2.0-py3-none-any.whl",
+        "protolink-0.2.0.tar.gz",
+    ):
+        (dist_dir / name).write_bytes(name.encode("utf-8"))
+
+    selection = select_artifact_pair(dist_dir)
+
+    assert selection.version == "0.2.0"
+    assert selection.wheel_file.name == "protolink-0.2.0-py3-none-any.whl"
+    assert selection.sdist_file.name == "protolink-0.2.0.tar.gz"
+    assert selection.wheel_versions == ("0.1.0", "0.2.0")
+    assert selection.sdist_versions == ("0.1.0", "0.2.0")
+
+
+def test_verify_dist_install_can_pin_an_explicit_artifact_version(tmp_path: Path) -> None:
+    namespace = _load_verify_dist_install_namespace()
+    select_artifact_pair = namespace["_select_artifact_pair"]
+
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir(parents=True)
+    for name in (
+        "protolink-0.1.0-py3-none-any.whl",
+        "protolink-0.1.0.tar.gz",
+        "protolink-0.2.0-py3-none-any.whl",
+        "protolink-0.2.0.tar.gz",
+    ):
+        (dist_dir / name).write_bytes(name.encode("utf-8"))
+
+    selection = select_artifact_pair(dist_dir, requested_version="0.1.0")
+
+    assert selection.version == "0.1.0"
+    assert selection.wheel_file.name == "protolink-0.1.0-py3-none-any.whl"
+    assert selection.sdist_file.name == "protolink-0.1.0.tar.gz"
+
+
+def test_verify_dist_install_rejects_mismatched_latest_artifacts_with_guidance(tmp_path: Path) -> None:
+    namespace = _load_verify_dist_install_namespace()
+    select_artifact_pair = namespace["_select_artifact_pair"]
+    verification_error = namespace["VerificationError"]
+
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir(parents=True)
+    for name in (
+        "protolink-0.2.0-py3-none-any.whl",
+        "protolink-0.2.0.tar.gz",
+        "protolink-0.3.0-py3-none-any.whl",
+    ):
+        (dist_dir / name).write_bytes(name.encode("utf-8"))
+
+    try:
+        select_artifact_pair(dist_dir)
+    except verification_error as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("Expected mismatched latest dist artifacts to be rejected.")
+
+    assert "mismatched latest ProtoLink artifacts" in message
+    assert "latest wheel version: 0.3.0" in message
+    assert "latest sdist version: 0.2.0" in message
+    assert "--artifact-version 0.2.0" in message

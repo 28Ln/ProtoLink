@@ -35,6 +35,9 @@ uv run protolink --smoke-check
 ```powershell
 uv run python scripts/verify_release_staging.py --name local
 python scripts/verify_dist_install.py
+# 如 dist/ 下并存多个历史版本，默认会校验最新且 wheel/sdist 成对存在的版本；
+# 若最新 wheel / sdist 版本不一致，则传入明确版本或先清理 dist/。
+python scripts/verify_dist_install.py --artifact-version 0.2.0
 uv build
 ```
 
@@ -54,3 +57,4 @@ uv build
 - 文档中的数字与主线 ID 必须与验证真值同步更新。
 - `uv` 管理的环境是当前正式验证口径。
 - 临时环境、临时 workspace 与本地审计产物不应作为正式交付真值。
+- `scripts/verify_dist_install.py` 默认自动选择 dist/ 中最新且 wheel/sdist 同版本成对存在的产物；若最新 wheel 与 sdist 版本不一致，脚本会显式报错并提示使用 `--artifact-version` 或先清理旧产物。

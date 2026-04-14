@@ -3,21 +3,48 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import venv
+from dataclasses import dataclass
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DIST_DIR = ROOT / "dist"
 PROTOLINK_BASE_DIR_ENV = "PROTOLINK_BASE_DIR"
+PROJECT_DISTRIBUTION = "protolink"
+WHEEL_SUFFIX = ".whl"
+SDIST_SUFFIX = ".tar.gz"
+
+try:
+    from packaging.version import InvalidVersion, Version
+except Exception:  # pragma: no cover - fallback only used when packaging is unavailable.
+    InvalidVersion = ValueError
+    Version = None
 
 
 class VerificationError(RuntimeError):
     """Raised when dist installation verification fails."""
+
+
+@dataclass(frozen=True)
+class ArtifactCandidate:
+    version: str
+    path: Path
+    modified_at: float
+
+
+@dataclass(frozen=True)
+class ArtifactSelection:
+    version: str
+    wheel_file: Path
+    sdist_file: Path
+    wheel_versions: tuple[str, ...]
+    sdist_versions: tuple[str, ...]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +61,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--keep-artifacts",
         action="store_true",
         help="保留临时虚拟环境和工作目录。",
+    )
+    parser.add_argument(
+        "--artifact-version",
+        help="显式指定要验证的产物版本；默认自动选择 dist/ 中最新且 wheel/sdist 成对存在的版本。",
     )
     return parser
 
@@ -80,20 +111,147 @@ def _run_command(
             f"command: {' '.join(command)}\n\n"
             f"stdout:\n{completed.stdout}\n\n"
             f"stderr:\n{completed.stderr}"
-        )
+    )
     return completed
 
 
-def _discover_single_artifact(dist_dir: Path, pattern: str, label: str) -> Path:
-    matches = sorted(path.resolve() for path in dist_dir.glob(pattern) if path.is_file())
-    if not matches:
-        raise VerificationError(f"No {label} artifact matched '{pattern}' under {dist_dir}. Run `uv build` first.")
-    if len(matches) > 1:
+def _version_sort_key(version_text: str) -> tuple[object, ...]:
+    if Version is not None:
+        try:
+            return (0, Version(version_text))
+        except InvalidVersion:
+            pass
+    parts: list[tuple[int, object]] = []
+    for token in re.split(r"(\d+)", version_text):
+        if not token:
+            continue
+        parts.append((0, int(token)) if token.isdigit() else (1, token.lower()))
+    return (1, tuple(parts), version_text.lower())
+
+
+def _parse_artifact_candidate(path: Path, *, kind: str) -> ArtifactCandidate | None:
+    name = path.name
+    prefix = f"{PROJECT_DISTRIBUTION}-"
+    if not name.startswith(prefix):
+        return None
+
+    if kind == "wheel":
+        if not name.endswith(WHEEL_SUFFIX):
+            return None
+        parts = name[: -len(WHEEL_SUFFIX)].split("-")
+        if len(parts) < 5:
+            return None
+        version = parts[1].strip()
+    elif kind == "sdist":
+        if not name.endswith(SDIST_SUFFIX):
+            return None
+        version = name[len(prefix) : -len(SDIST_SUFFIX)].strip()
+    else:  # pragma: no cover - internal misuse guard.
+        raise VerificationError(f"Unsupported artifact kind: {kind}")
+
+    if not version:
+        return None
+    return ArtifactCandidate(version=version, path=path.resolve(), modified_at=path.stat().st_mtime)
+
+
+def _discover_artifacts(dist_dir: Path, *, kind: str) -> dict[str, list[ArtifactCandidate]]:
+    pattern = f"*{WHEEL_SUFFIX}" if kind == "wheel" else f"*{SDIST_SUFFIX}"
+    discovered: dict[str, list[ArtifactCandidate]] = {}
+    for path in dist_dir.glob(pattern):
+        if not path.is_file():
+            continue
+        candidate = _parse_artifact_candidate(path, kind=kind)
+        if candidate is None:
+            continue
+        discovered.setdefault(candidate.version, []).append(candidate)
+
+    if not discovered:
         raise VerificationError(
-            f"Expected exactly one {label} artifact under {dist_dir}, found {len(matches)}:\n"
-            + "\n".join(str(path) for path in matches)
+            f"No ProtoLink {kind} artifact matched '{PROJECT_DISTRIBUTION}-*{pattern[1:]}' under {dist_dir}. "
+            "Run `uv build` first."
         )
-    return matches[0]
+    return discovered
+
+
+def _select_candidate(candidates_by_version: dict[str, list[ArtifactCandidate]], version: str, label: str) -> Path:
+    candidates = sorted(
+        candidates_by_version[version],
+        key=lambda candidate: (candidate.modified_at, str(candidate.path).lower()),
+    )
+    selected = candidates[-1]
+    if len(candidates) > 1:
+        ignored = ", ".join(candidate.path.name for candidate in candidates[:-1])
+        _print_step(
+            "DIST",
+            f"{label} version {version} has {len(candidates)} candidates; using newest {selected.path.name}, ignored: {ignored}",
+        )
+    return selected.path
+
+
+def _format_versions(versions: tuple[str, ...]) -> str:
+    return ", ".join(versions) if versions else "(none)"
+
+
+def _select_artifact_pair(dist_dir: Path, *, requested_version: str | None = None) -> ArtifactSelection:
+    wheel_candidates = _discover_artifacts(dist_dir, kind="wheel")
+    sdist_candidates = _discover_artifacts(dist_dir, kind="sdist")
+    wheel_versions = tuple(sorted(wheel_candidates, key=_version_sort_key))
+    sdist_versions = tuple(sorted(sdist_candidates, key=_version_sort_key))
+    common_versions = tuple(sorted(set(wheel_versions).intersection(sdist_versions), key=_version_sort_key))
+
+    if requested_version is not None:
+        requested_version = requested_version.strip()
+        if not requested_version:
+            raise VerificationError("Requested artifact version cannot be empty.")
+        if requested_version not in wheel_candidates or requested_version not in sdist_candidates:
+            raise VerificationError(
+                "Requested artifact version is not a complete wheel/sdist pair.\n"
+                f"requested_version: {requested_version}\n"
+                f"available wheel versions: {_format_versions(wheel_versions)}\n"
+                f"available sdist versions: {_format_versions(sdist_versions)}\n"
+                "Either pass a complete version or clean dist/ and rebuild."
+            )
+        selected_version = requested_version
+        _print_step("DIST", f"using requested ProtoLink dist version {selected_version}")
+    else:
+        if not common_versions:
+            raise VerificationError(
+                "dist/ does not contain a complete ProtoLink wheel/sdist pair.\n"
+                f"available wheel versions: {_format_versions(wheel_versions)}\n"
+                f"available sdist versions: {_format_versions(sdist_versions)}\n"
+                "Clean dist/ and rerun `uv build`, or pass --artifact-version once a complete pair exists."
+            )
+
+        latest_wheel_version = wheel_versions[-1]
+        latest_sdist_version = sdist_versions[-1]
+        if latest_wheel_version != latest_sdist_version:
+            suggested_common = common_versions[-1]
+            raise VerificationError(
+                "dist/ contains mismatched latest ProtoLink artifacts.\n"
+                f"latest wheel version: {latest_wheel_version}\n"
+                f"latest sdist version: {latest_sdist_version}\n"
+                f"available wheel versions: {_format_versions(wheel_versions)}\n"
+                f"available sdist versions: {_format_versions(sdist_versions)}\n"
+                f"Use --artifact-version {suggested_common} to verify the latest complete pair, "
+                "or clean dist/ and rebuild to keep only one release line."
+            )
+
+        selected_version = latest_wheel_version
+        older_complete_versions = [version for version in common_versions if version != selected_version]
+        if older_complete_versions:
+            _print_step(
+                "DIST",
+                f"using latest ProtoLink dist version {selected_version}; ignored older complete versions: "
+                f"{', '.join(older_complete_versions)}",
+            )
+
+    return ArtifactSelection(
+        version=selected_version,
+        wheel_file=_select_candidate(wheel_candidates, selected_version, "wheel"),
+        sdist_file=_select_candidate(sdist_candidates, selected_version, "sdist"),
+        wheel_versions=wheel_versions,
+        sdist_versions=sdist_versions,
+    )
 
 
 def _venv_python(venv_dir: Path) -> Path:
@@ -292,13 +450,22 @@ def main() -> int:
         if not dist_dir.exists():
             raise VerificationError(f"Distribution directory does not exist: {dist_dir}")
 
-        wheel_file = _discover_single_artifact(dist_dir, "*.whl", "wheel")
-        sdist_file = _discover_single_artifact(dist_dir, "*.tar.gz", "sdist")
+        artifact_selection = _select_artifact_pair(
+            dist_dir,
+            requested_version=args.artifact_version,
+        )
 
         result = {
             "dist_dir": str(dist_dir),
-            "wheel": _verify_artifact("wheel", wheel_file, temp_root),
-            "sdist": _verify_artifact("sdist", sdist_file, temp_root),
+            "artifact_selection": {
+                "selected_version": artifact_selection.version,
+                "wheel_file": str(artifact_selection.wheel_file),
+                "sdist_file": str(artifact_selection.sdist_file),
+                "wheel_versions": list(artifact_selection.wheel_versions),
+                "sdist_versions": list(artifact_selection.sdist_versions),
+            },
+            "wheel": _verify_artifact("wheel", artifact_selection.wheel_file, temp_root),
+            "sdist": _verify_artifact("sdist", artifact_selection.sdist_file, temp_root),
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0

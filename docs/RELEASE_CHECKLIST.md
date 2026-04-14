@@ -26,6 +26,8 @@ python scripts/verify_dist_install.py
 uv build
 ```
 
+> 若 `dist/` 下并存多个版本产物，`scripts/verify_dist_install.py` 默认验证最新且 wheel/sdist 成对存在的版本；若最新 wheel 与 sdist 版本不一致，应先清理旧产物，或使用 `python scripts/verify_dist_install.py --artifact-version <version>` 显式校验目标版本。
+
 ## 工作区与交付检查
 
 - `uv run protolink --release-preflight` 返回 `ready: true`
