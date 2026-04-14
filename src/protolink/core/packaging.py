@@ -136,6 +136,9 @@ DISTRIBUTION_PACKAGE_FORMAT_VERSION = "protolink-distribution-package-v1"
 INSTALLER_STAGING_FORMAT_VERSION = "protolink-installer-staging-v1"
 INSTALLER_PACKAGE_FORMAT_VERSION = "protolink-installer-package-v1"
 BUNDLED_RUNTIME_DELIVERY_MODE = "bundled_python_runtime"
+_NONESSENTIAL_RUNTIME_METADATA_FILES = frozenset({"RECORD", "INSTALLER", "REQUESTED", "direct_url.json"})
+_NONESSENTIAL_RUNTIME_PACKAGES = frozenset({"pytest", "_pytest", "iniconfig", "pip", "wheel"})
+_NONESSENTIAL_RUNTIME_PACKAGE_PREFIXES = tuple(f"{package}-" for package in sorted(_NONESSENTIAL_RUNTIME_PACKAGES))
 
 
 def _build_bundled_runtime_requirements() -> dict[str, object]:
@@ -174,11 +177,13 @@ def _copy_tree(
     ignore_python_path_links: bool = False,
     ignore_test_artifacts: bool = False,
     ignore_dev_packages: bool = False,
+    ignore_runtime_metadata: bool = False,
 ) -> None:
     if not source.exists():
         return
 
     def _ignore(_directory: str, names: list[str]) -> set[str]:
+        directory_name = Path(_directory).name
         ignored = {"__pycache__"}
         ignored.update(name for name in names if name.endswith((".pyc", ".pyo")))
         if ignore_site_packages and "site-packages" in names:
@@ -191,10 +196,11 @@ def _copy_tree(
             ignored.update(
                 name
                 for name in names
-                if name in {"pytest", "_pytest", "iniconfig"}
-                or name.startswith(("pytest-", "_pytest-", "iniconfig-"))
-                and name.endswith(".dist-info")
+                if name in _NONESSENTIAL_RUNTIME_PACKAGES
+                or (name.startswith(_NONESSENTIAL_RUNTIME_PACKAGE_PREFIXES) and name.endswith(".dist-info"))
             )
+        if ignore_runtime_metadata and directory_name.endswith((".dist-info", ".egg-info")):
+            ignored.update(name for name in names if name in _NONESSENTIAL_RUNTIME_METADATA_FILES)
         return ignored
 
     shutil.copytree(
@@ -254,6 +260,7 @@ def _materialize_bundled_runtime(
         ignore_python_path_links=True,
         ignore_test_artifacts=True,
         ignore_dev_packages=True,
+        ignore_runtime_metadata=True,
     )
     copied.append(str(runtime_site_packages_dest.relative_to(package_dir)))
 
@@ -309,20 +316,12 @@ def materialize_portable_package(
 
     for relative in (
         Path("README.md"),
-        Path("pyproject.toml"),
-        Path("uv.lock"),
         Path("docs/SMOKE_CHECKLIST.md"),
         Path("docs/RELEASE_CHECKLIST.md"),
     ):
         source = repo_root / relative
         if source.exists():
             copy_file(source, plan.package_dir / relative)
-
-    src_root = repo_root / "src" / "protolink"
-    if src_root.exists():
-        destination_root = plan.package_dir / "src" / "protolink"
-        _copy_tree(src_root, destination_root)
-        copied.append(str(destination_root.relative_to(plan.package_dir)))
 
     release_archive_destination = plan.package_dir / plan.release_archive_file.name
     copy_file(plan.release_archive_file, release_archive_destination)

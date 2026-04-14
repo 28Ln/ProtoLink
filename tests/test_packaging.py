@@ -71,6 +71,11 @@ def _create_fake_runtime_bundle(root: Path) -> tuple[Path, Path]:
     (runtime_root / "Lib" / "encodings").mkdir(parents=True)
     (runtime_root / "Lib" / "test").mkdir(parents=True)
     (site_packages / "demo_pkg").mkdir(parents=True)
+    (site_packages / "demo_pkg-1.0.dist-info").mkdir(parents=True)
+    (site_packages / "pip").mkdir(parents=True)
+    (site_packages / "pip-24.0.dist-info").mkdir(parents=True)
+    (site_packages / "wheel").mkdir(parents=True)
+    (site_packages / "wheel-0.45.1.dist-info").mkdir(parents=True)
     (site_packages / "pytest").mkdir(parents=True)
     (site_packages / "_pytest").mkdir(parents=True)
     (site_packages / "iniconfig").mkdir(parents=True)
@@ -82,6 +87,15 @@ def _create_fake_runtime_bundle(root: Path) -> tuple[Path, Path]:
     (runtime_root / "Lib" / "encodings" / "__init__.py").write_text("# encodings\n", encoding="utf-8")
     (runtime_root / "Lib" / "test" / "support.py").write_text("# test support\n", encoding="utf-8")
     (site_packages / "demo_pkg" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
+    (site_packages / "demo_pkg-1.0.dist-info" / "METADATA").write_text("Name: demo-pkg\n", encoding="utf-8")
+    (site_packages / "demo_pkg-1.0.dist-info" / "RECORD").write_text("", encoding="utf-8")
+    (site_packages / "demo_pkg-1.0.dist-info" / "INSTALLER").write_text("uv\n", encoding="utf-8")
+    (site_packages / "demo_pkg-1.0.dist-info" / "REQUESTED").write_text("", encoding="utf-8")
+    (site_packages / "demo_pkg-1.0.dist-info" / "direct_url.json").write_text("{}", encoding="utf-8")
+    (site_packages / "pip" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
+    (site_packages / "pip-24.0.dist-info" / "METADATA").write_text("Name: pip\n", encoding="utf-8")
+    (site_packages / "wheel" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
+    (site_packages / "wheel-0.45.1.dist-info" / "METADATA").write_text("Name: wheel\n", encoding="utf-8")
     (site_packages / "pytest" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
     (site_packages / "_pytest" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
     (site_packages / "iniconfig" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
@@ -178,16 +192,26 @@ def test_materialize_portable_package_copies_release_archive_and_metadata(tmp_pa
     with ZipFile(plan.archive_file) as archive:
         names = set(archive.namelist())
     assert "README.md" in names
-    assert "pyproject.toml" in names
+    assert "pyproject.toml" not in names
+    assert "uv.lock" not in names
     assert "docs/SMOKE_CHECKLIST.md" in names
     assert "docs/RELEASE_CHECKLIST.md" in names
-    assert "src/protolink/__init__.py" in names
+    assert "src/protolink/__init__.py" not in names
     assert "runtime/python.exe" in names
     assert "runtime/pythonw.exe" in names
     assert "runtime/Lib/encodings/__init__.py" in names
     assert "runtime/Lib/test/support.py" not in names
     assert "sp/demo_pkg/__init__.py" in names
+    assert "sp/demo_pkg-1.0.dist-info/METADATA" in names
+    assert "sp/demo_pkg-1.0.dist-info/RECORD" not in names
+    assert "sp/demo_pkg-1.0.dist-info/INSTALLER" not in names
+    assert "sp/demo_pkg-1.0.dist-info/REQUESTED" not in names
+    assert "sp/demo_pkg-1.0.dist-info/direct_url.json" not in names
     assert "sp/protolink/__init__.py" in names
+    assert "sp/pip/__init__.py" not in names
+    assert "sp/pip-24.0.dist-info/METADATA" not in names
+    assert "sp/wheel/__init__.py" not in names
+    assert "sp/wheel-0.45.1.dist-info/METADATA" not in names
     assert "sp/pytest/__init__.py" not in names
     assert "sp/_pytest/__init__.py" not in names
     assert "sp/iniconfig/__init__.py" not in names
@@ -201,6 +225,7 @@ def test_materialize_portable_package_copies_release_archive_and_metadata(tmp_pa
     assert "demo-release.zip" in names
     assert PORTABLE_MANIFEST_FILE in names
     assert "src/protolink/__pycache__/demo.cpython-311.pyc" not in names
+    assert "src/protolink" not in manifest["included_entries"]
     install_script = (plan.package_dir / "INSTALL.ps1").read_text(encoding="utf-8")
     launch_ps1 = (plan.package_dir / "Launch-ProtoLink.ps1").read_text(encoding="utf-8")
     launch_bat = (plan.package_dir / "Launch-ProtoLink.bat").read_text(encoding="utf-8")
