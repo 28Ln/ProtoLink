@@ -13,9 +13,13 @@ dist/
 .vscode/
 .omx/
 .protolink/
+.codex/
 ref/
 workspace/
 logs/
 audit_tmp*/
 audit_tmp*.zip
+.audit-tmp*/
+.audit-tmp*.json
+.audit-tmp*.zip
 $archive

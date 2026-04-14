@@ -37,7 +37,7 @@ jobs:
           "PROTO_PYTEST_PASSED=$($Matches[1])" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Verify canonical truth
-        run: uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count ${{ env.PROTO_PYTEST_PASSED }}
+        run: uv run python scripts/verify_canonical_truth.py --expected-mainline PL-012 --expected-pytest-count ${{ env.PROTO_PYTEST_PASSED }}
 
       - name: Run targeted regressions
         run: uv run python scripts/run_targeted_regressions.py --suite all

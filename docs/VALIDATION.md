@@ -1,77 +1,56 @@
 # ProtoLink Validation
 
-## 1. 当前可执行验证
+Last updated: 2026-04-14
 
-### 当前验证基线
+## 当前验证基线
 
 - `uv run pytest -q` -> 274 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count 274` -> passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-012 --expected-pytest-count 274` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
+- `python scripts/verify_dist_install.py` -> passed
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
-- `uv run protolink --smoke-check` -> passed with clean `smoke-check-ok` output
-- `uv run protolink --release-preflight` -> passed
-- `<install-dir>\\runtime\\python.exe -m protolink --headless-summary` -> passed for the installed bundled-runtime payload
+- `uv run protolink --smoke-check` -> `smoke-check-ok`
+- 当前 full-suite 快照：`274 passed`
 
-### 当前 CI 真值
-
-CI currently enforces:
-
-- full pytest
-- canonical truth verification
-- targeted regression suites
-- release-staging verification via `scripts/verify_release_staging.py` (including portable/distribution/installer verify + install/uninstall)
-- clean release-staging verification
-- `uv build`
-
-### 环境同步
+## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
+uv run pytest -q
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-012 --expected-pytest-count 274
 ```
 
-### 运行测试
+## UI / owner-surface 相关验证
 
 ```powershell
-uv run pytest
-```
-
-### 运行 canonical truth gate
-
-```powershell
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count 274
-```
-
-### 运行 targeted regression gate
-
-```powershell
+uv sync --python 3.11 --extra dev --extra ui
 uv run python scripts/run_targeted_regressions.py --suite all
-uv run python scripts/run_targeted_regressions.py --suite pl006_automation_owner_surface
-uv run python scripts/run_targeted_regressions.py --suite pl007_script_console_owner_surface
-uv run python scripts/run_targeted_regressions.py --suite pl008_data_tools_owner_surface
-uv run python scripts/run_targeted_regressions.py --suite pl009_network_tools_owner_surface
-uv run python scripts/run_targeted_regressions.py --suite pl010_ui_consistency
+uv run protolink --smoke-check
 ```
 
-### 运行 clean release-staging 验证
+## 交付链验证
 
 ```powershell
 uv run python scripts/verify_release_staging.py --name local
+python scripts/verify_dist_install.py
+uv build
 ```
 
-### 当前 owner-surface 重点回归
+## 通过标准
 
-- `uv run pytest tests/test_script_console_service.py tests/test_ui_script_console_panel.py tests/test_ui_main_window.py tests/test_script_host_service.py -q`
-- `uv run pytest tests/test_data_tools_service.py tests/test_ui_data_tools_panel.py tests/test_ui_main_window.py -q`
-- `uv run pytest tests/test_network_tools_service.py tests/test_ui_network_tools_panel.py tests/test_ui_main_window.py -q`
+一个可交接、可继续迭代的基线至少应满足：
 
-### 当前 reconciliation lane 重点回归
+1. full pytest 通过
+2. targeted regressions 通过
+3. canonical truth 校验通过
+4. release-staging 校验通过
+5. fresh-install 校验通过
+6. build 产物可生成
 
-- `uv run pytest tests/test_logging.py tests/test_event_bus.py tests/test_auto_response_runtime_service.py tests/test_device_scan_execution_service.py tests/test_register_monitor_service.py tests/test_script_host_service.py tests/test_packet_replay_service.py tests/test_channel_bridge_runtime_service.py tests/test_rule_engine_service.py tests/test_timed_task_service.py tests/test_bootstrap.py -q`
-- `uv run pytest tests/test_script_console_service.py tests/test_data_tools_service.py tests/test_network_tools_service.py tests/test_ui_script_console_panel.py tests/test_ui_data_tools_panel.py tests/test_ui_network_tools_panel.py tests/test_ui_automation_rules_panel.py tests/test_ui_owner_surface_consistency.py tests/test_ui_main_window.py -q`
+## 注意事项
 
-### 当前 full-suite snapshot
-
-- `274 passed`
-- no warning summary
+- 文档中的数字与主线 ID 必须与验证真值同步更新。
+- `uv` 管理的环境是当前正式验证口径。
+- 临时环境、临时 workspace 与本地审计产物不应作为正式交付真值。

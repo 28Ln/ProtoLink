@@ -1,94 +1,52 @@
 # ProtoLink Mainline Status
 
-Last rebuilt: 2026-04-12
+Last updated: 2026-04-14
 
 ## Single active mainline
 
-- ID: `PL-011`
-- Title: Carry-over dirty workspace reconciliation
+- ID: `PL-012`
+- Title: Delivery Baseline Consolidation
 
-## Direct product requirement served
+## 目标
 
-This mainline directly serves the current product-core requirement:
+把 ProtoLink 从“验证通过的开发态”收敛为“正式交付、正式交接、正式迭代”的工程基线。
 
-> Restore one trustworthy release-ready baseline and handoff truth after the verified owner-surface and delivery stack has accumulated above the original delivery baseline.
+## 为什么现在做这件事
 
-Why this is now the current product-core requirement:
+当前已经具备：
 
-- trusted release truth now exists
-- bundled-runtime clean-machine delivery now exists
-- runtime/session truth unification now exists
-- engineering-quality gates now exist beyond compileall + pytest
-- clean release-staging sign-off now exists as an executable path
-- automation runtime safety controls now exist
-- Script Console owner surface now exists
-- Data Tools owner surface now exists
-- Network Tools owner surface now exists
-- `PL-010` now has explicit regression protection and closure evidence
-- the next highest-priority gap is repository baseline reconciliation and handoff truth
+- `274 passed`
+- `release-staging passed`
+- `dist fresh-install passed`
 
-## Why this is first priority
+因此当前最高优先级不再是继续加功能，而是统一：
 
-- It is the highest-value step after the release-gate, clean-machine delivery, runtime/session truth, verification-gate, clean release-staging sign-off, safe automation-expansion, Script Console owner-surface, Data Tools owner-surface, Network Tools owner-surface, and `PL-010` consistency-closure slices closed.
-- It directly protects delivery confidence, handoff trust, and the integrity of all subsequent iterations.
-- It prevents more feature or polish work from piling onto an unreconciled mixed baseline.
+- 项目目标口径
+- 架构口径
+- 运行与交付口径
+- 主线任务口径
+- 风险与交接口径
 
-## Why not another task first
+## 当前范围
 
-- Not further sign-off work first:
-  - clean release-staging validation now exists as an executable path
-- Not more feature expansion first:
-  - new surface work on top of a mixed baseline would widen drift and weaken handoff truth
-- Not more polish first:
-  - polish no longer outranks establishing one trustworthy baseline for the already-verified stack
-- Not archive-only cleanup first:
-  - historical cleanup should follow baseline establishment, not replace it
+`PL-012` 聚焦：
 
-## Previous mainline results
+1. 正式文档体系收敛
+2. 单一主线任务与正式任务台账
+3. README / 文档入口 / 交接入口整理
+4. 风险台账固化
+5. 交付与 handoff 套件落地
 
-- `PL-001` — release-gate hardening completed
-- `PL-002` — bundled-runtime delivery completed
-- `PL-003` — runtime/session truth completed
-- `PL-004` — verification and engineering standards completed
-- `PL-005` — clean release-staging sign-off completed
-- `PL-006` — safe automation-expansion completed
-- `PL-007` — Script Console owner surface completed
-- `PL-008` — Data Tools owner surface completed
-- `PL-009` — Network Tools owner surface completed
-- `PL-010` — owner-surface consistency closure completed
+## 退出条件
 
-## Current implementation slice
+`PL-012` 只在以下条件全部满足时关闭：
 
-`PL-011` now continues through:
+- README、状态、验证、风险、handoff 文档完成收敛
+- 项目在无口头说明前提下可被新接手者运行与验证
+- 当前主线、未完成事项、风险与交付边界都有唯一正式文档
+- CI / 验证 / 文档真值保持同步
 
-- establishing one verified post-PL-010 baseline handoff point
-- synchronizing canonical docs, CI, validation, and git truth around that baseline
-- preventing future iterations from starting on top of an unreconciled mixed stack
+## 后续候选主线
 
-## Blocked follow-on tasks
-
-`PL-011` currently blocks:
-
-- `PL-012` — legacy alias cleanup in commentary and planning references
-- any new feature-expansion line that would otherwise build on top of an unreconciled baseline
-
-## Next iteration entry
-
-- `README.md`
-- `docs/CURRENT_STATE.md`
-- `docs/ENGINEERING_TASKLIST.md`
-- `docs/PROJECT_STATUS.md`
-- `docs/MAINLINE_STATUS.md`
-- `docs/WORKTREE_RECONCILIATION.md`
-- `docs/TASK_ARCHIVE.md`
-- `docs/VALIDATION.md`
-- `.github/workflows/ci.yml`
-- `git status`, `git diff`, and recent commit history
-
-## Mainline exit evidence
-
-`PL-011` exits only when:
-
-- canonical docs stay synchronized
-- the repository has one verified post-PL-010 baseline handoff point
-- future iterations no longer start from an unreconciled mixed stack
+- `PL-013` — Package Slimming and Native Installer Path
+- `PL-014` — Extension Contract and Plugin Boundary

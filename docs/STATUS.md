@@ -1,12 +1,11 @@
 # Legacy Status Stub
 
-`docs/STATUS.md` is no longer the canonical current-state document.
+`docs/STATUS.md` 仅保留为兼容入口，不再承载正式状态内容。
 
-Use:
+请使用：
 
+- `docs/INDEX.md`
 - `docs/CURRENT_STATE.md`
 - `docs/PROJECT_STATUS.md`
 - `docs/MAINLINE_STATUS.md`
 - `docs/TASK_ARCHIVE.md`
-
-Do not treat this file name as a live status source going forward.

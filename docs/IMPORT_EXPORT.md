@@ -1,71 +1,63 @@
-# ProtoLink Import / Export Conventions
+# ProtoLink Import / Export Specification
 
-## 1. 目标
+Last updated: 2026-04-14
 
-导入导出必须服务于三个核心资产域：
+## 目标
+
+导入导出为工作区中的正式资产提供稳定交换格式，覆盖：
 
 - captures
 - logs
 - profiles
+- release bundles
+- portable / distribution / installer packages
 
-原则：
+## 基本原则
 
-- 工作区目录仍然是运行期事实源
-- `exports/` 只作为对外打包/交换目录
-- 每个导出包都必须带 manifest
+- 工作区目录是运行时事实源
+- `exports/` 仅承担对外打包职责
+- 所有导出/交付产物都必须带 manifest
+- manifest 必须声明 `format_version`
 
-## 2. 当前约定
+## 当前导出规范
 
-### 源目录映射
-
+### 资产域
 - `capture` -> `workspace/captures/`
 - `log` -> `workspace/logs/`
 - `profile` -> `workspace/profiles/`
 
-### 导出包目录
+### 导出 bundle
 
-所有导出包进入：
-
-```text
-workspace/exports/<timestamp>-<kind>-<sanitized-name>/
-```
-
-例如：
+目录形态：
 
 ```text
-workspace/exports/20260408-031530-capture-Bench-Port-01/
+workspace/exports/<timestamp>-<kind>-<name>/
 ```
 
-### 导出包内容
-
-每个导出包至少包含：
-
+最小内容：
 - `manifest.json`
 - 1 个主 payload 文件
 
-## 3. manifest v1 最小字段
+## 当前交付层级
 
-- `format_version`
-- `kind`
-- `bundle_name`
-- `source_dir`
-- `payload_file`
-- `manifest_file`
+1. release bundle
+2. portable package
+3. distribution package
+4. installer-staging package
+5. installer package
 
-## 4. 文件名规则
+## 当前 manifest 版本
 
-- 只保留 `A-Z a-z 0-9 . _ -`
-- 其他字符统一折叠为 `-`
-- 结果为空时回退为 `artifact`
+- `protolink-export-v1`
+- `protolink-release-bundle-v1`
+- `protolink-portable-package-v1`
+- `protolink-distribution-package-v1`
+- `protolink-installer-staging-v1`
+- `protolink-installer-package-v1`
+- `protolink-install-receipt-v1`
 
-## 5. 当前代码落点
+## 工程要求
 
-`src/protolink/core/import_export.py` 现已提供：
-
-- `ArtifactKind`
-- `sanitize_artifact_name()`
-- `source_directory_for_kind()`
-- `build_export_bundle_plan()`
-- `build_export_manifest()`
-
-这意味着后续 capture/log/profile 导出功能可以先共用同一套 bundle 命名与 manifest 规范，再逐步扩展具体 payload 格式。
+- 新增导出格式必须先定义 manifest 版本与校验规则
+- 文件名必须经过规范化处理
+- install / uninstall / verify 必须形成闭环
