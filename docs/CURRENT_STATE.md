@@ -1,10 +1,10 @@
 # ProtoLink Current State
 
-Last updated: 2026-04-14
+Last updated: 2026-04-15
 
 ## 当前真实进展
 
-ProtoLink 已完成正式基线收敛与第一轮交付瘦身/运行证据补强，当前仓库已经处于可交付、可接手、可继续迭代的阶段性版本基线。
+ProtoLink 已完成正式基线收敛、第一次交付瘦身、运行证据补强，并进入 native installer 路线的可执行脚手架阶段。
 
 当前状态分为三层：
 
@@ -23,6 +23,8 @@ ProtoLink 已完成正式基线收敛与第一轮交付瘦身/运行证据补强
 - portable/distribution/installer package 已完成第一轮 package slimming
 - session service 的 shutdown / close 失败已经进入统一 failure evidence，并进入 release-preflight 阻断
 - `verify_dist_install.py` 已支持多版本 dist 产物选择策略
+- 已新增 WiX/MSI scaffold 构建与校验命令
+- 已新增 native installer toolchain 检测命令
 
 ### 当前可交付能力
 - `uv run protolink --headless-summary`
@@ -32,11 +34,14 @@ ProtoLink 已完成正式基线收敛与第一轮交付瘦身/运行证据补强
 - `uv run protolink --verify-installer-package <archive>`
 - `uv run protolink --install-installer-package <archive> <staging> <install>`
 - `uv run protolink --uninstall-portable-package <install-dir>`
+- `uv run protolink --build-native-installer-scaffold <name>`
+- `uv run protolink --verify-native-installer-scaffold <scaffold-dir>`
+- `uv run protolink --verify-native-installer-toolchain`
 
 ## 当前验证基线
 
-- `uv run pytest -q` -> `280 passed`
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 280` -> passed
+- `uv run pytest -q` -> `288 passed`
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 288` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
 - `python scripts/verify_dist_install.py` -> passed
@@ -51,6 +56,7 @@ ProtoLink 现在已经具备：
 - 可打包
 - 可安装
 - 可交接
+- 可为原生安装器路线生成与校验 WiX/MSI scaffold
 
 ProtoLink 当前还不具备：
 
@@ -63,6 +69,6 @@ ProtoLink 当前还不具备：
 
 当前重点已经从“交付基线收敛”和“第一次交付瘦身”推进到：
 
-- 推进 native installer / signing 路线
-- 保持 0.2.1 现有 bundled-runtime 交付链稳定可回退
+- 推进 native installer / signing 路线的真正 MSI build/verify lane
+- 保持 0.2.3 现有 bundled-runtime 交付链稳定可回退
 - 为扩展与插件接入建立正式契约

@@ -1,6 +1,6 @@
 # ProtoLink Handoff
 
-Last updated: 2026-04-14
+Last updated: 2026-04-15
 
 ## 1. 交接目的
 
@@ -13,15 +13,15 @@ Last updated: 2026-04-14
 
 ## 2. 项目一句话定义
 
-ProtoLink 是一个面向 Windows 的本地工业通信、协议调试与自动化工作台，当前重点是在 0.2.1 正式基线之上推进 native installer / signing 路线。
+ProtoLink 是一个面向 Windows 的本地工业通信、协议调试与自动化工作台，当前重点是在 0.2.3 正式基线之上推进 native installer / signing 路线。
 
 ## 3. 当前真实进展
 
-- full pytest: `280 passed`
+- full pytest: `288 passed`
 - targeted regressions: passed
 - release-staging: passed
 - dist fresh-install: passed
-- 当前阶段版本：`0.2.2`
+- 当前阶段版本：`0.2.3`
 - `PL-012` 已完成并冻结正式交付基线
 - `PL-013` 已完成并冻结交付瘦身与运行证据基线
 - 当前主线：`PL-014` Native Installer and Signing Path
@@ -68,8 +68,11 @@ uv run protolink
 ### 核心验证
 ```powershell
 uv run pytest -q
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 280
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 288
 uv run python scripts/run_targeted_regressions.py --suite all
+uv run protolink --build-native-installer-scaffold proto-stage
+uv run protolink --verify-native-installer-scaffold <scaffold-dir>
+uv run protolink --verify-native-installer-toolchain
 uv run python scripts/verify_release_staging.py --name local
 python scripts/verify_dist_install.py
 uv build
@@ -83,9 +86,10 @@ uv build
 - `docs/PROJECT_STATUS.md`
 
 接手后优先继续：
-1. native installer / signing 路线边界化
-2. 扩展契约与插件边界文档化
-3. HIL / 长稳回归规划
+1. native installer / signing 的真实 MSI build lane
+2. 签名与时间戳受控发布流程
+3. 扩展契约与插件边界文档化
+4. HIL / 长稳回归规划
 
 ## 8. 当前已知风险
 
@@ -96,13 +100,14 @@ uv build
 - 当前交付不是原生签名安装器
 - 脚本能力不是不受信沙箱
 - 扩展契约尚未正式化
+- 当前 WiX scaffold 只到骨架与 toolchain 检测，不等于 MSI 已可发布
 
 ## 9. 第一周动作清单
 
 1. 运行完整验证基线
 2. 阅读 `README.md`、`docs/INDEX.md`、`docs/ARCHITECTURE.md`
-3. 阅读 `docs/MAINLINE_STATUS.md` 与 `docs/ENGINEERING_TASKLIST.md`
-4. 确认本地 `git status` 干净（忽略本地工具缓存目录）
+3. 阅读 `docs/NATIVE_INSTALLER_PLAN.md`、`docs/MAINLINE_STATUS.md` 与 `docs/ENGINEERING_TASKLIST.md`
+4. 确认本地 `git status` 干净
 5. 再开始新的功能或重构工作
 
 ## 10. 当前不建议先做的事

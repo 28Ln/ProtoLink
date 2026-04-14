@@ -45,11 +45,12 @@ def _require_absent(path: Path) -> None:
         raise SystemExit(f"Retired file should not exist: {path.relative_to(ROOT)}")
 
 
-def _native_installer_scaffold_flags(cli_source: str) -> list[str]:
+def _native_installer_related_flags(cli_source: str) -> list[str]:
     flags = {
         match
         for match in re.findall(r"--[a-z0-9][a-z0-9-]*", cli_source)
-        if "scaffold" in match and any(keyword in match for keyword in ("installer", "native", "wix"))
+        if any(keyword in match for keyword in ("installer", "native", "wix"))
+        and any(kind in match for kind in ("scaffold", "toolchain"))
     }
     return sorted(flags)
 
@@ -103,7 +104,7 @@ def main() -> int:
     _require_regex("ENGINEERING_TASKLIST", tasklist, rf"^### {re.escape(expected_mainline)} — ")
     _require_regex("PROJECT_STATUS", project_status, rf"^- `{re.escape(expected_mainline)}`")
 
-    scaffold_flags = _native_installer_scaffold_flags(cli_source)
+    scaffold_flags = _native_installer_related_flags(cli_source)
     if scaffold_flags:
         _require_contains("VALIDATION", validation, "Native installer scaffold")
     for flag in scaffold_flags:

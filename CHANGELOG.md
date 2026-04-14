@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3 - 2026-04-15
+
+- raised full pytest baseline to `288 passed`
+- added native installer toolchain verification CLI
+- added WiX/MSI scaffold generation and verification CLI
+- advanced `PL-014` from route planning into executable scaffold/toolchain stage
+
 ## 0.2.2 - 2026-04-14
 
 - added formal native installer and signing route plan

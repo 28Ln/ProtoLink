@@ -97,9 +97,11 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
 
 ### Current status
 
-- 当前 `0.2.2` CLI 基线已经暴露：
-  - `--build-native-installer-scaffold`
-  - `--verify-native-installer-scaffold`
+当前 `0.2.2` CLI 基线已经暴露：
+
+- `--build-native-installer-scaffold`
+- `--verify-native-installer-scaffold`
+- `--verify-native-installer-toolchain`
 
 ### Required role
 
@@ -136,6 +138,19 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
 - 能被正式文档引用
 - 能被 canonical truth 检查
 - 不破坏当前 bundled-runtime 发布链
+
+### Toolchain verification
+
+当前 CLI 还必须提供：
+
+- `--verify-native-installer-toolchain`
+
+它的职责是：
+
+- 检测当前机器上的 `wix` / `wix.exe`
+- 检测当前机器上的 `signtool` / `signtool.exe`
+- 输出结构化 JSON，而不是依赖人工阅读 stderr
+- 给出推荐 build / sign / verify 命令
 
 ## 6. Signing model
 
@@ -186,12 +201,14 @@ native installer 路线至少要具备以下验证：
 
 ### Build verification
 - native installer scaffold 命令已纳入 CLI help、README、validation 与 release checklist
-- WiX source generation成功
+- `--verify-native-installer-toolchain` 可输出结构化结果
+- WiX source generation 成功
 - MSI build 成功
 - 签名前产物结构正确
 
 ### Signature verification
 - `Get-AuthenticodeSignature` 或同等级验证通过
+- `signtool verify /pa /v` 通过
 
 ### Install verification
 - clean-machine / clean-VM 安装成功
@@ -237,9 +254,10 @@ native installer 路线至少要具备以下验证：
 2. native installer scaffold contract
 3. `--build-native-installer-scaffold`
 4. `--verify-native-installer-scaffold`
-5. 切换条件与回退边界
-6. 验证矩阵接入点
-7. 下一阶段实现任务入口
+5. `--verify-native-installer-toolchain`
+6. 切换条件与回退边界
+7. 验证矩阵接入点
+8. 下一阶段实现任务入口
 
 ## 12. Next implementation handoff
 

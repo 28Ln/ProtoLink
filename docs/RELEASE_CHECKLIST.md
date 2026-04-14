@@ -18,13 +18,14 @@ Last updated: 2026-04-15
 ```powershell
 uv sync --python 3.11 --extra dev --extra ui
 uv run pytest -q
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 280
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 288
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local
 python scripts/verify_dist_install.py
 uv run protolink --build-native-installer-scaffold proto-stage
 uv run protolink --verify-native-installer-scaffold <scaffold-dir>
+uv run protolink --verify-native-installer-toolchain
 uv build
 ```
 
@@ -43,13 +44,14 @@ uv build
 - README、`docs/CURRENT_STATE.md`、`docs/PROJECT_STATUS.md`、`docs/VALIDATION.md` 的主线与验证数字一致
 - `.github/workflows/ci.yml` 与当前验证基线一致
 - 发布手册与冒烟手册只保留当前有效命令
-- 当前 native installer scaffold 命令为：
+- 当前 native installer scaffold/toolchain 命令为：
   - `--build-native-installer-scaffold`
   - `--verify-native-installer-scaffold`
+  - `--verify-native-installer-toolchain`
 - `uv run protolink --help` 中必须能看到这些命令
 - `README.md`、`docs/NATIVE_INSTALLER_PLAN.md`、`docs/VALIDATION.md`、本文件必须包含**精确 flag 名称**
 - `scripts/verify_canonical_truth.py` 必须通过
-- scaffold 仅用于生成原生安装器工程骨架，不替代现有 release-staging / dist-install / build 门禁
+- scaffold / toolchain 检测仅用于推进原生安装器路线，不替代现有 release-staging / dist-install / build 门禁
 
 ## 签收标准
 
