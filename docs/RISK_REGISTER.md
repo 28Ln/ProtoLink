@@ -39,8 +39,8 @@ Last updated: 2026-04-14
 - Category: Observability
 - Trigger: 资源释放、关闭、卸载路径出现异常
 - Impact: 问题复盘与交付诊断困难
-- Current control: 已有 runtime/config failure evidence 基线
-- Evidence: 仍需继续覆盖部分清理路径
+- Current control: 已有 runtime/config failure evidence 基线；release-preflight 已拦截记录到的 session shutdown close failures
+- Evidence: 关键 session service 的 shutdown close 失败已进入统一 evidence，但安装/卸载与更多清理路径仍需继续覆盖
 - Next action: 在 `PL-013` 中补完 failure evidence 覆盖
 - Residual risk: Medium
 

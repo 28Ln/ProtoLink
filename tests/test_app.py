@@ -8,6 +8,7 @@ from protolink.app import main
 from protolink.core.logging import create_log_entry, LogLevel
 from protolink.core.errors import CliExitCode, ProtoLinkUserError
 from protolink.core.logging import (
+    RuntimeFailureEvidenceRecorder,
     default_config_failure_evidence_path,
     default_runtime_failure_evidence_path,
     default_workspace_log_path,
@@ -525,6 +526,38 @@ def test_main_release_preflight_rejects_runtime_log_write_failures(monkeypatch, 
     assert "runtime_log_write_failures_detected" in payload["blocking_items"]
     assert payload["workspace_log_failed_write_count"] == 2
     assert payload["workspace_log_last_error"] == "disk full"
+    assert payload["ready"] is False
+
+
+def test_main_release_preflight_rejects_service_shutdown_failures(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    evidence_path = default_runtime_failure_evidence_path(workspace.logs)
+    recorder = RuntimeFailureEvidenceRecorder(evidence_path)
+    recorder.append(
+        source="serial_session_service",
+        code="service_shutdown_close_failed",
+        message="close failed",
+        details={
+            "transport_kind": "serial",
+            "session_id": "bench-session",
+            "target": "COM9",
+        },
+    )
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "service_shutdown_failures_present" in payload["blocking_items"]
+    assert payload["service_shutdown_failure_count"] == 1
+    assert payload["service_shutdown_failures"][0]["code"] == "service_shutdown_close_failed"
     assert payload["ready"] is False
 
 

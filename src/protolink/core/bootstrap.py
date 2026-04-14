@@ -258,6 +258,22 @@ def bootstrap_app_context(
     tcp_client_service = TcpClientSessionService(transport_registry, event_bus, workspace)
     tcp_server_service = TcpServerSessionService(transport_registry, event_bus, workspace)
     udp_service = UdpSessionService(transport_registry, event_bus, workspace)
+    for service in (
+        serial_session_service,
+        mqtt_client_service,
+        mqtt_server_service,
+        tcp_client_service,
+        tcp_server_service,
+        udp_service,
+    ):
+        service.set_shutdown_failure_recorder(
+            lambda code, message, details, source=service._transport_kind.value: runtime_failure_evidence_recorder.append(
+                source=f"{source}_session_service",
+                code=code,
+                message=message,
+                details=details,
+            )
+        )
     packet_replay_service = PacketReplayExecutionService(
         {
             TransportKind.SERIAL: serial_session_service,

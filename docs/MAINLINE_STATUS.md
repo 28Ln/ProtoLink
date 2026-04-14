@@ -21,7 +21,7 @@ Last updated: 2026-04-14
 
 当前已经具备：
 
-- `274 passed`
+- `280 passed`
 - `release-staging passed`
 - `dist fresh-install passed`
 

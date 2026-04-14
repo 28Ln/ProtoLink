@@ -54,6 +54,7 @@ class ConnectionSessionServiceBase(Generic[SnapshotT]):
         self._unknown_error_message = unknown_error_message
         self._listeners: list[Callable[[SnapshotT], None]] = []
         self._dispatch_scheduler: Callable[[Callable[[], None]], None] | None = None
+        self._shutdown_failure_recorder: Callable[[str, str, Mapping[str, str]], None] | None = None
         self._runtime: AsyncTaskRunner | None = None
         self._adapter = None
         self._snapshot = initial_snapshot
@@ -76,6 +77,12 @@ class ConnectionSessionServiceBase(Generic[SnapshotT]):
     def set_dispatch_scheduler(self, scheduler: Callable[[Callable[[], None]], None] | None) -> None:
         self._dispatch_scheduler = scheduler
 
+    def set_shutdown_failure_recorder(
+        self,
+        recorder: Callable[[str, str, Mapping[str, str]], None] | None,
+    ) -> None:
+        self._shutdown_failure_recorder = recorder
+
     def shutdown(self) -> None:
         runtime = self._runtime
         if runtime is None:
@@ -84,8 +91,8 @@ class ConnectionSessionServiceBase(Generic[SnapshotT]):
         if adapter is not None and self._snapshot.connection_state != ConnectionState.DISCONNECTED:
             try:
                 runtime.submit(adapter.close()).result(timeout=2.0)
-            except Exception:
-                pass
+            except Exception as exc:
+                self._record_shutdown_failure(exc)
         runtime.shutdown()
         self._runtime = None
 
@@ -172,6 +179,9 @@ class ConnectionSessionServiceBase(Generic[SnapshotT]):
         try:
             future.result()
         except Exception as exc:
+            if operation == "close":
+                self._record_close_failure(exc)
+
             def publish_error() -> None:
                 if operation == "send" and self._snapshot.connection_state in {
                     ConnectionState.STOPPING,
@@ -224,6 +234,41 @@ class ConnectionSessionServiceBase(Generic[SnapshotT]):
         if self._runtime is None:
             self._runtime = AsyncTaskRunner()
         return self._runtime
+
+    def _record_shutdown_failure(self, error: Exception) -> None:
+        self._record_service_close_failure(
+            code="service_shutdown_close_failed",
+            error=error,
+            operation="shutdown",
+        )
+
+    def _record_close_failure(self, error: Exception) -> None:
+        self._record_service_close_failure(
+            code="service_close_failed",
+            error=error,
+            operation="close",
+        )
+
+    def _record_service_close_failure(self, *, code: str, error: Exception, operation: str) -> None:
+        if self._shutdown_failure_recorder is None:
+            return
+        details = {
+            "transport_kind": self._transport_kind.value,
+            "connection_state": self._snapshot.connection_state.value,
+            "operation": operation,
+        }
+        active_session_id = getattr(self._snapshot, "active_session_id", None)
+        if isinstance(active_session_id, str) and active_session_id:
+            details["session_id"] = active_session_id
+        adapter_session = getattr(self._adapter, "session", None)
+        adapter_target = getattr(adapter_session, "target", None)
+        if isinstance(adapter_target, str) and adapter_target:
+            details["target"] = adapter_target
+        self._shutdown_failure_recorder(
+            code,
+            str(error),
+            details,
+        )
 
 
 class PresetConnectionSessionServiceBase(ConnectionSessionServiceBase[SnapshotT], Generic[SnapshotT, PresetT]):

@@ -4,22 +4,22 @@ Last updated: 2026-04-14
 
 ## 当前验证基线
 
-- `uv run pytest -q` -> 274 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-013 --expected-pytest-count 274` -> passed
+- `uv run pytest -q` -> 280 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-013 --expected-pytest-count 280` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
 - `python scripts/verify_dist_install.py` -> passed
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
 - `uv run protolink --smoke-check` -> `smoke-check-ok`
-- 当前 full-suite 快照：`274 passed`
+- 当前 full-suite 快照：`280 passed`
 
 ## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run pytest -q
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-013 --expected-pytest-count 274
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-013 --expected-pytest-count 280
 ```
 
 ## UI / owner-surface 相关验证
@@ -37,7 +37,7 @@ uv run python scripts/verify_release_staging.py --name local
 python scripts/verify_dist_install.py
 # 如 dist/ 下并存多个历史版本，默认会校验最新且 wheel/sdist 成对存在的版本；
 # 若最新 wheel / sdist 版本不一致，则传入明确版本或先清理 dist/。
-python scripts/verify_dist_install.py --artifact-version 0.2.0
+python scripts/verify_dist_install.py --artifact-version 0.2.1
 uv build
 ```
 

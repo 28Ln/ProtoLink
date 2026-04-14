@@ -1,7 +1,10 @@
+from dataclasses import replace
 from pathlib import Path
 
 from protolink.core.bootstrap import bootstrap_app_context
+from protolink.core.logging import load_runtime_failure_evidence
 from protolink.core.script_host import ScriptLanguage
+from protolink.core.transport import ConnectionState
 from protolink.core.transport import TransportKind
 from protolink.transports.mqtt_client import MqttClientTransportAdapter
 from protolink.transports.mqtt_server import MqttServerTransportAdapter
@@ -58,3 +61,93 @@ def test_bootstrap_persists_workspace_when_requested(tmp_path: Path) -> None:
 
     assert context.settings_layout.settings_file.exists()
     assert context.workspace.root == workspace_override.resolve()
+
+
+def test_bootstrap_session_services_record_shutdown_close_failures(tmp_path: Path) -> None:
+    context = bootstrap_app_context(tmp_path, persist_settings=False)
+    service = context.serial_session_service
+
+    class _FailingFuture:
+        def result(self, timeout: float | None = None) -> None:
+            raise RuntimeError("close failed")
+
+    class _FailingRuntime:
+        def submit(self, coroutine):
+            coroutine.close()
+            return _FailingFuture()
+
+        def shutdown(self) -> None:
+            return None
+
+    class _AdapterSession:
+        session_id = "bench-session"
+        target = "COM9"
+
+    class _FailingAdapter:
+        session = _AdapterSession()
+
+        async def close(self) -> None:
+            return None
+
+    service._runtime = _FailingRuntime()
+    service._adapter = _FailingAdapter()
+    service._snapshot = replace(
+        service.snapshot,
+        connection_state=ConnectionState.CONNECTED,
+        active_session_id="bench-session",
+    )
+
+    service.shutdown()
+
+    evidence_file, evidence_entries, evidence_error = load_runtime_failure_evidence(context.workspace.logs)
+
+    assert evidence_error is None
+    assert evidence_file is not None
+    assert any(entry["code"] == "service_shutdown_close_failed" for entry in evidence_entries)
+    failure_entry = next(entry for entry in evidence_entries if entry["code"] == "service_shutdown_close_failed")
+    assert failure_entry["source"] == "serial_session_service"
+    assert failure_entry["message"] == "close failed"
+    assert failure_entry["details"]["transport_kind"] == "serial"
+    assert failure_entry["details"]["session_id"] == "bench-session"
+    assert failure_entry["details"]["target"] == "COM9"
+    assert failure_entry["details"]["operation"] == "shutdown"
+
+
+def test_bootstrap_session_services_record_close_failures(tmp_path: Path) -> None:
+    context = bootstrap_app_context(tmp_path, persist_settings=False)
+    service = context.serial_session_service
+
+    class _FailingFuture:
+        def result(self, timeout: float | None = None) -> None:
+            raise RuntimeError("close failed")
+
+    class _AdapterSession:
+        session_id = "bench-session"
+        target = "COM9"
+
+    class _FailingAdapter:
+        session = _AdapterSession()
+
+    adapter = _FailingAdapter()
+    service._adapter = adapter
+    service._snapshot = replace(
+        service.snapshot,
+        connection_state=ConnectionState.CONNECTED,
+        active_session_id="bench-session",
+    )
+
+    service._handle_future_result("close", _FailingFuture(), adapter)
+
+    evidence_file, evidence_entries, evidence_error = load_runtime_failure_evidence(context.workspace.logs)
+
+    assert evidence_error is None
+    assert evidence_file is not None
+    assert any(entry["code"] == "service_close_failed" for entry in evidence_entries)
+    failure_entry = next(entry for entry in evidence_entries if entry["code"] == "service_close_failed")
+    assert failure_entry["source"] == "serial_session_service"
+    assert failure_entry["message"] == "close failed"
+    assert failure_entry["details"]["transport_kind"] == "serial"
+    assert failure_entry["details"]["session_id"] == "bench-session"
+    assert failure_entry["details"]["target"] == "COM9"
+    assert failure_entry["details"]["operation"] == "close"
+    assert service._adapter is None
