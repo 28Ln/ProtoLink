@@ -15,15 +15,15 @@ Last updated: 2026-04-14
 
 - Classification: `Active`
 - Objective:
-  - 在保持 0.2.1 基线稳定的前提下，推进原生安装器与签名交付路线。
+  - 在保持 0.2.2 基线稳定的前提下，推进原生安装器与签名交付路线。
 - Scope:
   1. 定义 native installer / signing 目标形态
   2. 定义切换条件、验证策略与回退边界
-  3. 保持 0.2.1 基线在过渡期间稳定可验证
+  3. 保持 0.2.2 基线在过渡期间稳定可验证
 - Exit criteria:
   - native installer / signing 路线形成正式计划
   - 切换条件、验证策略、回退边界文档化
-  - 0.2.1 基线保持稳定
+  - 0.2.2 基线保持稳定
 
 ## Next
 

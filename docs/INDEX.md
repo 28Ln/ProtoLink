@@ -11,6 +11,7 @@
 - `ARCHITECTURE.md`：入口、分层、状态、数据流、异常流、交付边界
 - `ERROR_POLICY.md`：日志、异常、错误文案与证据约束
 - `IMPORT_EXPORT.md`：导入导出与 manifest 规范
+- `EXTENSION_CONTRACT.md`：扩展边界与插件契约
 
 ## 状态与任务
 
@@ -24,6 +25,7 @@
 - `VALIDATION.md`：验证矩阵、门禁命令、通过标准
 - `RELEASE_CHECKLIST.md`：发布运行手册
 - `SMOKE_CHECKLIST.md`：冒烟运行手册
+- `NATIVE_INSTALLER_PLAN.md`：原生安装器与签名路线计划
 
 ## 交接
 

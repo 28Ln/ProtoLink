@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 - 2026-04-14
+
+- added formal native installer and signing route plan
+- added formal extension contract and plugin boundary specification
+- kept `PL-014` active with documented target shape, cutover conditions, verification strategy, and rollback boundary
+
 ## 0.2.1 - 2026-04-14
 
 - raised full pytest baseline to `280 passed`

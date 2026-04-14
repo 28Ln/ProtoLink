@@ -12,11 +12,13 @@ TARGET_FILES = {
     "TASKS": ROOT / "TASKS.md",
     "PROJECT_BRIEF": ROOT / "docs" / "PROJECT_BRIEF.md",
     "ARCHITECTURE": ROOT / "docs" / "ARCHITECTURE.md",
+    "EXTENSION_CONTRACT": ROOT / "docs" / "EXTENSION_CONTRACT.md",
     "CURRENT_STATE": ROOT / "docs" / "CURRENT_STATE.md",
     "PROJECT_STATUS": ROOT / "docs" / "PROJECT_STATUS.md",
     "MAINLINE_STATUS": ROOT / "docs" / "MAINLINE_STATUS.md",
     "ENGINEERING_TASKLIST": ROOT / "docs" / "ENGINEERING_TASKLIST.md",
     "HANDOFF": ROOT / "docs" / "HANDOFF.md",
+    "NATIVE_INSTALLER_PLAN": ROOT / "docs" / "NATIVE_INSTALLER_PLAN.md",
     "RISK_REGISTER": ROOT / "docs" / "RISK_REGISTER.md",
     "VALIDATION": ROOT / "docs" / "VALIDATION.md",
     "TASK_ARCHIVE": ROOT / "docs" / "TASK_ARCHIVE.md",
@@ -53,11 +55,13 @@ def main() -> int:
     tasks = _read("TASKS")
     _read("PROJECT_BRIEF")
     _read("ARCHITECTURE")
+    _read("EXTENSION_CONTRACT")
     current_state = _read("CURRENT_STATE")
     project_status = _read("PROJECT_STATUS")
     mainline_status = _read("MAINLINE_STATUS")
     tasklist = _read("ENGINEERING_TASKLIST")
     handoff = _read("HANDOFF")
+    _read("NATIVE_INSTALLER_PLAN")
     risk_register = _read("RISK_REGISTER")
     validation = _read("VALIDATION")
     task_archive = _read("TASK_ARCHIVE")
@@ -66,8 +70,11 @@ def main() -> int:
     expected_count = str(args.expected_pytest_count)
 
     _require_contains("INDEX", index, "HANDOFF.md")
+    _require_contains("INDEX", index, "NATIVE_INSTALLER_PLAN.md")
+    _require_contains("INDEX", index, "EXTENSION_CONTRACT.md")
     _require_contains("README", readme, f"Current canonical mainline: `{expected_mainline}`")
     _require_contains("README", readme, "`docs/HANDOFF.md`")
+    _require_contains("README", readme, "`docs/ROADMAP.md`")
     _require_contains("TASKS", tasks, "`docs/ENGINEERING_TASKLIST.md`")
     _require_contains("CURRENT_STATE", current_state, f"`uv run pytest -q` -> `{expected_count} passed`")
     _require_contains("PROJECT_STATUS", project_status, f"`uv run pytest -q` -> `{expected_count} passed`")

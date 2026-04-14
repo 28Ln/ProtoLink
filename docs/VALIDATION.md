@@ -37,7 +37,7 @@ uv run python scripts/verify_release_staging.py --name local
 python scripts/verify_dist_install.py
 # 如 dist/ 下并存多个历史版本，默认会校验最新且 wheel/sdist 成对存在的版本；
 # 若最新 wheel / sdist 版本不一致，则传入明确版本或先清理 dist/。
-python scripts/verify_dist_install.py --artifact-version 0.2.1
+python scripts/verify_dist_install.py --artifact-version 0.2.2
 uv build
 ```
 
