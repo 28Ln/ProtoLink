@@ -56,9 +56,9 @@ def test_mqtt_server_service_start_publish_receive_and_close(tmp_path: Path) -> 
 def test_mqtt_server_service_surfaces_open_errors(tmp_path: Path) -> None:
     context = bootstrap_app_context(tmp_path, persist_settings=False)
     service = context.mqtt_server_service
-    port = _find_unused_port()
     blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    blocker.bind(("127.0.0.1", port))
+    blocker.bind(("127.0.0.1", 0))
+    port = int(blocker.getsockname()[1])
     blocker.listen(1)
     try:
         service.set_host("127.0.0.1")

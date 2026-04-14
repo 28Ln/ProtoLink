@@ -19,6 +19,7 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/test_auto_response_runtime_service.py",
         "tests/test_channel_bridge_runtime_service.py",
         "tests/test_packet_replay_service.py",
+        "tests/test_mqtt_server_service.py",
         "tests/test_tcp_server_service.py",
     ),
     "pl006_automation_owner_surface": (
