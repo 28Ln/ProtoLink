@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import sysconfig
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
+from uuid import NAMESPACE_URL, uuid5
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from protolink.core.errors import ProtoLinkUserError
@@ -128,6 +130,25 @@ class InstallerPackageVerificationResult:
     installer_staging_archive_file: str
     checksum_matches: bool
     install_scripts_present: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NativeInstallerScaffoldPlan:
+    package_dir: Path
+    manifest_file: Path
+    package_name: str
+    installer_package_archive_file: Path
+    product_wxs_file: Path
+    files_wxs_file: Path
+    variables_wxi_file: Path
+
+
+@dataclass(frozen=True, slots=True)
+class NativeInstallerScaffoldVerificationResult:
+    scaffold_dir: Path
+    manifest_file: Path
+    installer_package_archive_file: str
+    wix_source_files_present: tuple[str, ...]
 
 
 PORTABLE_MANIFEST_FILE = "portable-manifest.json"
@@ -1670,3 +1691,221 @@ def verify_installer_package(archive_file: Path) -> InstallerPackageVerification
             checksum_matches=(expected_checksum == digest),
             install_scripts_present=install_scripts,
         )
+
+
+def build_native_installer_scaffold_plan(
+    workspace: WorkspaceLayout,
+    name: str,
+    installer_package_archive_file: Path,
+    *,
+    packaged_at: datetime | None = None,
+) -> NativeInstallerScaffoldPlan:
+    packaged_at = packaged_at or datetime.now(UTC)
+    package_name = f"{build_artifact_timestamp(packaged_at)}-native-installer-{sanitize_artifact_name(name)}"
+    package_dir = _package_staging_dir(workspace.exports, "native-installer", package_name)
+    manifest_file = package_dir / "native-installer-plan.json"
+    return NativeInstallerScaffoldPlan(
+        package_dir=package_dir,
+        manifest_file=manifest_file,
+        package_name=package_name,
+        installer_package_archive_file=installer_package_archive_file,
+        product_wxs_file=package_dir / "ProtoLink.wxs",
+        files_wxs_file=package_dir / "Files.wxs",
+        variables_wxi_file=package_dir / "Variables.wxi",
+    )
+
+
+def materialize_native_installer_scaffold(
+    plan: NativeInstallerScaffoldPlan,
+    repo_root: Path,
+) -> dict[str, object]:
+    action = "build native installer scaffold"
+    if not plan.installer_package_archive_file.exists():
+        raise ProtoLinkUserError(
+            f"Installer package archive '{plan.installer_package_archive_file}' was not found.",
+            action=action,
+            recovery="Build the installer package first and retry.",
+        )
+
+    plan.package_dir.mkdir(parents=True, exist_ok=True)
+    installer_package_archive = plan.installer_package_archive_file.resolve()
+    installer_package_file = installer_package_archive.name
+    app_version = _read_protolink_version(repo_root)
+    upgrade_code = str(uuid5(NAMESPACE_URL, "ProtoLink.NativeInstaller.UpgradeCode")).upper()
+    product_code = str(uuid5(NAMESPACE_URL, f"ProtoLink.{app_version}.ProductCode")).upper()
+    manufacturer = "ProtoLink Project"
+
+    plan.variables_wxi_file.write_text(
+        "\n".join(
+            (
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>",
+                "<Include>",
+                f"  <?define ProductVersion = \"{app_version}\" ?>",
+                f"  <?define Manufacturer = \"{manufacturer}\" ?>",
+                f"  <?define UpgradeCode = \"{upgrade_code}\" ?>",
+                f"  <?define ProductCode = \"{product_code}\" ?>",
+                f"  <?define InstallerPackageArchive = \"{installer_package_file}\" ?>",
+                "  <?define InstallDirName = \"ProtoLink\" ?>",
+                "</Include>",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    plan.files_wxs_file.write_text(
+        "\n".join(
+            (
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>",
+                "<Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\">",
+                "  <Fragment>",
+                "    <ComponentGroup Id=\"ProtoLinkPayloadGroup\">",
+                "      <!--",
+                "        Replace this placeholder with harvested MSI payload entries.",
+                "        Recommended source: the verified installer package archive referenced by",
+                "        Variables.wxi / InstallerPackageArchive.",
+                "      -->",
+                "    </ComponentGroup>",
+                "  </Fragment>",
+                "</Wix>",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    plan.product_wxs_file.write_text(
+        "\n".join(
+            (
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>",
+                "<Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\">",
+                "  <?include Variables.wxi?>",
+                "  <Package",
+                "    Name=\"ProtoLink\"",
+                "    Language=\"1033\"",
+                "    Version=\"$(var.ProductVersion)\"",
+                "    Manufacturer=\"$(var.Manufacturer)\"",
+                "    UpgradeCode=\"$(var.UpgradeCode)\"",
+                "    ProductCode=\"$(var.ProductCode)\">",
+                "    <SummaryInformation Description=\"ProtoLink Native Installer Scaffold\" />",
+                "    <MediaTemplate EmbedCab=\"yes\" />",
+                "    <MajorUpgrade DowngradeErrorMessage=\"A newer version of ProtoLink is already installed.\" />",
+                "    <StandardDirectory Id=\"ProgramFiles64Folder\">",
+                "      <Directory Id=\"INSTALLDIR\" Name=\"$(var.InstallDirName)\" />",
+                "    </StandardDirectory>",
+                "    <Feature Id=\"MainFeature\" Title=\"ProtoLink\" Level=\"1\">",
+                "      <ComponentGroupRef Id=\"ProtoLinkPayloadGroup\" />",
+                "    </Feature>",
+                "  </Package>",
+                "</Wix>",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    wix_source_files = (
+        plan.product_wxs_file.name,
+        plan.files_wxs_file.name,
+        plan.variables_wxi_file.name,
+    )
+    manifest = {
+        "format_version": "protolink-native-installer-scaffold-v1",
+        "package_name": plan.package_name,
+        "product_name": "ProtoLink",
+        "product_version": app_version,
+        "wix_toolset_version": "4.x",
+        "primary_route": "wix4-msi",
+        "installer_package_archive_file": installer_package_file,
+        "installer_package_archive_path": str(installer_package_archive),
+        "upgrade_code": upgrade_code,
+        "product_code": product_code,
+        "manufacturer": manufacturer,
+        "wix_source_files": list(wix_source_files),
+        "recommended_commands": [
+            "wix build ProtoLink.wxs Files.wxs -arch x64 -o ProtoLink.msi",
+            "signtool sign /fd SHA256 /tr <timestamp-url> /td SHA256 ProtoLink.msi",
+            "signtool verify /pa /v ProtoLink.msi",
+        ],
+        "verification_expectations": [
+            "msiexec /i ProtoLink.msi /qn /l*v install.log",
+            "protolink --headless-summary",
+            "msiexec /x ProtoLink.msi /qn /l*v uninstall.log",
+        ],
+    }
+    plan.manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return manifest
+
+
+def verify_native_installer_scaffold(scaffold_dir: Path) -> NativeInstallerScaffoldVerificationResult:
+    action = "verify native installer scaffold"
+    recovery = "Rebuild the native installer scaffold and retry."
+    scaffold_dir = scaffold_dir.resolve()
+    manifest_file = scaffold_dir / "native-installer-plan.json"
+    if not manifest_file.exists():
+        raise ProtoLinkUserError(
+            f"Native installer scaffold manifest '{manifest_file}' was not found.",
+            action=action,
+            recovery=recovery,
+        )
+    manifest = _read_file_manifest(
+        manifest_file,
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    _require_manifest_format_version(
+        manifest,
+        "protolink-native-installer-scaffold-v1",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    installer_package_archive_file = _require_manifest_string(
+        manifest,
+        "installer_package_archive_file",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    wix_source_files_raw = manifest.get("wix_source_files", [])
+    if not isinstance(wix_source_files_raw, list) or not all(isinstance(item, str) and item.strip() for item in wix_source_files_raw):
+        raise ProtoLinkUserError(
+            "Native installer scaffold manifest must contain a non-empty wix_source_files list.",
+            action=action,
+            recovery=recovery,
+        )
+    wix_source_files = tuple(str(item).strip() for item in wix_source_files_raw)
+    missing_files = [name for name in wix_source_files if not (scaffold_dir / name).exists()]
+    if missing_files:
+        raise ProtoLinkUserError(
+            f"Native installer scaffold is missing required WiX source files: {', '.join(missing_files)}.",
+            action=action,
+            recovery=recovery,
+        )
+    return NativeInstallerScaffoldVerificationResult(
+        scaffold_dir=scaffold_dir,
+        manifest_file=manifest_file,
+        installer_package_archive_file=installer_package_archive_file,
+        wix_source_files_present=wix_source_files,
+    )
+
+
+def _read_protolink_version(repo_root: Path) -> str:
+    pyproject_file = repo_root / "pyproject.toml"
+    try:
+        text = pyproject_file.read_text(encoding="utf-8")
+    except OSError as exc:  # pragma: no cover - defensive guard
+        raise ProtoLinkUserError(
+            f"Could not read '{pyproject_file}': {exc}",
+            action="build native installer scaffold",
+            recovery="Ensure the repository metadata is available and retry.",
+        ) from exc
+    match = re.search(r"^version\s*=\s*['\"]([^'\"]+)['\"]", text, flags=re.MULTILINE)
+    if match is not None:
+        return match.group(1)
+    raise ProtoLinkUserError(
+        f"Could not determine ProtoLink version from '{pyproject_file}'.",
+        action="build native installer scaffold",
+        recovery="Ensure pyproject.toml contains a project version and retry.",
+    )

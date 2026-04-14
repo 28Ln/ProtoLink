@@ -23,6 +23,8 @@ uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local
 python scripts/verify_dist_install.py
+uv run protolink --build-native-installer-scaffold proto-stage
+uv run protolink --verify-native-installer-scaffold <scaffold-dir>
 uv build
 ```
 
@@ -41,11 +43,13 @@ uv build
 - README、`docs/CURRENT_STATE.md`、`docs/PROJECT_STATUS.md`、`docs/VALIDATION.md` 的主线与验证数字一致
 - `.github/workflows/ci.yml` 与当前验证基线一致
 - 发布手册与冒烟手册只保留当前有效命令
-- 若 CLI 新增 WiX/native installer scaffold 命令：
-  - `uv run protolink --help` 中必须能看到该命令
-  - `README.md`、`docs/NATIVE_INSTALLER_PLAN.md`、`docs/VALIDATION.md`、本文件必须包含**精确 flag 名称**
-  - `scripts/verify_canonical_truth.py` 必须通过
-  - scaffold 仅用于生成原生安装器工程骨架，不替代现有 release-staging / dist-install / build 门禁
+- 当前 native installer scaffold 命令为：
+  - `--build-native-installer-scaffold`
+  - `--verify-native-installer-scaffold`
+- `uv run protolink --help` 中必须能看到这些命令
+- `README.md`、`docs/NATIVE_INSTALLER_PLAN.md`、`docs/VALIDATION.md`、本文件必须包含**精确 flag 名称**
+- `scripts/verify_canonical_truth.py` 必须通过
+- scaffold 仅用于生成原生安装器工程骨架，不替代现有 release-staging / dist-install / build 门禁
 
 ## 签收标准
 

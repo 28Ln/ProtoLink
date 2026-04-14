@@ -1007,6 +1007,59 @@ def test_main_builds_installer_package(monkeypatch, tmp_path, capsys) -> None:
     assert payload["installer_manifest"]["format_version"] == "protolink-installer-package-v1"
 
 
+def test_main_builds_native_installer_scaffold(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    _configure_fake_bundled_runtime(monkeypatch, tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='protolink'\nversion='0.2.2'\n", encoding="utf-8")
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_serial_profile(workspace)
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    def _fake_generate_smoke_artifacts(context):
+        runtime_log = _write_valid_runtime_log(context.workspace)
+        capture_file = _write_valid_capture(context.workspace, name="release-smoke.json")
+        return {
+            "workspace": str(context.workspace.root),
+            "log_file": str(runtime_log),
+            "capture_file": str(capture_file),
+            "replay_step_count": 2,
+        }
+
+    monkeypatch.setattr("protolink.app.generate_smoke_artifacts", _fake_generate_smoke_artifacts)
+
+    exit_code = main(["--build-native-installer-scaffold", "bench native installer"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    scaffold_dir = Path(payload["native_installer_scaffold_dir"])
+    assert scaffold_dir.exists()
+    assert Path(payload["native_installer_manifest_file"]).exists()
+    assert payload["native_installer_manifest"]["format_version"] == "protolink-native-installer-scaffold-v1"
+    assert set(payload["native_installer_manifest"]["wix_source_files"]) == {"ProtoLink.wxs", "Files.wxs", "Variables.wxi"}
+
+
+def test_main_verifies_native_installer_scaffold(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    from protolink.core.packaging import build_native_installer_scaffold_plan, materialize_native_installer_scaffold
+
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='protolink'\nversion='0.2.2'\n", encoding="utf-8")
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    installer_archive = workspace.exports / "installer-package.zip"
+    installer_archive.write_bytes(b"installer-package")
+
+    plan = build_native_installer_scaffold_plan(workspace, "bench native installer", installer_archive)
+    materialize_native_installer_scaffold(plan, tmp_path)
+
+    exit_code = main(["--verify-native-installer-scaffold", str(plan.package_dir)])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert Path(payload["manifest_file"]).exists()
+    assert set(payload["wix_source_files_present"]) == {"ProtoLink.wxs", "Files.wxs", "Variables.wxi"}
+
+
 def test_main_installs_installer_package_through_clean_release_staging(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     from zipfile import ZIP_DEFLATED, ZipFile

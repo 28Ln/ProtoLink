@@ -38,19 +38,22 @@ python scripts/verify_dist_install.py
 # 如 dist/ 下并存多个历史版本，默认会校验最新且 wheel/sdist 成对存在的版本；
 # 若最新 wheel / sdist 版本不一致，则传入明确版本或先清理 dist/。
 python scripts/verify_dist_install.py --artifact-version 0.2.2
+uv run protolink --build-native-installer-scaffold proto-stage
+uv run protolink --verify-native-installer-scaffold <scaffold-dir>
 uv build
 ```
 
 ## Native installer scaffold 真值门禁
 
-- 当前 CLI 基线**尚未暴露** WiX/native installer scaffold 命令。
-- 一旦 CLI 新增此类命令（命令名同时包含 `scaffold`，且包含 `installer` / `native` / `wix` 中任一关键词），它必须满足以下最小门禁：
-  1. `uv run protolink --help` 可见该命令
+- 当前 CLI 基线已暴露：
+  - `--build-native-installer-scaffold`
+  - `--verify-native-installer-scaffold`
+- 这些命令必须满足以下门禁：
+  1. `uv run protolink --help` 可见
   2. `README.md` 包含精确 flag 名称
   3. `docs/NATIVE_INSTALLER_PLAN.md` 包含精确 flag 名称与用途
   4. `docs/RELEASE_CHECKLIST.md` 包含精确 flag 名称与发布前检查要求
   5. `scripts/verify_canonical_truth.py` 通过
-- 在 scaffold 命令真正落地前，本节只校验**文档和真值同步规则**，不要求额外执行不存在的命令。
 
 ## 通过标准
 

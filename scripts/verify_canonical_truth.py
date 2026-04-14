@@ -104,6 +104,8 @@ def main() -> int:
     _require_regex("PROJECT_STATUS", project_status, rf"^- `{re.escape(expected_mainline)}`")
 
     scaffold_flags = _native_installer_scaffold_flags(cli_source)
+    if scaffold_flags:
+        _require_contains("VALIDATION", validation, "Native installer scaffold")
     for flag in scaffold_flags:
         _require_contains("README", readme, f"`{flag}`")
         _require_contains("NATIVE_INSTALLER_PLAN", native_installer_plan, f"`{flag}`")

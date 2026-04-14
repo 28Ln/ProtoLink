@@ -36,6 +36,7 @@ from protolink.core.logging import (
     load_runtime_failure_evidence,
 )
 from protolink.core.packaging import (
+    build_native_installer_scaffold_plan,
     build_installer_staging_plan,
     build_installer_package_plan,
     build_distribution_package_plan,
@@ -47,9 +48,11 @@ from protolink.core.packaging import (
     materialize_installer_package,
     materialize_installer_staging_package,
     materialize_distribution_package,
+    materialize_native_installer_scaffold,
     materialize_portable_package,
     uninstall_portable_package,
     verify_distribution_package,
+    verify_native_installer_scaffold,
     verify_portable_package,
     verify_installer_package,
     verify_installer_staging_package,
@@ -219,6 +222,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--verify-installer-package",
         metavar="ARCHIVE",
         help="校验安装器归档的清单、引用的安装器暂存归档及校验和。",
+    )
+    parser.add_argument(
+        "--build-native-installer-scaffold",
+        metavar="NAME",
+        help="基于当前安装器包构建 WiX/MSI 原生安装器脚手架目录。",
+    )
+    parser.add_argument(
+        "--verify-native-installer-scaffold",
+        metavar="DIR",
+        help="校验已生成的 WiX/MSI 原生安装器脚手架目录。",
     )
     parser.add_argument(
         "--install-installer-package",
@@ -760,6 +773,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.verify_installer_staging,
                 args.build_installer_package,
                 args.verify_installer_package,
+                args.build_native_installer_scaffold,
+                args.verify_native_installer_scaffold,
                 bool(args.install_installer_package),
             )
         )
@@ -1193,6 +1208,80 @@ def main(argv: list[str] | None = None) -> int:
                         "installer_staging_archive_file": result.installer_staging_archive_file,
                         "checksum_matches": result.checksum_matches,
                         "install_scripts_present": list(result.install_scripts_present),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return int(CliExitCode.OK)
+
+        if args.build_native_installer_scaffold:
+            release_payload = prepare_release_bundle(context, args.build_native_installer_scaffold)
+            release_archive = package_release_bundle(Path(str(release_payload["bundle_dir"])))
+            portable_plan = build_portable_package_plan(
+                base_dir,
+                context.workspace,
+                args.build_native_installer_scaffold,
+                release_archive,
+            )
+            portable_manifest = materialize_portable_package(portable_plan, base_dir)
+            distribution_plan = build_distribution_package_plan(
+                context.workspace,
+                args.build_native_installer_scaffold,
+                portable_plan.archive_file,
+                release_archive,
+            )
+            distribution_manifest = materialize_distribution_package(distribution_plan, base_dir)
+            installer_staging_plan = build_installer_staging_plan(
+                context.workspace,
+                args.build_native_installer_scaffold,
+                distribution_plan.archive_file,
+            )
+            installer_staging_manifest = materialize_installer_staging_package(installer_staging_plan, base_dir)
+            installer_plan = build_installer_package_plan(
+                context.workspace,
+                args.build_native_installer_scaffold,
+                installer_staging_plan.archive_file,
+            )
+            installer_manifest = materialize_installer_package(installer_plan, base_dir)
+            native_plan = build_native_installer_scaffold_plan(
+                context.workspace,
+                args.build_native_installer_scaffold,
+                installer_plan.archive_file,
+            )
+            native_manifest = materialize_native_installer_scaffold(native_plan, base_dir)
+            print(
+                json.dumps(
+                    {
+                        **release_payload,
+                        "release_archive_file": str(release_archive),
+                        "portable_archive_file": str(portable_plan.archive_file),
+                        "portable_manifest": portable_manifest,
+                        "distribution_archive_file": str(distribution_plan.archive_file),
+                        "distribution_manifest": distribution_manifest,
+                        "installer_staging_archive_file": str(installer_staging_plan.archive_file),
+                        "installer_staging_manifest": installer_staging_manifest,
+                        "installer_archive_file": str(installer_plan.archive_file),
+                        "installer_manifest": installer_manifest,
+                        "native_installer_scaffold_dir": str(native_plan.package_dir),
+                        "native_installer_manifest_file": str(native_plan.manifest_file),
+                        "native_installer_manifest": native_manifest,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return int(CliExitCode.OK)
+
+        if args.verify_native_installer_scaffold:
+            result = verify_native_installer_scaffold(Path(args.verify_native_installer_scaffold))
+            print(
+                json.dumps(
+                    {
+                        "scaffold_dir": str(result.scaffold_dir),
+                        "manifest_file": str(result.manifest_file),
+                        "installer_package_archive_file": result.installer_package_archive_file,
+                        "wix_source_files_present": list(result.wix_source_files_present),
                     },
                     ensure_ascii=False,
                     indent=2,

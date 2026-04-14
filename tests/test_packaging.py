@@ -14,6 +14,7 @@ from protolink.core.packaging import (
     INSTALLER_STAGING_FORMAT_VERSION,
     PORTABLE_MANIFEST_FILE,
     PORTABLE_PACKAGE_FORMAT_VERSION,
+    build_native_installer_scaffold_plan,
     build_installer_staging_plan,
     build_installer_package_plan,
     build_distribution_package_plan,
@@ -25,9 +26,11 @@ from protolink.core.packaging import (
     materialize_installer_package,
     materialize_installer_staging_package,
     materialize_distribution_package,
+    materialize_native_installer_scaffold,
     materialize_portable_package,
     uninstall_portable_package,
     verify_distribution_package,
+    verify_native_installer_scaffold,
     verify_portable_package,
     verify_installer_package,
     verify_installer_staging_package,
@@ -944,3 +947,50 @@ def test_verify_dist_install_rejects_mismatched_latest_artifacts_with_guidance(t
     assert "latest wheel version: 0.3.0" in message
     assert "latest sdist version: 0.2.0" in message
     assert "--artifact-version 0.2.0" in message
+
+
+def test_materialize_native_installer_scaffold_creates_wix_sources_and_manifest(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / "src" / "protolink").mkdir(parents=True)
+    (repo_root / "pyproject.toml").write_text("[project]\nname='protolink'\nversion='9.9.9'\n", encoding="utf-8")
+
+    context = bootstrap_app_context(tmp_path / "workspace-root", persist_settings=False)
+    installer_archive = context.workspace.exports / "installer-package.zip"
+    installer_archive.write_bytes(b"installer-package")
+
+    plan = build_native_installer_scaffold_plan(
+        context.workspace,
+        "native installer demo",
+        installer_archive,
+        packaged_at=datetime(2026, 4, 15, 10, 0, 0, tzinfo=UTC),
+    )
+    manifest = materialize_native_installer_scaffold(plan, repo_root)
+
+    assert plan.manifest_file.exists()
+    assert plan.product_wxs_file.exists()
+    assert plan.files_wxs_file.exists()
+    assert plan.variables_wxi_file.exists()
+    assert manifest["format_version"] == "protolink-native-installer-scaffold-v1"
+    assert manifest["product_version"] == "9.9.9"
+    assert manifest["installer_package_archive_file"] == installer_archive.name
+    assert set(manifest["wix_source_files"]) == {"ProtoLink.wxs", "Files.wxs", "Variables.wxi"}
+    assert "wix build ProtoLink.wxs Files.wxs -arch x64 -o ProtoLink.msi" in manifest["recommended_commands"]
+
+
+def test_verify_native_installer_scaffold_checks_required_files(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / "src" / "protolink").mkdir(parents=True)
+    (repo_root / "pyproject.toml").write_text("[project]\nname='protolink'\nversion='1.2.3'\n", encoding="utf-8")
+
+    context = bootstrap_app_context(tmp_path / "workspace-root", persist_settings=False)
+    installer_archive = context.workspace.exports / "installer-package.zip"
+    installer_archive.write_bytes(b"installer-package")
+    plan = build_native_installer_scaffold_plan(context.workspace, "native installer demo", installer_archive)
+    materialize_native_installer_scaffold(plan, repo_root)
+
+    result = verify_native_installer_scaffold(plan.package_dir)
+
+    assert result.scaffold_dir == plan.package_dir.resolve()
+    assert result.manifest_file == plan.manifest_file
+    assert result.installer_package_archive_file == installer_archive.name
+    assert set(result.wix_source_files_present) == {"ProtoLink.wxs", "Files.wxs", "Variables.wxi"}

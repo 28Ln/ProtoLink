@@ -97,8 +97,9 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
 
 ### Current status
 
-- 当前 `0.2.2` CLI 基线**尚未暴露** native installer scaffold 命令。
-- 在该命令真正落地前，本文件只定义其工程边界，不假设具体 flag 名称。
+- 当前 `0.2.2` CLI 基线已经暴露：
+  - `--build-native-installer-scaffold`
+  - `--verify-native-installer-scaffold`
 
 ### Required role
 
@@ -234,9 +235,11 @@ native installer 路线至少要具备以下验证：
 
 1. 本文件（installer route 计划）
 2. native installer scaffold contract
-3. 切换条件与回退边界
-4. 验证矩阵接入点
-5. 下一阶段实现任务入口
+3. `--build-native-installer-scaffold`
+4. `--verify-native-installer-scaffold`
+5. 切换条件与回退边界
+6. 验证矩阵接入点
+7. 下一阶段实现任务入口
 
 ## 12. Next implementation handoff
 
