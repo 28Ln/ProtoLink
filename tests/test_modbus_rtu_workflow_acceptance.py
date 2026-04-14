@@ -89,7 +89,7 @@ def test_modbus_rtu_workflow_acceptance_path(qapp: QApplication, tmp_path: Path)
             and context.packet_replay_service.snapshot.dispatched_steps == 1
         ),
     )
-    assert "Replay completed:" in panel.replay_status_label.text()
+    assert "回放完成：" in panel.replay_status_label.text()
 
     context.serial_session_service.close_session()
     _wait_until(qapp, lambda: context.serial_session_service.snapshot.connection_state == ConnectionState.DISCONNECTED)

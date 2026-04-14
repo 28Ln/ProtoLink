@@ -78,6 +78,6 @@ def test_register_monitor_panel_reflects_live_modbus_source(qapp: QApplication, 
     )
     qapp.processEvents()
 
-    assert "Source: modbus_rtu" in panel.status_label.text()
+    assert "来源：Modbus RTU 响应" in panel.status_label.text()
     assert "42 rpm" in panel.decoded_value_label.text()
     panel.close()

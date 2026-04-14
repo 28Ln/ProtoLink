@@ -96,7 +96,7 @@ def test_modbus_tcp_workflow_acceptance_path(qapp: QApplication, tmp_path: Path)
             ),
         )
         _wait_until(qapp, lambda: len(server.received_payloads()) > count_before)
-        assert "Replay completed:" in panel.replay_status_label.text()
+        assert "回放完成：" in panel.replay_status_label.text()
 
         context.tcp_client_service.close_session()
         _wait_until(qapp, lambda: context.tcp_client_service.snapshot.connection_state == ConnectionState.DISCONNECTED)

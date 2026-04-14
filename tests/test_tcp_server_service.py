@@ -98,9 +98,9 @@ def test_tcp_server_service_tracks_clients_and_can_target_single_peer(tmp_path: 
 def test_tcp_server_service_surfaces_open_errors(tmp_path: Path) -> None:
     context = bootstrap_app_context(tmp_path, persist_settings=False)
     service = context.tcp_server_service
-    listen_port = _find_unused_port()
     blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    blocker.bind(("127.0.0.1", listen_port))
+    blocker.bind(("127.0.0.1", 0))
+    listen_port = int(blocker.getsockname()[1])
     blocker.listen(1)
 
     try:
@@ -110,7 +110,7 @@ def test_tcp_server_service_surfaces_open_errors(tmp_path: Path) -> None:
         _wait_until(lambda: service.snapshot.connection_state == ConnectionState.ERROR)
 
         assert service.snapshot.last_error is not None
-        assert service.snapshot.last_error.startswith("Open failed:")
+        assert service.snapshot.last_error.startswith("打开失败：")
         assert any(entry.category == "transport.error" for entry in context.log_store.latest(10))
     finally:
         blocker.close()

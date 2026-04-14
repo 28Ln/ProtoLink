@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from protolink.application.register_monitor_service import RegisterMonitorService, RegisterMonitorSnapshot
 from protolink.core.register_monitor import RegisterByteOrder, RegisterDataType
+from protolink.ui.text import READY_TEXT, register_byte_order_text, register_data_type_text
 
 
 class RegisterMonitorPanel(QWidget):
@@ -38,7 +39,7 @@ class RegisterMonitorPanel(QWidget):
         frame_layout.setSpacing(10)
 
         header_layout = QHBoxLayout()
-        title = QLabel("Register Monitor")
+        title = QLabel("寄存器监视")
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
@@ -51,63 +52,63 @@ class RegisterMonitorPanel(QWidget):
         grid.setVerticalSpacing(8)
 
         self.point_combo = QComboBox()
-        self.point_combo.addItem("Select Point", None)
+        self.point_combo.addItem("选择点位", None)
         self.point_combo.currentIndexChanged.connect(self._on_point_selected)
 
         self.name_input = QLineEdit()
-        self.name_input.setPlaceholderText("Point name")
+        self.name_input.setPlaceholderText("点位名称")
         self.address_input = QSpinBox()
         self.address_input.setRange(0, 65535)
 
         self.data_type_combo = QComboBox()
         for data_type in RegisterDataType:
-            self.data_type_combo.addItem(data_type.value, data_type)
+            self.data_type_combo.addItem(register_data_type_text(data_type), data_type)
 
         self.byte_order_combo = QComboBox()
         for byte_order in RegisterByteOrder:
-            self.byte_order_combo.addItem(byte_order.value, byte_order)
+            self.byte_order_combo.addItem(register_byte_order_text(byte_order), byte_order)
 
         self.scale_input = QLineEdit("1.0")
         self.offset_input = QLineEdit("0.0")
         self.unit_input = QLineEdit()
-        self.unit_input.setPlaceholderText("unit")
+        self.unit_input.setPlaceholderText("单位")
 
-        self.upsert_button = QPushButton("Save Point")
+        self.upsert_button = QPushButton("保存点位")
         self.upsert_button.clicked.connect(self._on_upsert_point)
-        self.delete_button = QPushButton("Delete Point")
+        self.delete_button = QPushButton("删除点位")
         self.delete_button.clicked.connect(self._on_delete_point)
 
         self.register_words_input = QLineEdit()
-        self.register_words_input.setPlaceholderText("Register words (e.g. 0x0000 0x3FC0)")
+        self.register_words_input.setPlaceholderText("寄存器字（例如 0x0000 0x3FC0）")
         self.register_words_input.textChanged.connect(self.service.set_register_words_text)
-        self.decode_button = QPushButton("Decode")
+        self.decode_button = QPushButton("解码")
         self.decode_button.clicked.connect(self.service.decode_current_words)
 
-        self.decoded_value_label = QLabel("Decoded: -")
+        self.decoded_value_label = QLabel("解码：-")
         self.decoded_value_label.setObjectName("MetaLabel")
         self.error_label = QLabel()
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
-        grid.addWidget(QLabel("Point"), 0, 0)
+        grid.addWidget(QLabel("点位"), 0, 0)
         grid.addWidget(self.point_combo, 0, 1, 1, 2)
         grid.addWidget(self.delete_button, 0, 3)
-        grid.addWidget(QLabel("Name"), 1, 0)
+        grid.addWidget(QLabel("名称"), 1, 0)
         grid.addWidget(self.name_input, 1, 1)
-        grid.addWidget(QLabel("Address"), 1, 2)
+        grid.addWidget(QLabel("地址"), 1, 2)
         grid.addWidget(self.address_input, 1, 3)
-        grid.addWidget(QLabel("Type"), 2, 0)
+        grid.addWidget(QLabel("类型"), 2, 0)
         grid.addWidget(self.data_type_combo, 2, 1)
-        grid.addWidget(QLabel("Byte Order"), 2, 2)
+        grid.addWidget(QLabel("字节序"), 2, 2)
         grid.addWidget(self.byte_order_combo, 2, 3)
-        grid.addWidget(QLabel("Scale"), 3, 0)
+        grid.addWidget(QLabel("缩放"), 3, 0)
         grid.addWidget(self.scale_input, 3, 1)
-        grid.addWidget(QLabel("Offset"), 3, 2)
+        grid.addWidget(QLabel("偏移"), 3, 2)
         grid.addWidget(self.offset_input, 3, 3)
-        grid.addWidget(QLabel("Unit"), 4, 0)
+        grid.addWidget(QLabel("单位"), 4, 0)
         grid.addWidget(self.unit_input, 4, 1)
         grid.addWidget(self.upsert_button, 4, 3)
-        grid.addWidget(QLabel("Registers"), 5, 0)
+        grid.addWidget(QLabel("寄存器"), 5, 0)
         grid.addWidget(self.register_words_input, 5, 1, 1, 2)
         grid.addWidget(self.decode_button, 5, 3)
 
@@ -128,9 +129,9 @@ class RegisterMonitorPanel(QWidget):
 
         selected = snapshot.selected_point_name or "-"
         live_source = snapshot.last_live_source or "-"
-        self.status_label.setText(f"Points: {len(snapshot.point_names)}    Selected: {selected}    Source: {live_source}")
-        self.decoded_value_label.setText(f"Decoded: {snapshot.decoded_value or '-'}")
-        self.error_label.setText(snapshot.last_error or "Ready.")
+        self.status_label.setText(f"点位：{len(snapshot.point_names)}    选中：{selected}    来源：{live_source}")
+        self.decoded_value_label.setText(f"解码：{snapshot.decoded_value or '-'}")
+        self.error_label.setText(snapshot.last_error or READY_TEXT)
         self.delete_button.setEnabled(bool(snapshot.selected_point_name))
 
     def _on_point_selected(self) -> None:
@@ -164,7 +165,7 @@ class RegisterMonitorPanel(QWidget):
         if current_data != desired_data:
             self.point_combo.blockSignals(True)
             self.point_combo.clear()
-            self.point_combo.addItem("Select Point", None)
+            self.point_combo.addItem("选择点位", None)
             for point_name in snapshot.point_names:
                 self.point_combo.addItem(point_name, point_name)
             self.point_combo.blockSignals(False)
