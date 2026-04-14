@@ -1,141 +1,79 @@
 # ProtoLink Smoke Checklist
 
-Last created: 2026-04-09
+Last updated: 2026-04-14
 
-## Purpose
+## 用途
 
-This checklist is the first release-preparation slice for ProtoLink.
+本文件是最小冒烟运行手册，只保留当前阶段仍需执行的关键步骤。
 
-It is intentionally grounded in currently implemented and verified repository facts.
-
-## Environment
+## 环境
 
 - Python 3.11
 - `uv`
-- UI dependencies installed
+- UI 依赖已安装
 
-## Baseline commands
+## 最小冒烟命令
 
 ```powershell
 uv sync --python 3.11 --extra dev --extra ui
 uv run protolink --headless-summary
-uv run pytest
+uv run protolink --smoke-check
 ```
 
-## Mandatory smoke steps
+## 冒烟检查项
 
-### 1. Workspace / settings
-
-- Run:
+### 1. 工作区
 
 ```powershell
 uv run protolink --workspace .\workspace\lab-a --print-workspace
 ```
 
-- Expected:
-  - the printed path matches the intended workspace
-  - `.protolink/app_settings.json` points at that workspace
+期望：
+- 输出路径与目标工作区一致
+- 设置文件指向目标工作区
 
 ### 2. Headless summary
-
-- Run:
 
 ```powershell
 uv run protolink --headless-summary
 ```
 
-- Expected:
-  - command succeeds
-  - transport count is 6
-  - module count is 15
+期望：
+- 命令成功
+- transport / module 统计正常输出
 
-### 3. Full regression
-
-- Run:
-
-```powershell
-uv run pytest
-```
-
-- Expected:
-  - full suite passes
-  - known warnings are limited to the current aMQTT deprecation warning set
-
-### 4. Offscreen UI smoke
-
-- Preferred executable path:
+### 3. Offscreen UI smoke
 
 ```powershell
 uv run protolink --smoke-check
 ```
 
-- Or run the explicit offscreen smoke from `docs/VALIDATION.md`
+期望：
+- 输出 `smoke-check-ok`
+- 启动、展示、关闭过程中无崩溃
 
-- Expected:
-  - `ui-smoke-ok`
-  - no crash during bootstrap/show/close
-
-### 5. Runtime truth smoke
-
-- Verify:
-  - workspace log file path exists during runtime:
-    - `workspace/logs/transport-events.jsonl`
-  - if runtime artifacts are missing, generate them:
-
-```powershell
-uv run protolink --workspace <workspace-path> --generate-smoke-artifacts
-```
-
-  - real runtime log export works:
-
-```powershell
-uv run protolink --workspace <workspace-path> --export-runtime-log bench-runtime
-```
-
-- Expected:
-  - a real bundle is created under `workspace/exports/`
-  - payload file is copied from the workspace log file
-
-### 5b. Release preflight smoke
-
-- Run:
+### 4. Release preflight
 
 ```powershell
 uv run protolink --release-preflight
 ```
 
-- Expected:
-  - JSON report is printed
-  - `manifest_exists` is `true`
-  - `smoke_check` is `smoke-check-ok`
-  - `ready` is `true` for a release-prep-green workspace
+期望：
+- 返回 JSON 报告
+- `ready` 为 `true`
 
-### 6. RTU workflow smoke
-
-- Run:
+### 5. 工作流快验
 
 ```powershell
 uv run pytest tests/test_modbus_rtu_workflow_acceptance.py -q
-```
-
-- Expected:
-  - acceptance path passes
-
-### 7. TCP workflow smoke
-
-- Run:
-
-```powershell
 uv run pytest tests/test_modbus_tcp_workflow_acceptance.py -q
 ```
 
-- Expected:
-  - acceptance path passes
+期望：
+- 两条 acceptance 链路通过
 
-## Exit condition
+## 通过标准
 
-The smoke checklist is considered green only if:
-
-- every mandatory step passes
-- no new unexpected warning class appears
-- current-state/status/backlog documents still match the verified product surface
+- 冒烟命令通过
+- 关键工作流验收通过
+- 当前文档与验证口径未出现分叉

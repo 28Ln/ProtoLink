@@ -1,200 +1,49 @@
 # ProtoLink Release Checklist
 
-Last created: 2026-04-09
+Last updated: 2026-04-14
 
-## Purpose
+## 用途
 
-This checklist is the first release-preparation artifact for ProtoLink.
+本文件是正式发布运行手册，只描述当前有效的发布前检查，不承载任务、状态或历史叙事。
 
-It is a supporting operational checklist, not the canonical backlog or mainline tracker.
+## 前置条件
 
-It does not claim packaging is complete.
-It defines the minimum release-preparation truth that must exist before packaging is treated as a real active delivery path.
+- `docs/MAINLINE_STATUS.md` 与 `docs/ENGINEERING_TASKLIST.md` 已同步
+- `docs/VALIDATION.md` 与 README 中的验证命令已同步
+- 工作区与设置路径明确
+- 本地仓库处于可交接状态
 
-## Preconditions
-
-- canonical backlog is current
-- current active mainline is reflected in:
-  - `docs/CURRENT_STATE.md`
-  - `docs/PROJECT_STATUS.md`
-  - `docs/ENGINEERING_TASKLIST.md`
-  - `docs/MAINLINE_STATUS.md`
-- full test suite is green
-- smoke checklist is green
-
-## Release-preparation checks
-
-### 1. Workspace truth
-
-- active workspace is known
-- generated runtime artifacts are attributable to that workspace
-- logs/captures/exports are not silently landing outside the intended workspace
-- workspace manifest exists and is current:
-  - `workspace_manifest.json`
-- migration baseline works:
+## 最小发布前命令
 
 ```powershell
-uv run protolink --migrate-workspace
+uv sync --python 3.11 --extra dev --extra ui
+uv run pytest -q
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-013 --expected-pytest-count 274
+uv run python scripts/run_targeted_regressions.py --suite all
+uv run protolink --smoke-check
+uv run python scripts/verify_release_staging.py --name local
+python scripts/verify_dist_install.py
+uv build
 ```
 
-### 2. Verification truth
+## 工作区与交付检查
 
-- `uv run pytest` passes
-- targeted workflow acceptance passes for:
-  - Modbus RTU
-  - Modbus TCP
-- offscreen UI smoke passes
+- `uv run protolink --release-preflight` 返回 `ready: true`
+- release bundle / installer package 的 manifest、payload、receipt 可验证
+- 安装产物包含运行时、`sp/`、启动脚本、安装脚本
+- 安装、验证、卸载链路保持闭环
 
-### 3. Export truth
+## 文档与真值检查
 
-- runtime log export produces a real bundle from workspace logs
-- latest profile export produces a real bundle from workspace profiles
-- release bundle export produces a multi-artifact bundle from the active workspace
-- one-shot release preparation can run:
+- README、`docs/CURRENT_STATE.md`、`docs/PROJECT_STATUS.md`、`docs/VALIDATION.md` 的主线与验证数字一致
+- `.github/workflows/ci.yml` 与当前验证基线一致
+- 发布手册与冒烟手册只保留当前有效命令
 
-```powershell
-uv run protolink --workspace <workspace-path> --prepare-release bench-release
-```
+## 签收标准
 
-- archive packaging can run:
-
-```powershell
-uv run protolink --workspace <workspace-path> --package-release bench-release
-```
-
-- portable package build can run:
-
-```powershell
-uv run protolink --workspace <workspace-path> --build-portable-package bench-portable
-```
-
-- portable package extract/install can run:
-
-```powershell
-uv run protolink --install-portable-package <archive-path> <target-dir>
-```
-
-- portable package verify can run:
-
-```powershell
-uv run protolink --verify-portable-package <archive-path>
-```
-
-- portable package install validates `portable-manifest.json` and payload checksums before extraction
-
-- distribution package build can run:
-
-```powershell
-uv run protolink --workspace <workspace-path> --build-distribution-package bench-distribution
-```
-
-- distribution package extract/install can run:
-
-```powershell
-uv run protolink --install-distribution-package <archive-path> <staging-dir> <target-dir>
-```
-
-- distribution package install rejects nested-archive checksum mismatches from `distribution-manifest.json`
-
-- installer-staging package can run:
-
-```powershell
-uv run protolink --workspace <workspace-path> --build-installer-staging bench-installer
-```
-
-- installer-staging extract/install can run:
-
-```powershell
-uv run protolink --install-installer-staging <archive-path> <staging-dir> <target-dir>
-```
-
-- installer-staging install rejects distribution-archive checksum mismatches from `installer-manifest.json`
-
-- installer-staging verify can run:
-
-```powershell
-uv run protolink --verify-installer-staging <archive-path>
-```
-
-- installer-package install rejects installer-staging checksum mismatches from `installer-package-manifest.json`
-
-- installer-package verify can run:
-
-```powershell
-uv run protolink --verify-installer-package <archive-path>
-```
-
-- installer-package clean release-staging install can run:
-
-```powershell
-uv run protolink --install-installer-package <archive-path> <clean-staging-dir> <clean-install-dir>
-```
-
-- executable clean release-staging validation can run:
-
-```powershell
-uv run python scripts/verify_release_staging.py --name ci
-```
-
-- clean release-staging install produces:
-  - staged `installer-package-manifest.json`
-  - nested installer-staging and distribution manifests
-  - bundled runtime payload files in the install dir, including `runtime/python.exe`, `sp/`, and launch/install scripts
-  - `install-receipt.json` in the install dir
-
-- portable / distribution / installer installs reject zip path-traversal and symlink entries during extraction
-
-- capture export path produces a real bundle from workflow-generated capture artifacts
-- export manifests identify:
-  - bundle kind
-  - bundle name
-  - payload file
-  - source file when copied from an existing runtime artifact
-
-### 4. Known warnings
-
-Current known warnings allowed for this phase:
-
-- None.
-
-Any new warning class must be triaged before a release candidate is declared.
-
-### 5. Documentation truth
-
-- release-facing commands in `README.md` still work
-- `docs/VALIDATION.md` matches actual passing validation commands
-- `docs/CURRENT_STATE.md` does not describe invalidated counts or obsolete workflow status
-- `.github/workflows/ci.yml` mirrors the current validation baseline
-
-### 6. Product-surface truth
-
-- owned workflow surfaces currently present in the main window:
-  - Modbus RTU Lab
-  - Modbus TCP Lab
-  - Serial Studio
-  - TCP Client
-  - TCP Server
-  - UDP Lab
-  - MQTT Client
-  - MQTT Server
-  - Register Monitor
-  - Automation Rules
-  - Script Console
-  - Data Tools
-  - Network Tools
-
-### 7. Open blockers before real packaging
-
-- project-local git baseline exists and `git status --short` is clean before release handoff
-- installer packaging/distribution now exists and is verified here, but should still be exercised on a clean release-staging machine before a release candidate
-- workspace migration baseline exists and now feeds release-prep flows, but release candidate sign-off still depends on a clean release environment
-- bundled-runtime delivery is now runnable on the install target, but remains a packaged Python runtime + site-packages payload rather than a native signed Windows installer/binary line
-
-## Exit condition
-
-This checklist is complete only when:
-
-- the smoke checklist is green
-- docs and verification are in sync
-- packaging blockers are reduced enough to justify switching the active mainline from preparation to executable release work
-- the current validation baseline stays reproducible in CI and on a clean release-staging machine
+- full pytest 通过
+- targeted regressions 通过
+- canonical truth 通过
+- release-staging 通过
+- dist fresh-install 通过
+- build 成功

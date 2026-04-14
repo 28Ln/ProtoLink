@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TARGET_FILES = {
     "INDEX": ROOT / "docs" / "INDEX.md",
     "README": ROOT / "README.md",
+    "TASKS": ROOT / "TASKS.md",
     "PROJECT_BRIEF": ROOT / "docs" / "PROJECT_BRIEF.md",
     "ARCHITECTURE": ROOT / "docs" / "ARCHITECTURE.md",
     "CURRENT_STATE": ROOT / "docs" / "CURRENT_STATE.md",
@@ -18,6 +19,7 @@ TARGET_FILES = {
     "HANDOFF": ROOT / "docs" / "HANDOFF.md",
     "RISK_REGISTER": ROOT / "docs" / "RISK_REGISTER.md",
     "VALIDATION": ROOT / "docs" / "VALIDATION.md",
+    "TASK_ARCHIVE": ROOT / "docs" / "TASK_ARCHIVE.md",
 }
 
 
@@ -35,6 +37,11 @@ def _require_regex(label: str, text: str, pattern: str) -> None:
         raise SystemExit(f"{label} is missing expected pattern: {pattern}")
 
 
+def _require_absent(path: Path) -> None:
+    if path.exists():
+        raise SystemExit(f"Retired file should not exist: {path.relative_to(ROOT)}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify ProtoLink canonical truth is synchronized.")
     parser.add_argument("--expected-mainline", required=True)
@@ -43,6 +50,7 @@ def main() -> int:
 
     index = _read("INDEX")
     readme = _read("README")
+    tasks = _read("TASKS")
     _read("PROJECT_BRIEF")
     _read("ARCHITECTURE")
     current_state = _read("CURRENT_STATE")
@@ -52,6 +60,7 @@ def main() -> int:
     handoff = _read("HANDOFF")
     risk_register = _read("RISK_REGISTER")
     validation = _read("VALIDATION")
+    task_archive = _read("TASK_ARCHIVE")
 
     expected_mainline = args.expected_mainline
     expected_count = str(args.expected_pytest_count)
@@ -59,6 +68,7 @@ def main() -> int:
     _require_contains("INDEX", index, "HANDOFF.md")
     _require_contains("README", readme, f"Current canonical mainline: `{expected_mainline}`")
     _require_contains("README", readme, "`docs/HANDOFF.md`")
+    _require_contains("TASKS", tasks, "`docs/ENGINEERING_TASKLIST.md`")
     _require_contains("CURRENT_STATE", current_state, f"`uv run pytest -q` -> `{expected_count} passed`")
     _require_contains("PROJECT_STATUS", project_status, f"`uv run pytest -q` -> `{expected_count} passed`")
     _require_contains("VALIDATION", validation, f"`uv run pytest -q` -> {expected_count} passed")
@@ -66,8 +76,12 @@ def main() -> int:
     _require_contains("MAINLINE_STATUS", mainline_status, f"- ID: `{expected_mainline}`")
     _require_contains("HANDOFF", handoff, "当前主线")
     _require_contains("RISK_REGISTER", risk_register, "风险清单")
+    _require_contains("TASK_ARCHIVE", task_archive, "- `PL-012` —")
     _require_regex("ENGINEERING_TASKLIST", tasklist, rf"^### {re.escape(expected_mainline)} — ")
     _require_regex("PROJECT_STATUS", project_status, rf"^- `{re.escape(expected_mainline)}`")
+    _require_absent(ROOT / "docs" / "REFERENCE_ANALYSIS.md")
+    _require_absent(ROOT / "docs" / "WORKTREE_RECONCILIATION.md")
+    _require_absent(ROOT / "docs" / "STATUS.md")
 
     return 0
 

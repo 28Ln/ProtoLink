@@ -11,7 +11,7 @@ Last updated: 2026-04-14
 - Impact: 交付体积、下载成本、安装时间、维护成本上升
 - Current control: 已过滤部分 test / dev 负载，并具备 verify/install 回归
 - Evidence: 当前 portable / installer 包仍以 bundled runtime 为核心
-- Next action: 继续收敛 package allowlist，规划 `PL-013`
+- Next action: 在 `PL-013` 中继续收敛 package allowlist
 - Residual risk: Medium
 
 ### R-002 尚未具备原生签名安装器
@@ -21,7 +21,7 @@ Last updated: 2026-04-14
 - Impact: 安装信任度、系统兼容性、交付口径受限
 - Current control: 现有 installer package 可安装、可验证、可卸载
 - Evidence: 当前交付能力仍是 bundled-runtime clean-machine runnable delivery
-- Next action: 规划 native installer / signing 路线
+- Next action: 在 `PL-014` 中推进 native installer / signing 路线
 - Residual risk: Medium
 
 ### R-003 脚本能力不是不受信沙箱
@@ -51,5 +51,5 @@ Last updated: 2026-04-14
 - Impact: 扩展实现分叉，维护成本上升
 - Current control: 当前代码分层清晰，可沿现有 service / transport 模式扩展
 - Evidence: 尚无正式 SDK / contract 文档
-- Next action: 规划 `PL-014`
+- Next action: 规划 `PL-015`
 - Residual risk: Medium

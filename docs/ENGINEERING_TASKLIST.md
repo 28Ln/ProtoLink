@@ -11,31 +11,31 @@ Last updated: 2026-04-14
 
 ## Active
 
-### PL-012 — Delivery Baseline Consolidation
+### PL-013 — Package Slimming and Delivery Hardening
 
 - Classification: `Active`
 - Objective:
-  - 把现有可验证成果整理为正式工程基线，确保可交付、可接手、可继续迭代。
+  - 在不破坏正式基线的前提下，继续降低交付冗余并补强运行证据。
 - Scope:
-  1. 正式文档体系收敛
-  2. 单一主线与正式任务台账固化
-  3. README / 文档入口 / handoff 套件完善
-  4. 风险台账与运行边界固化
+  1. 收敛 bundled runtime 与打包 allowlist
+  2. 补强关闭、清理、安装、卸载路径的 failure evidence
+  3. 保持文档、CI、release-staging、dist-install 真值一致
+  4. 定义 native installer / signing 的进入条件与边界
 - Exit criteria:
-  - 正式文档集完成并职责清晰
-  - handoff 文档可支撑新接手者独立启动与验证
-  - 风险文档覆盖当前主要工程边界
-  - CI / 验证 / 文档口径一致
+  - 打包冗余继续下降，且正式验证链无回归
+  - 关键关闭/清理/交付路径具备可复盘的 failure evidence
+  - native installer 路线具备可执行的计划边界
+  - 正式文档、CI、验证基线保持同步
 
 ## Next
 
-### PL-013 — Package Slimming and Native Installer Path
+### PL-014 — Native Installer and Signing Path
 
 - Classification: `Next`
 - Objective:
-  - 继续降低 bundled-runtime 冗余负载，并规划原生安装器路线。
+  - 在 `PL-013` 完成后推进原生安装器与签名交付路线。
 
-### PL-014 — Extension Contract and Plugin Boundary
+### PL-015 — Extension Contract and Plugin Boundary
 
 - Classification: `Next`
 - Objective:
@@ -54,5 +54,6 @@ Last updated: 2026-04-14
 - `PL-009` — network tools owner surface
 - `PL-010` — owner-surface consistency closure
 - `PL-011` — repository baseline reconciliation and formal baseline freeze
+- `PL-012` — delivery baseline consolidation
 
 历史别名与无效口径见：`docs/TASK_ARCHIVE.md`
