@@ -20,6 +20,7 @@ from protolink.core.packaging import (
     DISTRIBUTION_PACKAGE_FORMAT_VERSION,
     INSTALLER_PACKAGE_FORMAT_VERSION,
     INSTALLER_STAGING_FORMAT_VERSION,
+    NATIVE_INSTALLER_SCAFFOLD_FORMAT_VERSION,
     PORTABLE_MANIFEST_FILE,
     PORTABLE_PACKAGE_FORMAT_VERSION,
 )
@@ -58,6 +59,22 @@ def _write_portable_archive(archive_file: Path) -> None:
             archive.writestr(name, payload)
         archive.writestr("demo-release.zip", b"release-bytes")
         archive.writestr(PORTABLE_MANIFEST_FILE, json.dumps(manifest, ensure_ascii=False, indent=2))
+
+
+def _write_installer_package_archive(archive_file: Path) -> None:
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    installer_staging_bytes = b"installer-staging"
+    manifest = {
+        "format_version": INSTALLER_PACKAGE_FORMAT_VERSION,
+        "installer_staging_archive_file": "installer-staging.zip",
+        "checksum": hashlib.sha256(installer_staging_bytes).hexdigest(),
+    }
+    with ZipFile(archive_file, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("installer-package-manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        archive.writestr("installer-staging.zip", installer_staging_bytes)
+        archive.writestr("Install-ProtoLink.ps1", "echo install\n")
+        archive.writestr("Install-ProtoLink.bat", "echo install\r\n")
 
 
 def _write_valid_runtime_log(workspace) -> Path:
@@ -1035,8 +1052,13 @@ def test_main_builds_native_installer_scaffold(monkeypatch, tmp_path, capsys) ->
     scaffold_dir = Path(payload["native_installer_scaffold_dir"])
     assert scaffold_dir.exists()
     assert Path(payload["native_installer_manifest_file"]).exists()
-    assert payload["native_installer_manifest"]["format_version"] == "protolink-native-installer-scaffold-v1"
-    assert set(payload["native_installer_manifest"]["wix_source_files"]) == {"ProtoLink.wxs", "Files.wxs", "Variables.wxi"}
+    assert Path(payload["native_installer_wix_source_file"]).exists()
+    assert Path(payload["native_installer_wix_include_file"]).exists()
+    assert Path(payload["native_installer_payload_file"]).exists()
+    assert payload["native_installer_manifest"]["format_version"] == NATIVE_INSTALLER_SCAFFOLD_FORMAT_VERSION
+    assert payload["native_installer_manifest"]["wix_source_file"] == "ProtoLink.wxs"
+    assert payload["native_installer_manifest"]["wix_include_file"] == "ProtoLink.Generated.wxi"
+    assert payload["native_installer_manifest"]["installer_package_file"].startswith("payload/")
 
 
 def test_main_verifies_native_installer_scaffold(monkeypatch, tmp_path, capsys) -> None:
@@ -1046,7 +1068,7 @@ def test_main_verifies_native_installer_scaffold(monkeypatch, tmp_path, capsys) 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='protolink'\nversion='0.2.2'\n", encoding="utf-8")
     workspace = ensure_workspace_layout(tmp_path / "workspace")
     installer_archive = workspace.exports / "installer-package.zip"
-    installer_archive.write_bytes(b"installer-package")
+    _write_installer_package_archive(installer_archive)
 
     plan = build_native_installer_scaffold_plan(workspace, "bench native installer", installer_archive)
     materialize_native_installer_scaffold(plan, tmp_path)
@@ -1057,7 +1079,10 @@ def test_main_verifies_native_installer_scaffold(monkeypatch, tmp_path, capsys) 
 
     assert exit_code == int(CliExitCode.OK)
     assert Path(payload["manifest_file"]).exists()
-    assert set(payload["wix_source_files_present"]) == {"ProtoLink.wxs", "Files.wxs", "Variables.wxi"}
+    assert payload["wix_source_file"] == "ProtoLink.wxs"
+    assert payload["wix_include_file"] == "ProtoLink.Generated.wxi"
+    assert payload["installer_package_file"] == "payload/installer-package.zip"
+    assert payload["checksum_matches"] is True
 
 
 def test_main_installs_installer_package_through_clean_release_staging(monkeypatch, tmp_path, capsys) -> None:

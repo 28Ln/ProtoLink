@@ -12,6 +12,7 @@ from protolink.core.packaging import (
     DISTRIBUTION_PACKAGE_FORMAT_VERSION,
     INSTALLER_PACKAGE_FORMAT_VERSION,
     INSTALLER_STAGING_FORMAT_VERSION,
+    NATIVE_INSTALLER_SCAFFOLD_FORMAT_VERSION,
     PORTABLE_MANIFEST_FILE,
     PORTABLE_PACKAGE_FORMAT_VERSION,
     build_native_installer_scaffold_plan,
@@ -71,6 +72,20 @@ def _write_portable_archive(archive_file: Path) -> None:
             archive.writestr(name, payload)
         archive.writestr("demo-release.zip", b"release-bytes")
         archive.writestr(PORTABLE_MANIFEST_FILE, json.dumps(manifest, ensure_ascii=False, indent=2))
+
+
+def _write_installer_package_archive(archive_file: Path) -> None:
+    installer_staging_bytes = b"installer-staging"
+    manifest = {
+        "format_version": INSTALLER_PACKAGE_FORMAT_VERSION,
+        "installer_staging_archive_file": "installer-staging.zip",
+        "checksum": _sha256_bytes(installer_staging_bytes),
+    }
+    with ZipFile(archive_file, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("installer-package-manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        archive.writestr("installer-staging.zip", installer_staging_bytes)
+        archive.writestr("Install-ProtoLink.ps1", "echo install\n")
+        archive.writestr("Install-ProtoLink.bat", "echo install\r\n")
 
 
 def _create_fake_runtime_bundle(root: Path) -> tuple[Path, Path]:
@@ -956,7 +971,7 @@ def test_materialize_native_installer_scaffold_creates_wix_sources_and_manifest(
 
     context = bootstrap_app_context(tmp_path / "workspace-root", persist_settings=False)
     installer_archive = context.workspace.exports / "installer-package.zip"
-    installer_archive.write_bytes(b"installer-package")
+    _write_installer_package_archive(installer_archive)
 
     plan = build_native_installer_scaffold_plan(
         context.workspace,
@@ -967,14 +982,20 @@ def test_materialize_native_installer_scaffold_creates_wix_sources_and_manifest(
     manifest = materialize_native_installer_scaffold(plan, repo_root)
 
     assert plan.manifest_file.exists()
-    assert plan.product_wxs_file.exists()
-    assert plan.files_wxs_file.exists()
-    assert plan.variables_wxi_file.exists()
-    assert manifest["format_version"] == "protolink-native-installer-scaffold-v1"
-    assert manifest["product_version"] == "9.9.9"
-    assert manifest["installer_package_archive_file"] == installer_archive.name
-    assert set(manifest["wix_source_files"]) == {"ProtoLink.wxs", "Files.wxs", "Variables.wxi"}
-    assert "wix build ProtoLink.wxs Files.wxs -arch x64 -o ProtoLink.msi" in manifest["recommended_commands"]
+    assert plan.wix_source_file.exists()
+    assert plan.wix_include_file.exists()
+    assert plan.installer_package_file.exists()
+    assert manifest["format_version"] == NATIVE_INSTALLER_SCAFFOLD_FORMAT_VERSION
+    assert manifest["application_version"] == "9.9.9"
+    assert manifest["wix_product_version"] == "9.9.9"
+    assert manifest["installer_package_file"] == "payload/installer-package.zip"
+    assert manifest["wix_source_file"] == "ProtoLink.wxs"
+    assert manifest["wix_include_file"] == "ProtoLink.Generated.wxi"
+    assert "wix build ProtoLink.wxs -arch x64 -o ProtoLink.msi" in manifest["recommended_commands"]
+    assert "ProtoLink.Generated.wxi" in plan.wix_source_file.read_text(encoding="utf-8")
+    include_text = plan.wix_include_file.read_text(encoding="utf-8")
+    assert "payload\\installer-package.zip" in include_text
+    assert "installer-package.zip" in include_text
 
 
 def test_verify_native_installer_scaffold_checks_required_files(tmp_path: Path) -> None:
@@ -984,7 +1005,7 @@ def test_verify_native_installer_scaffold_checks_required_files(tmp_path: Path) 
 
     context = bootstrap_app_context(tmp_path / "workspace-root", persist_settings=False)
     installer_archive = context.workspace.exports / "installer-package.zip"
-    installer_archive.write_bytes(b"installer-package")
+    _write_installer_package_archive(installer_archive)
     plan = build_native_installer_scaffold_plan(context.workspace, "native installer demo", installer_archive)
     materialize_native_installer_scaffold(plan, repo_root)
 
@@ -992,5 +1013,7 @@ def test_verify_native_installer_scaffold_checks_required_files(tmp_path: Path) 
 
     assert result.scaffold_dir == plan.package_dir.resolve()
     assert result.manifest_file == plan.manifest_file
-    assert result.installer_package_archive_file == installer_archive.name
-    assert set(result.wix_source_files_present) == {"ProtoLink.wxs", "Files.wxs", "Variables.wxi"}
+    assert result.wix_source_file == "ProtoLink.wxs"
+    assert result.wix_include_file == "ProtoLink.Generated.wxi"
+    assert result.installer_package_file == "payload/installer-package.zip"
+    assert result.checksum_matches is True
