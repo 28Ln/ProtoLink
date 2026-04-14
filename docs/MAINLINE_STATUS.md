@@ -4,18 +4,21 @@ Last updated: 2026-04-14
 
 ## Single active mainline
 
-- ID: `PL-013`
-- Title: Package Slimming and Delivery Hardening
+- ID: `PL-014`
+- Title: Native Installer and Signing Path
 
 ## 前置结论
 
-`PL-012` 已完成，ProtoLink 已具备正式基线、正式文档、正式交接入口和可执行验证链。
+`PL-012` 与 `PL-013` 已完成，ProtoLink 现阶段已经具备：
 
-当前进入 `PL-013`，是因为下一阶段的最高收益不再来自继续整理文档，而来自继续降低交付成本并补强运行证据。
+- 正式交付基线
+- 第一次 package slimming / delivery hardening 成果
+- 关闭/清理路径的关键 failure evidence 基线
+- 稳定的 release-staging / fresh-install 验证链
 
 ## 目标
 
-在不破坏当前正式基线的前提下，继续收敛交付包内容、补强运行与交付证据，并为原生安装器路线保留清晰接口。
+在不破坏 0.2.1 基线的前提下，推进原生安装器与签名路线，建立从 bundled-runtime 交付向更正式安装形态演进的工程路径。
 
 ## 为什么现在做这件事
 
@@ -25,31 +28,31 @@ Last updated: 2026-04-14
 - `release-staging passed`
 - `dist fresh-install passed`
 
-因此当前最高优先级是继续提高正式交付质量，而不是继续加功能：
+因此当前最高优先级是把已经收敛的交付基线推进到下一形态：
 
-- 降低 bundled runtime 冗余
-- 补强关闭/清理/安装链的 failure evidence
-- 让后续 native installer 路线有清晰切换条件
+- 明确 native installer / signing 路线
+- 明确切换条件、验证策略与回退边界
+- 保证 0.2.1 现有交付链在过渡期间保持稳定
 
 ## 当前范围
 
-`PL-013` 聚焦：
+`PL-014` 聚焦：
 
-1. 收敛打包 allowlist，继续清理 bundled runtime 冗余负载
-2. 补强关闭、清理、安装、卸载路径的异常证据
-3. 保持 release-staging / dist-install / CI / 文档真值一致
-4. 形成 native installer / signing 的切换条件和规划边界
+1. 定义 native installer / signing 路线的目标交付形态
+2. 定义从 bundled-runtime 交付切换到更正式安装器形态的进入条件
+3. 定义验证策略、签名要求、回退边界
+4. 保持现有 0.2.1 交付链作为稳定回退基线
 
 ## 退出条件
 
-`PL-013` 只在以下条件全部满足时关闭：
+`PL-014` 只在以下条件全部满足时关闭：
 
-- 交付包内容较当前基线显著收敛，且无回归
-- 关键关闭/清理/交付路径具备足够的 failure evidence
-- CI、文档、release-staging、dist-install 维持同一真值
-- native installer / signing 路线具有明确的进入条件与边界说明
+- native installer / signing 路线文档化完成
+- 切换条件、回退条件、验证边界明确
+- 现有 bundled-runtime 交付基线继续保持稳定可验证
+- 下一阶段实现任务已具备明确入口
 
 ## 后续候选主线
 
-- `PL-014` — Native Installer and Signing Path
 - `PL-015` — Extension Contract and Plugin Boundary
+- `PL-016` — Hardware-in-the-Loop and Long-Run Validation

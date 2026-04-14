@@ -529,7 +529,7 @@ def test_main_release_preflight_rejects_runtime_log_write_failures(monkeypatch, 
     assert payload["ready"] is False
 
 
-def test_main_release_preflight_rejects_service_shutdown_failures(monkeypatch, tmp_path, capsys) -> None:
+def test_main_release_preflight_rejects_service_close_failures(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
     _write_valid_runtime_log(workspace)
@@ -555,9 +555,9 @@ def test_main_release_preflight_rejects_service_shutdown_failures(monkeypatch, t
     payload = json.loads(captured.out)
 
     assert exit_code == int(CliExitCode.OK)
-    assert "service_shutdown_failures_present" in payload["blocking_items"]
-    assert payload["service_shutdown_failure_count"] == 1
-    assert payload["service_shutdown_failures"][0]["code"] == "service_shutdown_close_failed"
+    assert "service_close_failures_present" in payload["blocking_items"]
+    assert payload["service_close_failure_count"] == 1
+    assert payload["service_close_failures"][0]["code"] == "service_shutdown_close_failed"
     assert payload["ready"] is False
 
 

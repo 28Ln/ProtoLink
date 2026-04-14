@@ -5,7 +5,7 @@ Last updated: 2026-04-14
 ## 当前验证基线
 
 - `uv run pytest -q` -> 280 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-013 --expected-pytest-count 280` -> passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 280` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
 - `python scripts/verify_dist_install.py` -> passed
@@ -19,7 +19,7 @@ Last updated: 2026-04-14
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run pytest -q
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-013 --expected-pytest-count 280
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 280
 ```
 
 ## UI / owner-surface 相关验证

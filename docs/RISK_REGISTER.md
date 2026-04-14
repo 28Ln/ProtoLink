@@ -4,14 +4,14 @@ Last updated: 2026-04-14
 
 ## 风险清单
 
-### R-001 Bundled Runtime 体积偏大
+### R-001 Bundled Runtime 体积仍偏大
 - Level: High
 - Category: Delivery
 - Trigger: 发布包继续扩张或引入更多环境级依赖
 - Impact: 交付体积、下载成本、安装时间、维护成本上升
-- Current control: 已过滤部分 test / dev 负载，并具备 verify/install 回归
+- Current control: 已完成第一轮 package slimming，并具备 verify/install 回归
 - Evidence: 当前 portable / installer 包仍以 bundled runtime 为核心
-- Next action: 在 `PL-013` 中继续收敛 package allowlist
+- Next action: 在 `PL-014` 中把原生安装器路线作为下一阶段目标
 - Residual risk: Medium
 
 ### R-002 尚未具备原生签名安装器
@@ -34,14 +34,14 @@ Last updated: 2026-04-14
 - Next action: 在 handoff、README、架构文档中持续明确边界
 - Residual risk: Medium
 
-### R-004 关闭 / 清理路径的异常证据仍需补强
+### R-004 关闭 / 清理路径的异常证据仍需继续扩展
 - Level: Medium
 - Category: Observability
 - Trigger: 资源释放、关闭、卸载路径出现异常
 - Impact: 问题复盘与交付诊断困难
-- Current control: 已有 runtime/config failure evidence 基线；release-preflight 已拦截记录到的 session shutdown close failures
-- Evidence: 关键 session service 的 shutdown close 失败已进入统一 evidence，但安装/卸载与更多清理路径仍需继续覆盖
-- Next action: 在 `PL-013` 中补完 failure evidence 覆盖
+- Current control: 已有 runtime/config failure evidence 基线；release-preflight 已拦截记录到的 service close failures
+- Evidence: 关键 session service 的 shutdown / close 失败已进入统一 evidence，但安装/卸载与更多清理路径仍需继续覆盖
+- Next action: 在后续主线中继续扩展交付链与清理路径 evidence
 - Residual risk: Medium
 
 ### R-005 插件 / 扩展接入契约尚未正式化

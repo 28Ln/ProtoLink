@@ -494,8 +494,10 @@ def build_release_preflight_report(context) -> dict[str, object]:
     log_write_failures = [
         entry for entry in runtime_failure_evidence_entries if entry.get("code") == "workspace_log_write_failure"
     ]
-    shutdown_close_failures = [
-        entry for entry in runtime_failure_evidence_entries if entry.get("code") == "service_shutdown_close_failed"
+    service_close_failures = [
+        entry
+        for entry in runtime_failure_evidence_entries
+        if entry.get("code") in {"service_shutdown_close_failed", "service_close_failed"}
     ]
     current_event_handler_errors = [
         {
@@ -538,8 +540,8 @@ def build_release_preflight_report(context) -> dict[str, object]:
         blocking_items.append("event_handler_errors_present")
     if effective_log_write_failure_count > 0:
         blocking_items.append("runtime_log_write_failures_detected")
-    if shutdown_close_failures:
-        blocking_items.append("service_shutdown_failures_present")
+    if service_close_failures:
+        blocking_items.append("service_close_failures_present")
     if smoke_result != "smoke-check-ok":
         blocking_items.append("smoke_check_failed")
     return {
@@ -564,8 +566,8 @@ def build_release_preflight_report(context) -> dict[str, object]:
         "event_handler_errors": effective_event_handler_errors,
         "workspace_log_failed_write_count": effective_log_write_failure_count,
         "workspace_log_last_error": effective_log_write_last_error,
-        "service_shutdown_failure_count": len(shutdown_close_failures),
-        "service_shutdown_failures": shutdown_close_failures,
+        "service_close_failure_count": len(service_close_failures),
+        "service_close_failures": service_close_failures,
         "settings_config_failure_file": str(settings_config_failure_file) if settings_config_failure_file is not None else None,
         "settings_config_failure_count": len(settings_config_failure_entries),
         "settings_config_failure_entries": settings_config_failure_entries,

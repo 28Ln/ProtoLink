@@ -18,7 +18,7 @@ Last updated: 2026-04-14
 ```powershell
 uv sync --python 3.11 --extra dev --extra ui
 uv run pytest -q
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-013 --expected-pytest-count 280
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 280
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local
@@ -34,6 +34,7 @@ uv build
 - release bundle / installer package 的 manifest、payload、receipt 可验证
 - 安装产物包含运行时、`sp/`、启动脚本、安装脚本
 - 安装、验证、卸载链路保持闭环
+- recorded service close failures 会阻断 preflight，必须先清理
 
 ## 文档与真值检查
 
