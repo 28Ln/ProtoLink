@@ -65,6 +65,7 @@ docs/            正式工程文档与归档
 - `docs/RISK_REGISTER.md`：风险清单
 - `docs/HANDOFF.md`：交接文档
 - `docs/VALIDATION.md`：验证矩阵与门禁
+- `CHANGELOG.md`：阶段版本变更记录
 - `docs/RELEASE_CHECKLIST.md`：发布运行手册
 - `docs/SMOKE_CHECKLIST.md`：冒烟检查手册
 - `docs/TASK_ARCHIVE.md`：历史归档

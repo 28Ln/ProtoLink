@@ -4,6 +4,7 @@
 
 - `PROJECT_BRIEF.md`：产品目标、目标用户、范围与非目标
 - `ROADMAP.md`：长期演进方向
+- `../CHANGELOG.md`：阶段版本变更记录
 
 ## 架构与规范
 
