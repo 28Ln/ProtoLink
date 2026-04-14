@@ -21,6 +21,8 @@ from protolink.core.packaging import (
     INSTALLER_PACKAGE_FORMAT_VERSION,
     INSTALLER_STAGING_FORMAT_VERSION,
     NATIVE_INSTALLER_SCAFFOLD_FORMAT_VERSION,
+    NativeInstallerToolStatus,
+    NativeInstallerToolchainVerificationResult,
     PORTABLE_MANIFEST_FILE,
     PORTABLE_PACKAGE_FORMAT_VERSION,
 )
@@ -1083,6 +1085,67 @@ def test_main_verifies_native_installer_scaffold(monkeypatch, tmp_path, capsys) 
     assert payload["wix_include_file"] == "ProtoLink.Generated.wxi"
     assert payload["installer_package_file"] == "payload/installer-package.zip"
     assert payload["checksum_matches"] is True
+
+
+def test_main_verifies_native_installer_toolchain_without_bootstrap(monkeypatch, capsys) -> None:
+    result = NativeInstallerToolchainVerificationResult(
+        target_platform="windows",
+        current_platform="win32",
+        ready=False,
+        available_tools=("wix",),
+        missing_tools=("signtool",),
+        tools=(
+            NativeInstallerToolStatus(
+                tool_key="wix",
+                display_name="WiX Toolset v4 CLI",
+                executable_name="wix.exe",
+                available=True,
+                resolved_path=r"C:\Tools\wix.exe",
+                detection_source="PATH",
+                probe_command=("--version",),
+                probe_output="4.0.5",
+                error=None,
+                install_hint="Install WiX Toolset v4 and ensure `wix.exe` is on PATH or set PROTOLINK_WIX.",
+                recommended_command="wix build ProtoLink.wxs -arch x64 -o ProtoLink.msi",
+            ),
+            NativeInstallerToolStatus(
+                tool_key="signtool",
+                display_name="Windows SignTool",
+                executable_name="signtool.exe",
+                available=False,
+                resolved_path=None,
+                detection_source="not-found",
+                probe_command=("/?",),
+                probe_output=None,
+                error="executable not found",
+                install_hint="Install the Windows SDK signing tools and ensure `signtool.exe` is on PATH or set PROTOLINK_SIGNTOOL.",
+                recommended_command="signtool sign /fd SHA256 /tr <timestamp-url> /td SHA256 ProtoLink.msi",
+            ),
+        ),
+        recommended_commands={
+            "build_msi": "wix build ProtoLink.wxs -arch x64 -o ProtoLink.msi",
+            "sign_msi": "signtool sign /fd SHA256 /tr <timestamp-url> /td SHA256 ProtoLink.msi",
+            "verify_signature": "signtool verify /pa /v ProtoLink.msi",
+        },
+    )
+    monkeypatch.setattr("protolink.app.verify_native_installer_toolchain", lambda: result)
+    monkeypatch.setattr(
+        "protolink.app.bootstrap_app_context",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("bootstrap should not run")),
+    )
+
+    exit_code = main(["--verify-native-installer-toolchain"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert payload["target_platform"] == "windows"
+    assert payload["ready"] is False
+    assert payload["available_tools"] == ["wix"]
+    assert payload["missing_tools"] == ["signtool"]
+    assert payload["tools"]["wix"]["resolved_path"] == r"C:\Tools\wix.exe"
+    assert payload["tools"]["signtool"]["error"] == "executable not found"
+    assert payload["recommended_commands"]["verify_signature"] == "signtool verify /pa /v ProtoLink.msi"
 
 
 def test_main_installs_installer_package_through_clean_release_staging(monkeypatch, tmp_path, capsys) -> None:

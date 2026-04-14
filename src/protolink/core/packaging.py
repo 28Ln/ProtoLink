@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import sysconfig
 from dataclasses import dataclass
@@ -153,6 +154,44 @@ class NativeInstallerScaffoldVerificationResult:
     checksum_matches: bool
 
 
+@dataclass(frozen=True, slots=True)
+class NativeInstallerToolStatus:
+    tool_key: str
+    display_name: str
+    executable_name: str
+    available: bool
+    resolved_path: str | None
+    detection_source: str
+    probe_command: tuple[str, ...]
+    probe_output: str | None
+    error: str | None
+    install_hint: str
+    recommended_command: str
+
+
+@dataclass(frozen=True, slots=True)
+class NativeInstallerToolchainVerificationResult:
+    target_platform: str
+    current_platform: str
+    ready: bool
+    available_tools: tuple[str, ...]
+    missing_tools: tuple[str, ...]
+    tools: tuple[NativeInstallerToolStatus, ...]
+    recommended_commands: dict[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class _NativeInstallerToolSpec:
+    tool_key: str
+    display_name: str
+    env_var: str
+    executable_names: tuple[str, ...]
+    probe_command: tuple[str, ...]
+    acceptable_exit_codes: tuple[int, ...]
+    install_hint: str
+    recommended_command_key: str
+
+
 PORTABLE_MANIFEST_FILE = "portable-manifest.json"
 PORTABLE_PACKAGE_FORMAT_VERSION = "protolink-portable-package-v1"
 DISTRIBUTION_PACKAGE_FORMAT_VERSION = "protolink-distribution-package-v1"
@@ -166,6 +205,28 @@ BUNDLED_RUNTIME_DELIVERY_MODE = "bundled_python_runtime"
 _NONESSENTIAL_RUNTIME_METADATA_FILES = frozenset({"RECORD", "INSTALLER", "REQUESTED", "direct_url.json"})
 _NONESSENTIAL_RUNTIME_PACKAGES = frozenset({"pytest", "_pytest", "iniconfig", "pip", "wheel"})
 _NONESSENTIAL_RUNTIME_PACKAGE_PREFIXES = tuple(f"{package}-" for package in sorted(_NONESSENTIAL_RUNTIME_PACKAGES))
+_NATIVE_INSTALLER_TOOL_SPECS = (
+    _NativeInstallerToolSpec(
+        tool_key="wix",
+        display_name="WiX Toolset v4 CLI",
+        env_var="PROTOLINK_WIX",
+        executable_names=("wix.exe", "wix"),
+        probe_command=("--version",),
+        acceptable_exit_codes=(0,),
+        install_hint="Install WiX Toolset v4 and ensure `wix.exe` is on PATH or set PROTOLINK_WIX.",
+        recommended_command_key="build_msi",
+    ),
+    _NativeInstallerToolSpec(
+        tool_key="signtool",
+        display_name="Windows SignTool",
+        env_var="PROTOLINK_SIGNTOOL",
+        executable_names=("signtool.exe", "signtool"),
+        probe_command=("/?",),
+        acceptable_exit_codes=(0, 1),
+        install_hint="Install the Windows SDK signing tools and ensure `signtool.exe` is on PATH or set PROTOLINK_SIGNTOOL.",
+        recommended_command_key="sign_msi",
+    ),
+)
 
 
 def _build_bundled_runtime_requirements() -> dict[str, object]:
@@ -1822,6 +1883,7 @@ def materialize_native_installer_scaffold(
         encoding="utf-8",
     )
 
+    recommended_commands = _native_installer_recommended_commands()
     manifest = {
         "format_version": NATIVE_INSTALLER_SCAFFOLD_FORMAT_VERSION,
         "package_name": plan.package_name,
@@ -1836,11 +1898,7 @@ def materialize_native_installer_scaffold(
         "installer_package_manifest_file": installer_verification.installer_package_manifest_file,
         "wix_source_file": plan.wix_source_file.name,
         "wix_include_file": plan.wix_include_file.name,
-        "recommended_commands": [
-            "wix build ProtoLink.wxs -arch x64 -o ProtoLink.msi",
-            "signtool sign /fd SHA256 /tr <timestamp-url> /td SHA256 ProtoLink.msi",
-            "signtool verify /pa /v ProtoLink.msi",
-        ],
+        "recommended_commands": list(recommended_commands.values()),
         "verification_expectations": [
             "msiexec /i ProtoLink.msi /qn /l*v install.log",
             "protolink --headless-summary",
@@ -1980,6 +2038,159 @@ def verify_native_installer_scaffold(scaffold_dir: Path) -> NativeInstallerScaff
         wix_include_file=wix_include_file,
         installer_package_file=installer_package_file,
         checksum_matches=True,
+    )
+
+
+def _native_installer_recommended_commands() -> dict[str, str]:
+    return {
+        "build_msi": "wix build ProtoLink.wxs -arch x64 -o ProtoLink.msi",
+        "sign_msi": "signtool sign /fd SHA256 /tr <timestamp-url> /td SHA256 ProtoLink.msi",
+        "verify_signature": "signtool verify /pa /v ProtoLink.msi",
+    }
+
+
+def _known_native_installer_tool_candidates(tool_key: str) -> tuple[Path, ...]:
+    candidates: list[Path] = []
+    if tool_key == "wix":
+        home = Path.home()
+        for variable in ("ProgramFiles", "ProgramFiles(x86)"):
+            root = os.environ.get(variable)
+            if root:
+                candidates.append(Path(root) / "WiX Toolset v4" / "bin" / "wix.exe")
+        candidates.append(home / ".dotnet" / "tools" / "wix.exe")
+    elif tool_key == "signtool":
+        for variable in ("ProgramFiles(x86)", "ProgramFiles"):
+            root = os.environ.get(variable)
+            if not root:
+                continue
+            windows_kits_root = Path(root) / "Windows Kits"
+            for major in ("10", "11"):
+                bin_dir = windows_kits_root / major / "bin"
+                if not bin_dir.exists():
+                    continue
+                version_dirs = sorted(
+                    (path for path in bin_dir.iterdir() if path.is_dir()),
+                    key=lambda path: path.name,
+                    reverse=True,
+                )
+                for version_dir in version_dirs:
+                    for arch in ("x64", "x86", "arm64"):
+                        candidates.append(version_dir / arch / "signtool.exe")
+                for arch in ("x64", "x86", "arm64"):
+                    candidates.append(bin_dir / arch / "signtool.exe")
+
+    unique_candidates: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_candidates.append(candidate)
+    return tuple(unique_candidates)
+
+
+def _resolve_native_installer_tool_path(spec: _NativeInstallerToolSpec) -> tuple[Path | None, str]:
+    override = os.environ.get(spec.env_var)
+    if override:
+        override_path = Path(override)
+        if override_path.exists():
+            return override_path, f"env:{spec.env_var}"
+        resolved_override = shutil.which(override)
+        if resolved_override is not None:
+            return Path(resolved_override), f"env:{spec.env_var}"
+        return None, f"missing-env:{spec.env_var}"
+
+    for executable_name in spec.executable_names:
+        resolved = shutil.which(executable_name)
+        if resolved is not None:
+            return Path(resolved), "PATH"
+
+    for candidate in _known_native_installer_tool_candidates(spec.tool_key):
+        if candidate.exists():
+            return candidate, "known-location"
+
+    return None, "not-found"
+
+
+def _probe_native_installer_tool(
+    spec: _NativeInstallerToolSpec,
+    *,
+    recommended_commands: dict[str, str],
+) -> NativeInstallerToolStatus:
+    resolved_path, detection_source = _resolve_native_installer_tool_path(spec)
+    if resolved_path is None:
+        return NativeInstallerToolStatus(
+            tool_key=spec.tool_key,
+            display_name=spec.display_name,
+            executable_name=spec.executable_names[0],
+            available=False,
+            resolved_path=None,
+            detection_source=detection_source,
+            probe_command=spec.probe_command,
+            probe_output=None,
+            error="executable not found",
+            install_hint=spec.install_hint,
+            recommended_command=recommended_commands[spec.recommended_command_key],
+        )
+
+    try:
+        completed = subprocess.run(
+            [str(resolved_path), *spec.probe_command],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return NativeInstallerToolStatus(
+            tool_key=spec.tool_key,
+            display_name=spec.display_name,
+            executable_name=spec.executable_names[0],
+            available=False,
+            resolved_path=str(resolved_path),
+            detection_source=detection_source,
+            probe_command=spec.probe_command,
+            probe_output=None,
+            error=str(exc),
+            install_hint=spec.install_hint,
+            recommended_command=recommended_commands[spec.recommended_command_key],
+        )
+
+    probe_output = "\n".join(part for part in (completed.stdout.strip(), completed.stderr.strip()) if part) or None
+    available = completed.returncode in spec.acceptable_exit_codes
+    error = None if available else f"probe returned exit code {completed.returncode}"
+    return NativeInstallerToolStatus(
+        tool_key=spec.tool_key,
+        display_name=spec.display_name,
+        executable_name=spec.executable_names[0],
+        available=available,
+        resolved_path=str(resolved_path),
+        detection_source=detection_source,
+        probe_command=spec.probe_command,
+        probe_output=probe_output,
+        error=error,
+        install_hint=spec.install_hint,
+        recommended_command=recommended_commands[spec.recommended_command_key],
+    )
+
+
+def verify_native_installer_toolchain() -> NativeInstallerToolchainVerificationResult:
+    recommended_commands = _native_installer_recommended_commands()
+    tools = tuple(
+        _probe_native_installer_tool(spec, recommended_commands=recommended_commands)
+        for spec in _NATIVE_INSTALLER_TOOL_SPECS
+    )
+    available_tools = tuple(tool.tool_key for tool in tools if tool.available)
+    missing_tools = tuple(tool.tool_key for tool in tools if not tool.available)
+    return NativeInstallerToolchainVerificationResult(
+        target_platform="windows",
+        current_platform=sys.platform,
+        ready=(not missing_tools),
+        available_tools=available_tools,
+        missing_tools=missing_tools,
+        tools=tools,
+        recommended_commands=recommended_commands,
     )
 
 

@@ -2,6 +2,7 @@ import hashlib
 import json
 import runpy
 import shutil
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -32,6 +33,7 @@ from protolink.core.packaging import (
     uninstall_portable_package,
     verify_distribution_package,
     verify_native_installer_scaffold,
+    verify_native_installer_toolchain,
     verify_portable_package,
     verify_installer_package,
     verify_installer_staging_package,
@@ -1017,3 +1019,98 @@ def test_verify_native_installer_scaffold_checks_required_files(tmp_path: Path) 
     assert result.wix_include_file == "ProtoLink.Generated.wxi"
     assert result.installer_package_file == "payload/installer-package.zip"
     assert result.checksum_matches is True
+
+
+def test_verify_native_installer_toolchain_reports_missing_tools(monkeypatch) -> None:
+    monkeypatch.delenv("PROTOLINK_WIX", raising=False)
+    monkeypatch.delenv("PROTOLINK_SIGNTOOL", raising=False)
+    monkeypatch.setattr("protolink.core.packaging.shutil.which", lambda name: None)
+    monkeypatch.setattr("protolink.core.packaging._known_native_installer_tool_candidates", lambda tool_key: ())
+
+    result = verify_native_installer_toolchain()
+    tools = {tool.tool_key: tool for tool in result.tools}
+
+    assert result.ready is False
+    assert result.available_tools == ()
+    assert result.missing_tools == ("wix", "signtool")
+    assert tools["wix"].available is False
+    assert tools["wix"].error == "executable not found"
+    assert tools["wix"].recommended_command == result.recommended_commands["build_msi"]
+    assert tools["signtool"].available is False
+    assert tools["signtool"].install_hint.startswith("Install the Windows SDK signing tools")
+
+
+def test_verify_native_installer_toolchain_reports_available_tools(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("PROTOLINK_WIX", raising=False)
+    monkeypatch.delenv("PROTOLINK_SIGNTOOL", raising=False)
+    wix_executable = tmp_path / "wix.exe"
+    signtool_executable = tmp_path / "signtool.exe"
+    wix_executable.write_text("stub", encoding="utf-8")
+    signtool_executable.write_text("stub", encoding="utf-8")
+
+    executable_map = {
+        "wix.exe": str(wix_executable),
+        "wix": str(wix_executable),
+        "signtool.exe": str(signtool_executable),
+        "signtool": str(signtool_executable),
+    }
+    monkeypatch.setattr("protolink.core.packaging.shutil.which", lambda name: executable_map.get(name))
+    monkeypatch.setattr("protolink.core.packaging._known_native_installer_tool_candidates", lambda tool_key: ())
+
+    def _fake_run(command, capture_output, text, timeout, check):
+        executable_name = Path(command[0]).name.lower()
+        if executable_name == "wix.exe":
+            return subprocess.CompletedProcess(command, 0, stdout="4.0.5\n", stderr="")
+        if executable_name == "signtool.exe":
+            return subprocess.CompletedProcess(command, 0, stdout="Microsoft (R) SignTool\n", stderr="")
+        raise AssertionError(f"unexpected probe command: {command}")
+
+    monkeypatch.setattr("protolink.core.packaging.subprocess.run", _fake_run)
+
+    result = verify_native_installer_toolchain()
+    tools = {tool.tool_key: tool for tool in result.tools}
+
+    assert result.ready is True
+    assert result.available_tools == ("wix", "signtool")
+    assert result.missing_tools == ()
+    assert tools["wix"].resolved_path == str(wix_executable)
+    assert tools["wix"].probe_output == "4.0.5"
+    assert tools["wix"].detection_source == "PATH"
+    assert tools["signtool"].resolved_path == str(signtool_executable)
+    assert tools["signtool"].probe_command == ("/?",)
+    assert tools["signtool"].probe_output == "Microsoft (R) SignTool"
+
+
+def test_verify_native_installer_toolchain_reports_detected_binaries(monkeypatch) -> None:
+    def fake_which(name: str) -> str | None:
+        mapping = {
+            "wix": r"C:\Tools\wix.exe",
+            "wix.exe": r"C:\Tools\wix.exe",
+            "signtool": r"C:\SDK\signtool.exe",
+            "signtool.exe": r"C:\SDK\signtool.exe",
+        }
+        return mapping.get(name)
+
+    monkeypatch.setattr("protolink.core.packaging.shutil.which", fake_which)
+    monkeypatch.setattr("protolink.core.packaging._known_native_installer_tool_candidates", lambda tool_key: ())
+
+    def _fake_run(command, capture_output, text, timeout, check):
+        executable_name = Path(command[0]).name.lower()
+        if executable_name == "wix.exe":
+            return subprocess.CompletedProcess(command, 0, stdout="4.0.5\n", stderr="")
+        if executable_name == "signtool.exe":
+            return subprocess.CompletedProcess(command, 0, stdout="Microsoft (R) SignTool\n", stderr="")
+        raise AssertionError(f"unexpected probe command: {command}")
+
+    monkeypatch.setattr("protolink.core.packaging.subprocess.run", _fake_run)
+
+    result = verify_native_installer_toolchain()
+
+    assert result.ready is True
+    assert result.target_platform == "windows"
+    assert set(result.available_tools) == {"wix", "signtool"}
+    assert result.missing_tools == ()
+    tool_map = {tool.tool_key: tool for tool in result.tools}
+    assert tool_map["wix"].resolved_path == r"C:\Tools\wix.exe"
+    assert tool_map["signtool"].resolved_path == r"C:\SDK\signtool.exe"
+    assert "wix build" in result.recommended_commands["build_msi"]

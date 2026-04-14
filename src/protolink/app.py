@@ -53,6 +53,7 @@ from protolink.core.packaging import (
     uninstall_portable_package,
     verify_distribution_package,
     verify_native_installer_scaffold,
+    verify_native_installer_toolchain,
     verify_portable_package,
     verify_installer_package,
     verify_installer_staging_package,
@@ -232,6 +233,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--verify-native-installer-scaffold",
         metavar="DIR",
         help="校验已生成的 WiX/MSI 原生安装器脚手架目录。",
+    )
+    parser.add_argument(
+        "--verify-native-installer-toolchain",
+        action="store_true",
+        help="检测当前环境中的 WiX / signtool 原生安装器工具链可用性。",
     )
     parser.add_argument(
         "--install-installer-package",
@@ -747,6 +753,39 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{port.device}\t{port.description}\t{port.hardware_id}")
             return int(CliExitCode.OK)
 
+        if args.verify_native_installer_toolchain:
+            result = verify_native_installer_toolchain()
+            print(
+                json.dumps(
+                    {
+                        "target_platform": result.target_platform,
+                        "current_platform": result.current_platform,
+                        "ready": result.ready,
+                        "available_tools": list(result.available_tools),
+                        "missing_tools": list(result.missing_tools),
+                        "tools": {
+                            tool.tool_key: {
+                                "display_name": tool.display_name,
+                                "executable_name": tool.executable_name,
+                                "available": tool.available,
+                                "resolved_path": tool.resolved_path,
+                                "detection_source": tool.detection_source,
+                                "probe_command": list(tool.probe_command),
+                                "probe_output": tool.probe_output,
+                                "error": tool.error,
+                                "install_hint": tool.install_hint,
+                                "recommended_command": tool.recommended_command,
+                            }
+                            for tool in result.tools
+                        },
+                        "recommended_commands": result.recommended_commands,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return int(CliExitCode.OK)
+
         read_only_mode = any(
             (
                 args.print_workspace,
@@ -775,6 +814,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.verify_installer_package,
                 args.build_native_installer_scaffold,
                 args.verify_native_installer_scaffold,
+                args.verify_native_installer_toolchain,
                 bool(args.install_installer_package),
             )
         )
