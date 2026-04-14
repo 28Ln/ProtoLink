@@ -21,6 +21,7 @@ TARGET_FILES = {
     "NATIVE_INSTALLER_PLAN": ROOT / "docs" / "NATIVE_INSTALLER_PLAN.md",
     "RISK_REGISTER": ROOT / "docs" / "RISK_REGISTER.md",
     "VALIDATION": ROOT / "docs" / "VALIDATION.md",
+    "RELEASE_CHECKLIST": ROOT / "docs" / "RELEASE_CHECKLIST.md",
     "TASK_ARCHIVE": ROOT / "docs" / "TASK_ARCHIVE.md",
 }
 
@@ -44,6 +45,15 @@ def _require_absent(path: Path) -> None:
         raise SystemExit(f"Retired file should not exist: {path.relative_to(ROOT)}")
 
 
+def _native_installer_scaffold_flags(cli_source: str) -> list[str]:
+    flags = {
+        match
+        for match in re.findall(r"--[a-z0-9][a-z0-9-]*", cli_source)
+        if "scaffold" in match and any(keyword in match for keyword in ("installer", "native", "wix"))
+    }
+    return sorted(flags)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify ProtoLink canonical truth is synchronized.")
     parser.add_argument("--expected-mainline", required=True)
@@ -61,10 +71,12 @@ def main() -> int:
     mainline_status = _read("MAINLINE_STATUS")
     tasklist = _read("ENGINEERING_TASKLIST")
     handoff = _read("HANDOFF")
-    _read("NATIVE_INSTALLER_PLAN")
+    native_installer_plan = _read("NATIVE_INSTALLER_PLAN")
     risk_register = _read("RISK_REGISTER")
     validation = _read("VALIDATION")
+    release_checklist = _read("RELEASE_CHECKLIST")
     task_archive = _read("TASK_ARCHIVE")
+    cli_source = (ROOT / "src" / "protolink" / "app.py").read_text(encoding="utf-8")
 
     expected_mainline = args.expected_mainline
     expected_count = str(args.expected_pytest_count)
@@ -75,17 +87,29 @@ def main() -> int:
     _require_contains("README", readme, f"Current canonical mainline: `{expected_mainline}`")
     _require_contains("README", readme, "`docs/HANDOFF.md`")
     _require_contains("README", readme, "`docs/ROADMAP.md`")
+    _require_contains("README", readme, "Native installer scaffold")
     _require_contains("TASKS", tasks, "`docs/ENGINEERING_TASKLIST.md`")
     _require_contains("CURRENT_STATE", current_state, f"`uv run pytest -q` -> `{expected_count} passed`")
     _require_contains("PROJECT_STATUS", project_status, f"`uv run pytest -q` -> `{expected_count} passed`")
     _require_contains("VALIDATION", validation, f"`uv run pytest -q` -> {expected_count} passed")
     _require_contains("VALIDATION", validation, f"`{expected_count} passed`")
+    _require_contains("VALIDATION", validation, "Native installer scaffold")
     _require_contains("MAINLINE_STATUS", mainline_status, f"- ID: `{expected_mainline}`")
     _require_contains("HANDOFF", handoff, "当前主线")
+    _require_contains("NATIVE_INSTALLER_PLAN", native_installer_plan, "native installer scaffold")
+    _require_contains("RELEASE_CHECKLIST", release_checklist, "native installer scaffold")
     _require_contains("RISK_REGISTER", risk_register, "风险清单")
     _require_contains("TASK_ARCHIVE", task_archive, "- `PL-012` —")
     _require_regex("ENGINEERING_TASKLIST", tasklist, rf"^### {re.escape(expected_mainline)} — ")
     _require_regex("PROJECT_STATUS", project_status, rf"^- `{re.escape(expected_mainline)}`")
+
+    scaffold_flags = _native_installer_scaffold_flags(cli_source)
+    for flag in scaffold_flags:
+        _require_contains("README", readme, f"`{flag}`")
+        _require_contains("NATIVE_INSTALLER_PLAN", native_installer_plan, f"`{flag}`")
+        _require_contains("VALIDATION", validation, f"`{flag}`")
+        _require_contains("RELEASE_CHECKLIST", release_checklist, f"`{flag}`")
+
     _require_absent(ROOT / "docs" / "REFERENCE_ANALYSIS.md")
     _require_absent(ROOT / "docs" / "WORKTREE_RECONCILIATION.md")
     _require_absent(ROOT / "docs" / "STATUS.md")
