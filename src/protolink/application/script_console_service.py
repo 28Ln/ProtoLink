@@ -81,10 +81,10 @@ class ScriptConsoleService:
     def run_script(self) -> ScriptExecutionResult | None:
         language = self._snapshot.selected_language
         if language is None:
-            self._set_snapshot(last_error="No script language is available.")
+            self._set_snapshot(last_error="当前没有可用的脚本语言。")
             return None
         if not self._snapshot.code.strip():
-            self._set_snapshot(last_error="Script code is required before running.")
+            self._set_snapshot(last_error="运行前请输入脚本代码。")
             return None
 
         try:
@@ -121,14 +121,14 @@ class ScriptConsoleService:
             self._publish_log(
                 level=LogLevel.INFO,
                 category="automation.script_console.run",
-                message="Script Console execution succeeded.",
+                message="脚本控制台执行成功。",
                 metadata={"language": language.value, "script_file": script_file.name},
             )
         else:
             self._publish_log(
                 level=LogLevel.ERROR,
                 category="automation.script_console.error",
-                message=result.error or "Script Console execution failed.",
+                message=result.error or "脚本控制台执行失败。",
                 metadata={"language": language.value, "script_file": script_file.name},
             )
         return result
@@ -139,9 +139,9 @@ class ScriptConsoleService:
         try:
             payload = json.loads(text)
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Script context must be valid JSON: {exc}") from exc
+            raise ValueError(f"脚本上下文必须是合法的 JSON：{exc}") from exc
         if not isinstance(payload, dict):
-            raise ValueError("Script context must be a JSON object.")
+            raise ValueError("脚本上下文必须是 JSON 对象。")
         return {str(key): value for key, value in payload.items()}
 
     def _save_script_file(self, language: ScriptLanguage, code: str) -> Path:

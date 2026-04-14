@@ -78,7 +78,7 @@ def test_packet_replay_service_requires_connected_target() -> None:
     service.execute_plan(plan, TransportKind.UDP)
 
     assert service.snapshot.running is False
-    assert service.snapshot.last_error == "Replay target 'udp' is not connected."
+    assert service.snapshot.last_error == "回放目标“udp”未连接。"
     assert target.sent == []
     service.shutdown()
 
@@ -104,11 +104,11 @@ def test_packet_replay_service_dispatches_listener_notifications_through_schedul
     )
     service.execute_plan(plan, TransportKind.UDP)
 
-    assert service.snapshot.last_error == "Replay target 'udp' is not connected."
+    assert service.snapshot.last_error == "回放目标“udp”未连接。"
     assert snapshots[-1].last_error is None
     assert len(scheduled_callbacks) == 1
     scheduled_callbacks.pop(0)()
-    assert snapshots[-1].last_error == "Replay target 'udp' is not connected."
+    assert snapshots[-1].last_error == "回放目标“udp”未连接。"
     service.shutdown()
 
 
@@ -183,5 +183,5 @@ def test_packet_replay_service_fails_when_target_session_changes_mid_run() -> No
     target.snapshot.active_session_id = "session-b"
     _wait_until(lambda: service.snapshot.running is False)
 
-    assert service.snapshot.last_error == "Replay execution failed: Replay target session changed during execution."
+    assert service.snapshot.last_error == "回放执行失败：回放执行期间目标会话已变更。"
     service.shutdown()

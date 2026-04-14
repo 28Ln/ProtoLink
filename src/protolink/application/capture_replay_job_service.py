@@ -66,11 +66,11 @@ class CaptureReplayJobService:
 
     def remove_job(self, name: str | None) -> None:
         if not name:
-            self._set_snapshot(last_error="Select a replay job before removing.")
+            self._set_snapshot(last_error="删除前请先选择回放任务。")
             return
         removed = self._jobs_by_name.pop(name, None)
         if removed is None:
-            self._set_snapshot(last_error=f"Replay job '{name}' was not found.")
+            self._set_snapshot(last_error=f"未找到回放任务“{name}”。")
             return
         self._set_snapshot(
             job_names=tuple(sorted(self._jobs_by_name)),
@@ -81,16 +81,16 @@ class CaptureReplayJobService:
     def run_job(self, name: str) -> None:
         job = self._jobs_by_name.get(name)
         if job is None:
-            self._set_snapshot(last_error=f"Replay job '{name}' was not found.")
+            self._set_snapshot(last_error=f"未找到回放任务“{name}”。")
             return
         if not job.enabled:
-            self._set_snapshot(last_error=f"Replay job '{name}' is disabled.")
+            self._set_snapshot(last_error=f"回放任务“{name}”已停用。")
             return
         if self._snapshot.running:
-            self._set_snapshot(last_error="A capture/replay job is already running.")
+            self._set_snapshot(last_error="当前已有采集/回放任务正在执行。")
             return
         if not Path(job.replay_plan_path).exists():
-            self._set_snapshot(last_error=f"Replay plan '{job.replay_plan_path}' was not found.")
+            self._set_snapshot(last_error=f"未找到回放计划“{job.replay_plan_path}”。")
             return
 
         self._active_job = job

@@ -120,13 +120,13 @@ def test_rule_engine_service_reports_missing_or_disabled_rules() -> None:
 
     missing = service.run_rule("Missing")
     assert missing is None
-    assert service.snapshot.last_error == "Rule 'Missing' was not found."
+    assert service.snapshot.last_error == "未找到规则“Missing”。"
 
     disabled = service.run_rule("Disabled")
     assert disabled is None
-    assert service.snapshot.last_error == "Rule 'Disabled' is disabled."
+    assert service.snapshot.last_error == "规则“Disabled”已停用。"
     assert service.snapshot.execution_count == 2
-    assert service.execution_history[-1].error == "Rule 'Disabled' is disabled."
+    assert service.execution_history[-1].error == "规则“Disabled”已停用。"
 
 
 def test_rule_engine_service_blocks_replay_conflicts() -> None:
@@ -156,7 +156,7 @@ def test_rule_engine_service_blocks_replay_conflicts() -> None:
 
     assert result is None
     assert replay.calls == []
-    assert service.snapshot.last_error == "Rule 'Replay Conflict' failed: Replay service is already running."
+    assert service.snapshot.last_error == "规则“Replay Conflict”执行失败：回放服务已在运行中。"
     assert service.execution_history[-1].succeeded is False
 
 
@@ -211,8 +211,8 @@ def test_rule_engine_service_logs_missing_and_failed_rules() -> None:
 
     error_entries = [entry for entry in captured if entry.category == "automation.rule_engine.error"]
     assert [entry.message for entry in error_entries] == [
-        "Rule 'Missing' was not found.",
-        "Rule 'Replay Conflict' failed: Replay service is already running.",
+        "未找到规则“Missing”。",
+        "规则“Replay Conflict”执行失败：回放服务已在运行中。",
     ]
     assert error_entries[0].metadata == {"rule_name": "Missing"}
     assert error_entries[1].metadata == {"rule_name": "Replay Conflict"}

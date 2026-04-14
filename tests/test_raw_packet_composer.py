@@ -20,11 +20,11 @@ def test_raw_packet_composer_surfaces_invalid_ascii_and_hex_errors() -> None:
     composer = RawPacketComposerState()
     composer.set_input_mode(RawPacketInputMode.ASCII)
     composer.set_draft_text("Ping\u4e2d")
-    assert composer.snapshot.last_error == "ASCII payload can only contain 7-bit ASCII characters."
+    assert composer.snapshot.last_error == "ASCII 报文只能包含 7 位 ASCII 字符。"
 
     composer.set_input_mode(RawPacketInputMode.HEX)
     composer.set_draft_text("0")
-    assert composer.snapshot.last_error == "HEX payload must contain complete hexadecimal bytes."
+    assert composer.snapshot.last_error == "HEX 报文必须由完整的十六进制字节组成。"
 
 
 def test_raw_packet_composer_loads_existing_payload_as_hex_draft() -> None:

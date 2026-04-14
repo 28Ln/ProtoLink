@@ -109,11 +109,11 @@ class RuleEngineService:
 
     def remove_rule(self, name: str | None) -> None:
         if not name:
-            self._set_snapshot(last_error="Select a rule before removing.")
+            self._set_snapshot(last_error="删除前请先选择规则。")
             return
         removed = self._rules_by_name.pop(name, None)
         if removed is None:
-            self._set_snapshot(last_error=f"Rule '{name}' was not found.")
+            self._set_snapshot(last_error=f"未找到规则“{name}”。")
             return
         self._persist_rules()
         self._set_snapshot(
@@ -146,7 +146,7 @@ class RuleEngineService:
     def run_rule(self, name: str) -> AutomationRunResult | None:
         rule = self._rules_by_name.get(name)
         if rule is None:
-            error_message = f"Rule '{name}' was not found."
+            error_message = f"未找到规则“{name}”。"
             self._record_execution(
                 RuleExecutionRecord(
                     rule_name=name,
@@ -162,7 +162,7 @@ class RuleEngineService:
             )
             return None
         if not rule.enabled:
-            error_message = f"Rule '{name}' is disabled."
+            error_message = f"规则“{name}”已停用。"
             self._record_execution(
                 RuleExecutionRecord(
                     rule_name=name,
@@ -193,7 +193,7 @@ class RuleEngineService:
                     error=str(exc),
                 )
             )
-            error_message = f"Rule '{name}' failed: {exc}"
+            error_message = f"规则“{name}”执行失败：{exc}"
             self._publish_error_log(error_message, rule_name=rule.name)
             self._set_snapshot(
                 execution_count=len(self._execution_history),
@@ -234,16 +234,16 @@ class RuleEngineService:
     ) -> None:
         if action.kind == AutomationActionKind.RUN_REPLAY_PLAN:
             if not action.replay_plan_path or action.replay_target_kind is None:
-                raise ValueError("Replay action requires replay_plan_path and replay_target_kind.")
+                raise ValueError("回放动作必须提供 replay_plan_path 和 replay_target_kind。")
             replay_snapshot = getattr(self._packet_replay_service, "snapshot", None)
             if replay_snapshot is not None and getattr(replay_snapshot, "running", False):
-                raise ValueError("Replay service is already running.")
+                raise ValueError("回放服务已在运行中。")
             self._packet_replay_service.execute_saved_plan(action.replay_plan_path, action.replay_target_kind)
             return
 
         if action.kind == AutomationActionKind.SET_AUTO_RESPONSE_ENABLED:
             if action.auto_response_enabled is None:
-                raise ValueError("Auto-response toggle action requires auto_response_enabled.")
+                raise ValueError("自动响应开关动作必须提供 auto_response_enabled。")
             self._auto_response_runtime_service.set_enabled(action.auto_response_enabled)
             return
 
@@ -253,7 +253,7 @@ class RuleEngineService:
 
         if action.kind == AutomationActionKind.PREPARE_DEVICE_SCAN:
             if action.device_scan_config is None:
-                raise ValueError("Device-scan action requires device_scan_config.")
+                raise ValueError("设备扫描动作必须提供 device_scan_config。")
             requests = build_device_scan_requests(action.device_scan_config)
             job = PreparedDeviceScanJob(
                 rule_name=rule_name,
@@ -264,7 +264,7 @@ class RuleEngineService:
             prepared_jobs.append(job)
             return
 
-        raise ValueError(f"Unsupported automation action kind: {action.kind}")
+        raise ValueError(f"不支持的自动化动作类型：{action.kind}")
 
     def _set_snapshot(self, **changes: object) -> None:
         self._snapshot = replace(self._snapshot, **changes)

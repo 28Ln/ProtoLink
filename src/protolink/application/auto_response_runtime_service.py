@@ -69,7 +69,7 @@ class AutoResponseRuntimeService:
             return
         if entry.category != "transport.message" or not entry.raw_payload:
             return
-        if not entry.message.lower().startswith("inbound "):
+        if not _is_inbound_entry(entry):
             return
         if not entry.transport_kind:
             return
@@ -107,7 +107,7 @@ class AutoResponseRuntimeService:
                 },
             )
         except Exception as exc:
-            error_message = f"Auto response send failed: {exc}"
+            error_message = f"自动响应发送失败：{exc}"
             self._publish_error_log(
                 error_message,
                 metadata={
@@ -158,3 +158,11 @@ def _target_selected_peer(target: object) -> str | None:
     snapshot = getattr(target, "snapshot", None)
     peer = getattr(snapshot, "selected_client_peer", None)
     return peer if isinstance(peer, str) and peer else None
+
+
+def _is_inbound_entry(entry: StructuredLogEntry) -> bool:
+    direction = str(entry.metadata.get("direction", "")).lower()
+    if direction:
+        return direction == "inbound"
+    message = entry.message.lower()
+    return message.startswith("inbound ") or message.startswith("入站")

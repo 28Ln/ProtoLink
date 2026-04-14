@@ -13,6 +13,7 @@ from enum import StrEnum
 from uuid import uuid4
 
 from protolink.core.transport import MessageDirection, RawTransportMessage, TransportEvent, TransportEventType
+from protolink.presentation import display_connection_state, display_transport_name
 
 DEFAULT_SERIALIZED_PAYLOAD_BYTES = 4096
 RUNTIME_FAILURE_EVIDENCE_FILE = "runtime-failure-evidence.jsonl"
@@ -99,7 +100,7 @@ def create_log_entry_from_transport_event(event: TransportEvent) -> StructuredLo
         return create_log_entry(
             level=LogLevel.INFO,
             category="transport.state",
-            message=f"{event.session.kind} state changed to {event.session.state}",
+            message=f"{display_transport_name(event.session.kind)}状态切换为{display_connection_state(event.session.state)}",
             session_id=event.session.session_id,
             transport_kind=event.session.kind,
             metadata={"target": event.session.target},
@@ -107,6 +108,8 @@ def create_log_entry_from_transport_event(event: TransportEvent) -> StructuredLo
 
     if event.event_type == TransportEventType.MESSAGE and event.message is not None:
         direction = event.message.direction
+        metadata = dict(event.message.metadata)
+        metadata.setdefault("direction", direction.value)
         return create_log_entry(
             level=LogLevel.INFO,
             category="transport.message",
@@ -114,13 +117,13 @@ def create_log_entry_from_transport_event(event: TransportEvent) -> StructuredLo
             session_id=event.session.session_id,
             transport_kind=event.session.kind,
             raw_payload=event.message.payload,
-            metadata=dict(event.message.metadata),
+            metadata=metadata,
         )
 
     return create_log_entry(
         level=LogLevel.ERROR,
         category="transport.error",
-        message=event.error or "Unknown transport error",
+        message=event.error or "未知传输异常",
         session_id=event.session.session_id,
         transport_kind=event.session.kind,
         metadata={"target": event.session.target},
@@ -129,11 +132,11 @@ def create_log_entry_from_transport_event(event: TransportEvent) -> StructuredLo
 
 def _format_message_summary(direction: MessageDirection, message: RawTransportMessage) -> str:
     direction_label = {
-        MessageDirection.INBOUND: "Inbound",
-        MessageDirection.OUTBOUND: "Outbound",
-        MessageDirection.INTERNAL: "Internal",
+        MessageDirection.INBOUND: "入站",
+        MessageDirection.OUTBOUND: "出站",
+        MessageDirection.INTERNAL: "内部",
     }[direction]
-    return f"{direction_label} payload ({len(message.payload)} bytes)"
+    return f"{direction_label}报文（{len(message.payload)} 字节）"
 
 
 class InMemoryLogStore:

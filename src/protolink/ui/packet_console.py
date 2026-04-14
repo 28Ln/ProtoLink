@@ -30,6 +30,7 @@ from protolink.core.packet_replay import (
 from protolink.core.raw_packet_composer import RawPacketComposerState, RawPacketInputMode, RawPacketLineEnding
 from protolink.core.transport import TransportKind
 from protolink.core.workspace import WorkspaceLayout
+from protolink.ui.text import line_ending_text, log_level_text, raw_input_mode_text, transport_kind_text
 
 
 class PacketConsoleWidget(QWidget):
@@ -68,18 +69,18 @@ class PacketConsoleWidget(QWidget):
         frame_layout.setSpacing(10)
 
         header_layout = QHBoxLayout()
-        title = QLabel("Packet Inspector")
+        title = QLabel("报文分析台")
         title.setObjectName("SectionTitle")
 
         self.view_mode = QComboBox()
-        self.view_mode.addItem("Hex", PayloadViewMode.HEX)
-        self.view_mode.addItem("ASCII", PayloadViewMode.ASCII)
-        self.view_mode.addItem("UTF-8", PayloadViewMode.UTF8)
+        self.view_mode.addItem("十六进制视图", PayloadViewMode.HEX)
+        self.view_mode.addItem("ASCII 视图", PayloadViewMode.ASCII)
+        self.view_mode.addItem("UTF-8 视图", PayloadViewMode.UTF8)
         self.view_mode.currentIndexChanged.connect(self._on_view_mode_changed)
 
         header_layout.addWidget(title)
         header_layout.addStretch(1)
-        header_layout.addWidget(QLabel("Payload View"))
+        header_layout.addWidget(QLabel("负载视图"))
         header_layout.addWidget(self.view_mode)
 
         filters_layout = QGridLayout()
@@ -87,36 +88,36 @@ class PacketConsoleWidget(QWidget):
         filters_layout.setVerticalSpacing(8)
 
         self.level_filter = QComboBox()
-        self.level_filter.addItem("All Levels", None)
-        self.level_filter.addItem("Debug", LogLevel.DEBUG)
-        self.level_filter.addItem("Info", LogLevel.INFO)
-        self.level_filter.addItem("Warning", LogLevel.WARNING)
-        self.level_filter.addItem("Error", LogLevel.ERROR)
+        self.level_filter.addItem("全部等级", None)
+        self.level_filter.addItem(log_level_text(LogLevel.DEBUG), LogLevel.DEBUG)
+        self.level_filter.addItem(log_level_text(LogLevel.INFO), LogLevel.INFO)
+        self.level_filter.addItem(log_level_text(LogLevel.WARNING), LogLevel.WARNING)
+        self.level_filter.addItem(log_level_text(LogLevel.ERROR), LogLevel.ERROR)
         self.level_filter.currentIndexChanged.connect(self._on_filters_changed)
 
         self.session_filter = QComboBox()
-        self.session_filter.addItem("All Sessions", None)
+        self.session_filter.addItem("全部会话", None)
         self.session_filter.currentIndexChanged.connect(self._on_filters_changed)
 
         self.category_filter = QLineEdit()
-        self.category_filter.setPlaceholderText("Category contains…")
+        self.category_filter.setPlaceholderText("类别筛选…")
         self.category_filter.textChanged.connect(self._on_filters_changed)
 
         self.text_filter = QLineEdit()
-        self.text_filter.setPlaceholderText("Search message or payload…")
+        self.text_filter.setPlaceholderText("搜索消息或载荷…")
         self.text_filter.textChanged.connect(self._on_filters_changed)
 
-        self.clear_filters_button = QPushButton("Clear Filters")
+        self.clear_filters_button = QPushButton("清除筛选")
         self.clear_filters_button.clicked.connect(self._on_clear_filters)
 
-        filters_layout.addWidget(QLabel("Level"), 0, 0)
+        filters_layout.addWidget(QLabel("等级"), 0, 0)
         filters_layout.addWidget(self.level_filter, 0, 1)
-        filters_layout.addWidget(QLabel("Session"), 0, 2)
+        filters_layout.addWidget(QLabel("会话"), 0, 2)
         filters_layout.addWidget(self.session_filter, 0, 3)
         filters_layout.addWidget(self.clear_filters_button, 0, 4)
-        filters_layout.addWidget(QLabel("Category"), 1, 0)
+        filters_layout.addWidget(QLabel("类别"), 1, 0)
         filters_layout.addWidget(self.category_filter, 1, 1, 1, 2)
-        filters_layout.addWidget(QLabel("Search"), 1, 3)
+        filters_layout.addWidget(QLabel("搜索"), 1, 3)
         filters_layout.addWidget(self.text_filter, 1, 4)
         filters_layout.setColumnStretch(1, 1)
         filters_layout.setColumnStretch(3, 1)
@@ -139,10 +140,10 @@ class PacketConsoleWidget(QWidget):
         self.modbus_text = QTextEdit()
         self.modbus_text.setReadOnly(True)
 
-        body.addWidget(QLabel("Entries"), 0, 0)
-        body.addWidget(QLabel("Payload"), 0, 1)
-        body.addWidget(QLabel("Metadata"), 2, 1)
-        body.addWidget(QLabel("Protocol Decode"), 4, 1)
+        body.addWidget(QLabel("日志条目"), 0, 0)
+        body.addWidget(QLabel("载荷"), 0, 1)
+        body.addWidget(QLabel("元数据"), 2, 1)
+        body.addWidget(QLabel("协议解析"), 4, 1)
         body.addWidget(self.entry_list, 1, 0, 4, 1)
         body.addWidget(self.payload_text, 1, 1)
         body.addWidget(self.metadata_text, 3, 1)
@@ -150,34 +151,34 @@ class PacketConsoleWidget(QWidget):
         body.setColumnStretch(0, 1)
         body.setColumnStretch(1, 1)
 
-        composer_title = QLabel("Raw Packet Composer")
+        composer_title = QLabel("原始报文构建器")
         composer_title.setObjectName("SectionTitle")
 
         composer_header = QHBoxLayout()
         composer_header.setSpacing(8)
 
         self.composer_mode = QComboBox()
-        self.composer_mode.addItem("HEX", RawPacketInputMode.HEX)
-        self.composer_mode.addItem("ASCII", RawPacketInputMode.ASCII)
-        self.composer_mode.addItem("UTF-8", RawPacketInputMode.UTF8)
+        self.composer_mode.addItem("十六进制（HEX）", RawPacketInputMode.HEX)
+        self.composer_mode.addItem("ASCII 文本", RawPacketInputMode.ASCII)
+        self.composer_mode.addItem("UTF-8 文本", RawPacketInputMode.UTF8)
         self.composer_mode.currentIndexChanged.connect(self._on_composer_mode_changed)
 
         self.composer_line_ending = QComboBox()
-        self.composer_line_ending.addItem("None", RawPacketLineEnding.NONE)
+        self.composer_line_ending.addItem("无", RawPacketLineEnding.NONE)
         self.composer_line_ending.addItem("CR", RawPacketLineEnding.CR)
         self.composer_line_ending.addItem("LF", RawPacketLineEnding.LF)
         self.composer_line_ending.addItem("CRLF", RawPacketLineEnding.CRLF)
         self.composer_line_ending.currentIndexChanged.connect(self._on_composer_line_ending_changed)
 
-        self.load_selected_payload_button = QPushButton("Load Selected Payload")
+        self.load_selected_payload_button = QPushButton("加载选中载荷")
         self.load_selected_payload_button.clicked.connect(self._on_load_selected_payload)
 
-        self.composer_clear_button = QPushButton("Clear Draft")
+        self.composer_clear_button = QPushButton("清除草稿")
         self.composer_clear_button.clicked.connect(self._on_composer_clear)
 
-        composer_header.addWidget(QLabel("Mode"))
+        composer_header.addWidget(QLabel("模式"))
         composer_header.addWidget(self.composer_mode)
-        composer_header.addWidget(QLabel("Line Ending"))
+        composer_header.addWidget(QLabel("换行"))
         composer_header.addWidget(self.composer_line_ending)
         composer_header.addStretch(1)
         composer_header.addWidget(self.load_selected_payload_button)
@@ -194,13 +195,13 @@ class PacketConsoleWidget(QWidget):
         composer_body.setVerticalSpacing(8)
 
         self.composer_input = QTextEdit()
-        self.composer_input.setPlaceholderText("Enter payload bytes as HEX, ASCII, or UTF-8 text…")
+        self.composer_input.setPlaceholderText("输入十六进制、ASCII 或 UTF-8 文本负载…")
         self.composer_input.textChanged.connect(self._on_composer_text_changed)
         self.composer_preview = QTextEdit()
         self.composer_preview.setReadOnly(True)
 
-        composer_body.addWidget(QLabel("Draft"), 0, 0)
-        composer_body.addWidget(QLabel("Bytes Preview"), 0, 1)
+        composer_body.addWidget(QLabel("草稿"), 0, 0)
+        composer_body.addWidget(QLabel("字节预览"), 0, 1)
         composer_body.addWidget(self.composer_input, 1, 0)
         composer_body.addWidget(self.composer_preview, 1, 1)
         composer_body.setColumnStretch(0, 1)
@@ -225,7 +226,7 @@ class PacketConsoleWidget(QWidget):
         section_layout.setContentsMargins(12, 12, 12, 12)
         section_layout.setSpacing(8)
 
-        title = QLabel("Packet Replay")
+        title = QLabel("报文重放")
         title.setObjectName("SectionTitle")
 
         controls = QGridLayout()
@@ -233,7 +234,7 @@ class PacketConsoleWidget(QWidget):
         controls.setVerticalSpacing(8)
 
         self.replay_file_input = QLineEdit()
-        self.replay_file_input.setPlaceholderText("Replay plan path (.json)")
+        self.replay_file_input.setPlaceholderText("回放计划路径 (.json)")
         if self.workspace is not None:
             self.replay_file_input.setText(str(self.workspace.captures / "replay-plan.json"))
 
@@ -246,30 +247,30 @@ class PacketConsoleWidget(QWidget):
             TransportKind.MQTT_CLIENT,
             TransportKind.MQTT_SERVER,
         ):
-            self.replay_target_combo.addItem(kind.value, kind)
+            self.replay_target_combo.addItem(transport_kind_text(kind), kind)
 
-        self.replay_run_button = QPushButton("Run Replay")
+        self.replay_run_button = QPushButton("执行重放")
         self.replay_run_button.clicked.connect(self._on_run_replay)
 
         self.replay_plan_name_input = QLineEdit()
-        self.replay_plan_name_input.setPlaceholderText("replay-plan")
+        self.replay_plan_name_input.setPlaceholderText("留空则使用默认回放文件键")
         self.replay_direction_combo = QComboBox()
-        self.replay_direction_combo.addItem("Outbound Only", "outbound_only")
-        self.replay_direction_combo.addItem("Outbound + Inbound", "outbound_inbound")
-        self.replay_direction_combo.addItem("All Directions", "all")
-        self.replay_build_button = QPushButton("Build From Visible")
+        self.replay_direction_combo.addItem("仅出站", "outbound_only")
+        self.replay_direction_combo.addItem("出入站", "outbound_inbound")
+        self.replay_direction_combo.addItem("全部方向", "all")
+        self.replay_build_button = QPushButton("以可见构建")
         self.replay_build_button.clicked.connect(self._on_build_replay_plan)
 
-        self.replay_status_label = QLabel("Replay idle.")
+        self.replay_status_label = QLabel("重放空闲。")
         self.replay_status_label.setObjectName("MetaLabel")
         self.replay_status_label.setWordWrap(True)
 
-        controls.addWidget(QLabel("Plan"), 0, 0)
+        controls.addWidget(QLabel("计划"), 0, 0)
         controls.addWidget(self.replay_file_input, 0, 1, 1, 3)
-        controls.addWidget(QLabel("Target"), 1, 0)
+        controls.addWidget(QLabel("目标"), 1, 0)
         controls.addWidget(self.replay_target_combo, 1, 1)
         controls.addWidget(self.replay_run_button, 1, 3)
-        controls.addWidget(QLabel("Build Name"), 2, 0)
+        controls.addWidget(QLabel("计划名称"), 2, 0)
         controls.addWidget(self.replay_plan_name_input, 2, 1)
         controls.addWidget(self.replay_direction_combo, 2, 2)
         controls.addWidget(self.replay_build_button, 2, 3)
@@ -288,13 +289,13 @@ class PacketConsoleWidget(QWidget):
         self._sync_filter_controls(sessions)
 
         self.entry_summary.setText(
-            "Entries: "
+            "条目: "
             f"{len(self.inspector)}    "
-            f"Visible: {len(rows)}    "
-            f"Sessions: {len(sessions)}    "
-            f"Info: {counts.get(LogLevel.INFO, 0)}    "
-            f"Warning: {counts.get(LogLevel.WARNING, 0)}    "
-            f"Error: {counts.get(LogLevel.ERROR, 0)}"
+            f"可见: {len(rows)}    "
+            f"会话: {len(sessions)}    "
+            f"信息: {counts.get(LogLevel.INFO, 0)}    "
+            f"警告: {counts.get(LogLevel.WARNING, 0)}    "
+            f"错误: {counts.get(LogLevel.ERROR, 0)}"
         )
 
         self.entry_list.blockSignals(True)
@@ -306,7 +307,7 @@ class PacketConsoleWidget(QWidget):
             session_label = row.session_id[:8] if row.session_id else "-"
             text = (
                 f"{row.timestamp.strftime('%H:%M:%S')}  "
-                f"{row.level.value.upper()}  "
+                f"{log_level_text(row.level)}  "
                 f"{session_label}  "
                 f"{row.category}  {row.message}"
             )
@@ -394,33 +395,33 @@ class PacketConsoleWidget(QWidget):
     def _on_run_replay(self) -> None:
         service = self.replay_service
         if service is None:
-            self.replay_status_label.setText("Replay service is unavailable.")
+            self.replay_status_label.setText("重放服务不可用。")
             return
 
         replay_path = self.replay_file_input.text().strip()
         if not replay_path:
-            self.replay_status_label.setText("Replay plan path is required.")
+            self.replay_status_label.setText("需要指定重放计划路径。")
             return
 
         target_kind = self.replay_target_combo.currentData()
         if target_kind is None:
-            self.replay_status_label.setText("Replay target is required.")
+            self.replay_status_label.setText("请选择重放目标。")
             return
         if not isinstance(target_kind, TransportKind):
             target_kind = TransportKind(str(target_kind))
 
         self.replay_status_label.setText(
-            f"Replay requested: {Path(replay_path).name} -> {target_kind.value}"
+            f"重放请求：{Path(replay_path).name} -> {transport_kind_text(target_kind)}"
         )
         try:
             service.execute_saved_plan(Path(replay_path), target_kind)
         except Exception as exc:
-            self.replay_status_label.setText(f"Replay load failed: {exc}")
+            self.replay_status_label.setText(f"重放加载失败: {exc}")
             return
 
     def _on_build_replay_plan(self) -> None:
         if self.workspace is None:
-            self.replay_status_label.setText("Workspace is required to build replay plans.")
+            self.replay_status_label.setText("构建重放计划需要有效的工作区。")
             return
 
         name = self.replay_plan_name_input.text().strip() or "packet-replay"
@@ -438,7 +439,7 @@ class PacketConsoleWidget(QWidget):
 
         visible_entries = self.inspector.visible_entries()
         if not visible_entries:
-            self.replay_status_label.setText("No visible entries to build replay plan.")
+            self.replay_status_label.setText("当前无可见条目，无法构建重放计划。")
             return
 
         plan = build_packet_replay_plan(
@@ -447,7 +448,7 @@ class PacketConsoleWidget(QWidget):
             include_directions=include_directions,
         )
         if not plan.steps:
-            self.replay_status_label.setText("No matching transport message rows for replay build.")
+            self.replay_status_label.setText("无匹配的传输消息用于构建重放。")
             return
 
         plan_path = default_packet_replay_path(
@@ -458,7 +459,7 @@ class PacketConsoleWidget(QWidget):
         save_packet_replay_plan(plan_path, plan)
         self.replay_file_input.setText(str(plan_path))
         self.replay_status_label.setText(
-            f"Replay plan built: {plan_path.name}    Steps: {len(plan.steps)}"
+            f"重放计划构建完成：{plan_path.name}    步骤：{len(plan.steps)}"
         )
 
     def _sync_filter_controls(self, sessions: tuple[str, ...]) -> None:
@@ -488,7 +489,7 @@ class PacketConsoleWidget(QWidget):
 
         self.session_filter.blockSignals(True)
         self.session_filter.clear()
-        self.session_filter.addItem("All Sessions", None)
+        self.session_filter.addItem("全部会话", None)
         for session_id in sessions:
             self.session_filter.addItem(self._format_session_label(session_id), session_id)
         self.session_filter.blockSignals(False)
@@ -522,22 +523,22 @@ class PacketConsoleWidget(QWidget):
 
         self.load_selected_payload_button.setEnabled(self.inspector.selected_entry() is not None)
         self.composer_summary.setText(
-            f"Bytes: {len(snapshot.payload)}    "
-            f"Mode: {snapshot.input_mode.value.upper()}    "
-            f"Line Ending: {snapshot.line_ending.value.upper()}"
+            f"字节数: {len(snapshot.payload)}    "
+            f"模式: {raw_input_mode_text(snapshot.input_mode)}    "
+            f"换行: {line_ending_text(snapshot.line_ending)}"
         )
-        self.composer_error.setText(f"Error: {snapshot.last_error}" if snapshot.last_error else "Error: None")
+        self.composer_error.setText(f"错误: {snapshot.last_error}" if snapshot.last_error else "错误: 无")
         self.composer_preview.setPlainText(
             "\n".join(
                 (
-                    "HEX:",
-                    snapshot.payload_hex or "(empty)",
+                    "十六进制:",
+                    snapshot.payload_hex or "（空）",
                     "",
                     "ASCII:",
-                    snapshot.payload_ascii or "(empty)",
+                    snapshot.payload_ascii or "（空）",
                     "",
                     "UTF-8:",
-                    snapshot.payload_utf8 or "(empty)",
+                    snapshot.payload_utf8 or "（空）",
                 )
             )
         )
@@ -552,24 +553,24 @@ class PacketConsoleWidget(QWidget):
     def _on_replay_snapshot(self, snapshot: PacketReplayExecutionSnapshot) -> None:
         if snapshot.running:
             self.replay_status_label.setText(
-                f"Replay running: {snapshot.plan_name or '-'}    "
-                f"Step {snapshot.dispatched_steps}/{snapshot.total_steps}    "
-                f"Skipped: {snapshot.skipped_steps}"
+                f"重放运行中：{snapshot.plan_name or '-'}    "
+                f"步骤 {snapshot.dispatched_steps}/{snapshot.total_steps}    "
+                f"跳过：{snapshot.skipped_steps}"
             )
             self._set_replay_controls_enabled(False)
             return
 
         self._set_replay_controls_enabled(True)
         if snapshot.last_error:
-            self.replay_status_label.setText(f"Replay error: {snapshot.last_error}")
+            self.replay_status_label.setText(f"重放错误：{snapshot.last_error}")
             return
         if snapshot.plan_name and snapshot.total_steps > 0 and snapshot.dispatched_steps >= snapshot.total_steps:
             self.replay_status_label.setText(
-                f"Replay completed: {snapshot.plan_name}    "
-                f"Dispatched: {snapshot.dispatched_steps}/{snapshot.total_steps}"
+                f"重放完成：{snapshot.plan_name}    "
+                f"派发：{snapshot.dispatched_steps}/{snapshot.total_steps}"
             )
             return
-        self.replay_status_label.setText("Replay idle.")
+        self.replay_status_label.setText("重放空闲。")
 
     def _set_replay_controls_enabled(self, enabled: bool) -> None:
         self.replay_file_input.setEnabled(enabled)

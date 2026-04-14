@@ -20,6 +20,7 @@ from protolink.application.mqtt_client_service import (
     MqttClientSessionSnapshot,
 )
 from protolink.core.transport import ConnectionState
+from protolink.ui.text import CURRENT_DRAFT_TEXT, READY_TEXT, connection_state_text
 
 
 class MqttClientPanel(QWidget):
@@ -43,7 +44,7 @@ class MqttClientPanel(QWidget):
         frame_layout.setSpacing(10)
 
         header_layout = QHBoxLayout()
-        title = QLabel("MQTT Client Controls")
+        title = QLabel("MQTT 客户端")
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
@@ -64,41 +65,41 @@ class MqttClientPanel(QWidget):
         self.port_input.valueChanged.connect(self._on_port_changed)
 
         self.client_id_input = QLineEdit()
-        self.client_id_input.setPlaceholderText("Optional client id")
+        self.client_id_input.setPlaceholderText("可选客户端 ID")
         self.client_id_input.textChanged.connect(self._on_client_id_changed)
 
         self.publish_topic_input = QLineEdit()
-        self.publish_topic_input.setPlaceholderText("bench/topic")
+        self.publish_topic_input.setPlaceholderText("主题/分区")
         self.publish_topic_input.textChanged.connect(self._on_publish_topic_changed)
 
         self.subscribe_topic_input = QLineEdit()
-        self.subscribe_topic_input.setPlaceholderText("bench/topic")
+        self.subscribe_topic_input.setPlaceholderText("主题/分区")
         self.subscribe_topic_input.textChanged.connect(self._on_subscribe_topic_changed)
 
         self.mode_combo = QComboBox()
-        self.mode_combo.addItem("HEX", MqttClientSendEncoding.HEX.value)
-        self.mode_combo.addItem("ASCII", MqttClientSendEncoding.ASCII.value)
-        self.mode_combo.addItem("UTF-8", MqttClientSendEncoding.UTF8.value)
+        self.mode_combo.addItem("十六进制（HEX）", MqttClientSendEncoding.HEX.value)
+        self.mode_combo.addItem("ASCII 文本", MqttClientSendEncoding.ASCII.value)
+        self.mode_combo.addItem("UTF-8 文本", MqttClientSendEncoding.UTF8.value)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
 
         self.preset_combo = QComboBox()
-        self.preset_combo.addItem("Current Draft", None)
+        self.preset_combo.addItem(CURRENT_DRAFT_TEXT, None)
         self.preset_combo.currentIndexChanged.connect(self._on_preset_selected)
 
         self.preset_name_input = QLineEdit()
-        self.preset_name_input.setPlaceholderText("Preset name")
+        self.preset_name_input.setPlaceholderText("预设名称")
 
-        self.open_button = QPushButton("Open")
+        self.open_button = QPushButton("连接")
         self.open_button.clicked.connect(self.service.open_session)
-        self.close_button = QPushButton("Close")
+        self.close_button = QPushButton("断开")
         self.close_button.clicked.connect(self.service.close_session)
-        self.subscribe_button = QPushButton("Subscribe")
+        self.subscribe_button = QPushButton("订阅")
         self.subscribe_button.clicked.connect(self.service.subscribe_current_topic)
-        self.send_button = QPushButton("Publish")
+        self.send_button = QPushButton("发布")
         self.send_button.clicked.connect(self.service.send_current_payload)
-        self.save_preset_button = QPushButton("Save Preset")
+        self.save_preset_button = QPushButton("保存预设")
         self.save_preset_button.clicked.connect(self._on_save_preset)
-        self.delete_preset_button = QPushButton("Delete Preset")
+        self.delete_preset_button = QPushButton("删除预设")
         self.delete_preset_button.clicked.connect(self._on_delete_preset)
 
         self.subscribed_topics_label = QLabel()
@@ -106,26 +107,26 @@ class MqttClientPanel(QWidget):
         self.subscribed_topics_label.setWordWrap(True)
 
         self.send_text = QTextEdit()
-        self.send_text.setPlaceholderText("HEX: 01 03 00 01\nASCII: READY\nUTF-8: hello 世界")
+        self.send_text.setPlaceholderText("十六进制：01 03 00 01\nASCII：READY\nUTF-8：hello 世界")
         self.send_text.textChanged.connect(self._on_send_text_changed)
 
         self.error_label = QLabel()
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
-        grid.addWidget(QLabel("Host"), 0, 0)
+        grid.addWidget(QLabel("主机"), 0, 0)
         grid.addWidget(self.host_input, 0, 1)
-        grid.addWidget(QLabel("Port"), 0, 2)
+        grid.addWidget(QLabel("端口"), 0, 2)
         grid.addWidget(self.port_input, 0, 3)
-        grid.addWidget(QLabel("Client ID"), 1, 0)
+        grid.addWidget(QLabel("客户端 ID"), 1, 0)
         grid.addWidget(self.client_id_input, 1, 1, 1, 3)
-        grid.addWidget(QLabel("Publish Topic"), 2, 0)
+        grid.addWidget(QLabel("发布主题"), 2, 0)
         grid.addWidget(self.publish_topic_input, 2, 1, 1, 3)
-        grid.addWidget(QLabel("Subscribe Topic"), 3, 0)
+        grid.addWidget(QLabel("订阅主题"), 3, 0)
         grid.addWidget(self.subscribe_topic_input, 3, 1, 1, 3)
-        grid.addWidget(QLabel("Send Mode"), 4, 0)
+        grid.addWidget(QLabel("发送模式"), 4, 0)
         grid.addWidget(self.mode_combo, 4, 1)
-        grid.addWidget(QLabel("Preset"), 4, 2)
+        grid.addWidget(QLabel("预设"), 4, 2)
         grid.addWidget(self.preset_combo, 4, 3)
         grid.addWidget(self.preset_name_input, 5, 0, 1, 2)
         grid.addWidget(self.save_preset_button, 5, 2)
@@ -137,9 +138,9 @@ class MqttClientPanel(QWidget):
 
         frame_layout.addLayout(header_layout)
         frame_layout.addLayout(grid)
-        frame_layout.addWidget(QLabel("Subscribed Topics"))
+        frame_layout.addWidget(QLabel("已订阅主题"))
         frame_layout.addWidget(self.subscribed_topics_label)
-        frame_layout.addWidget(QLabel("Payload"))
+        frame_layout.addWidget(QLabel("帧负载"))
         frame_layout.addWidget(self.send_text)
         frame_layout.addWidget(self.error_label)
         layout.addWidget(frame)
@@ -159,12 +160,15 @@ class MqttClientPanel(QWidget):
         finally:
             self._syncing_controls = False
 
-        state_label = snapshot.connection_state.value.upper()
+        state_label = connection_state_text(snapshot.connection_state)
         session_label = snapshot.active_session_id[:8] if snapshot.active_session_id else "-"
-        preset_label = snapshot.selected_preset_name or "draft"
-        self.status_label.setText(f"State: {state_label}    Session: {session_label}    Preset: {preset_label}")
-        self.subscribed_topics_label.setText(", ".join(snapshot.subscribed_topics) or "(none)")
-        self.error_label.setText(snapshot.last_error or "Ready.")
+        preset_label = snapshot.selected_preset_name or CURRENT_DRAFT_TEXT
+        self.status_label.setText(
+            f"状态: {state_label}    会话: {session_label}    预设: {preset_label}"
+        )
+        topics_text = "、".join(snapshot.subscribed_topics) if snapshot.subscribed_topics else "（无）"
+        self.subscribed_topics_label.setText(topics_text)
+        self.error_label.setText(snapshot.last_error or READY_TEXT)
 
         is_connected = snapshot.connection_state == ConnectionState.CONNECTED
         is_busy = snapshot.connection_state == ConnectionState.CONNECTING
@@ -250,7 +254,7 @@ class MqttClientPanel(QWidget):
         if current_data != desired_data:
             self.preset_combo.blockSignals(True)
             self.preset_combo.clear()
-            self.preset_combo.addItem("Current Draft", None)
+            self.preset_combo.addItem(CURRENT_DRAFT_TEXT, None)
             for preset_name in snapshot.preset_names:
                 self.preset_combo.addItem(preset_name, preset_name)
             self.preset_combo.blockSignals(False)

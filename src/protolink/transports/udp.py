@@ -14,12 +14,13 @@ from protolink.core.transport import (
     TransportKind,
     TransportSession,
 )
+from protolink.presentation import display_transport_name
 
 
 def _default_udp_descriptor() -> TransportDescriptor:
     return TransportDescriptor(
         kind=TransportKind.UDP,
-        display_name="UDP Lab",
+        display_name=display_transport_name(TransportKind.UDP),
         capabilities=TransportCapabilities(can_listen=True, supports_binary_payloads=True),
     )
 
@@ -55,11 +56,11 @@ class UdpTransportSettings:
 def parse_udp_target(target: str) -> UdpEndpoint:
     host, separator, port_text = target.strip().rpartition(":")
     if separator != ":" or not host or not port_text:
-        raise ValueError("UDP target must use the format host:port.")
+        raise ValueError("UDP 目标必须使用 host:port 格式。")
 
     port = int(port_text)
     if not 0 <= port <= 65535:
-        raise ValueError("UDP port must be between 0 and 65535.")
+        raise ValueError("UDP 端口必须在 0 到 65535 之间。")
     return UdpEndpoint(host, port)
 
 
@@ -68,7 +69,7 @@ class _UdpProtocol(asyncio.DatagramProtocol):
         self.adapter = adapter
 
     def datagram_received(self, data: bytes, addr) -> None:
-        peer = f"{addr[0]}:{addr[1]}" if isinstance(addr, tuple) and len(addr) >= 2 else "unknown"
+        peer = f"{addr[0]}:{addr[1]}" if isinstance(addr, tuple) and len(addr) >= 2 else "未知"
         self.adapter.emit_message(
             MessageDirection.INBOUND,
             bytes(data),
@@ -97,7 +98,7 @@ class UdpTransportAdapter(TransportAdapter):
 
     async def open(self, config: TransportConfig) -> None:
         if self._transport is not None:
-            raise RuntimeError("UDP transport is already open.")
+            raise RuntimeError("UDP 传输已打开。")
 
         settings = UdpTransportSettings.from_transport_config(config)
         self.bind_session(config)
@@ -147,12 +148,12 @@ class UdpTransportAdapter(TransportAdapter):
 
     def _require_transport(self) -> asyncio.DatagramTransport:
         if self._transport is None:
-            raise RuntimeError("UDP transport is not open.")
+            raise RuntimeError("UDP 传输未打开。")
         return self._transport
 
     def _require_remote_endpoint(self) -> UdpEndpoint:
         if self._remote_endpoint is None:
-            raise RuntimeError("UDP remote endpoint is not configured.")
+            raise RuntimeError("UDP 远端端点尚未配置。")
         return self._remote_endpoint
 
     def _sync_bound_target(self) -> None:

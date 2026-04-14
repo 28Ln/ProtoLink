@@ -161,6 +161,7 @@ def test_serialize_log_entry_truncates_large_raw_payload() -> None:
 
     assert payload["raw_payload_hex"] == "aabb"
     assert payload["metadata"] == {
+        "direction": "inbound",
         "format": "hex",
         "raw_payload_truncated": "true",
         "raw_payload_original_bytes": "4",

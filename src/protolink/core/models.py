@@ -12,6 +12,7 @@ class ModuleStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class FeatureModule:
+    key: str
     name: str
     area: str
     milestone: str

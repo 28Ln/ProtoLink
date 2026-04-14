@@ -166,7 +166,15 @@ def _copy_file(source: Path, destination: Path) -> None:
     shutil.copy2(source, destination)
 
 
-def _copy_tree(source: Path, destination: Path, *, ignore_site_packages: bool = False) -> None:
+def _copy_tree(
+    source: Path,
+    destination: Path,
+    *,
+    ignore_site_packages: bool = False,
+    ignore_python_path_links: bool = False,
+    ignore_test_artifacts: bool = False,
+    ignore_dev_packages: bool = False,
+) -> None:
     if not source.exists():
         return
 
@@ -175,6 +183,18 @@ def _copy_tree(source: Path, destination: Path, *, ignore_site_packages: bool = 
         ignored.update(name for name in names if name.endswith((".pyc", ".pyo")))
         if ignore_site_packages and "site-packages" in names:
             ignored.add("site-packages")
+        if ignore_python_path_links:
+            ignored.update(name for name in names if name.endswith((".pth", ".egg-link")))
+        if ignore_test_artifacts:
+            ignored.update(name for name in names if name in {"test", "tests"})
+        if ignore_dev_packages:
+            ignored.update(
+                name
+                for name in names
+                if name in {"pytest", "_pytest", "iniconfig"}
+                or name.startswith(("pytest-", "_pytest-", "iniconfig-"))
+                and name.endswith(".dist-info")
+            )
         return ignored
 
     shutil.copytree(
@@ -219,11 +239,22 @@ def _materialize_bundled_runtime(
     for directory_name in ("DLLs", "Lib"):
         source = runtime_root / directory_name
         if source.exists():
-            _copy_tree(source, runtime_dest / directory_name, ignore_site_packages=(directory_name == "Lib"))
+            _copy_tree(
+                source,
+                runtime_dest / directory_name,
+                ignore_site_packages=(directory_name == "Lib"),
+                ignore_test_artifacts=(directory_name == "Lib"),
+            )
             copied.append(str((runtime_dest / directory_name).relative_to(package_dir)))
 
     runtime_site_packages_dest = package_dir / "sp"
-    _copy_tree(site_packages_root, runtime_site_packages_dest)
+    _copy_tree(
+        site_packages_root,
+        runtime_site_packages_dest,
+        ignore_python_path_links=True,
+        ignore_test_artifacts=True,
+        ignore_dev_packages=True,
+    )
     copied.append(str(runtime_site_packages_dest.relative_to(package_dir)))
 
     app_source_root = repo_root / "src" / "protolink"

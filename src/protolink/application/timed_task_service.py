@@ -74,12 +74,12 @@ class TimedTaskService:
 
     def remove_task(self, name: str | None) -> None:
         if not name:
-            self._set_snapshot(last_error="Select a timed task before removing.")
+            self._set_snapshot(last_error="删除前请先选择定时任务。")
             return
         removed = self._tasks_by_name.pop(name, None)
         self._next_run_monotonic.pop(name, None)
         if removed is None:
-            self._set_snapshot(last_error=f"Timed task '{name}' was not found.")
+            self._set_snapshot(last_error=f"未找到定时任务“{name}”。")
             return
         self._set_snapshot(task_names=tuple(sorted(self._tasks_by_name)), last_error=None)
 

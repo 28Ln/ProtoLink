@@ -11,12 +11,13 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PROTOLINK_BASE_DIR_ENV = "PROTOLINK_BASE_DIR"
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Verify ProtoLink clean release-staging install-and-run flow.")
-    parser.add_argument("--name", default="release-staging", help="Artifact name prefix.")
-    parser.add_argument("--keep-artifacts", action="store_true", help="Keep temporary staging/install/workspace directories.")
+    parser = argparse.ArgumentParser(description="校验 ProtoLink 的 release-staging 安装与运行链路。")
+    parser.add_argument("--name", default="release-staging", help="产物名称前缀。")
+    parser.add_argument("--keep-artifacts", action="store_true", help="保留临时暂存、安装和工作区目录。")
     return parser
 
 
@@ -59,6 +60,22 @@ def _uv(*args: str) -> list[str]:
     return ["uv", "run", *args]
 
 
+def _sanitized_environment(*, python_path: Path | None = None) -> dict[str, str]:
+    env = os.environ.copy()
+    for variable in (
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "VIRTUAL_ENV",
+        "UV_PROJECT_ENVIRONMENT",
+        "__PYVENV_LAUNCHER__",
+        PROTOLINK_BASE_DIR_ENV,
+    ):
+        env.pop(variable, None)
+    if python_path is not None:
+        env["PYTHONPATH"] = str(python_path)
+    return env
+
+
 def _parse_headless_summary(label: str, output: str, install_root: Path) -> dict[str, object]:
     lines = [line.strip() for line in output.splitlines() if line.strip()]
     if not lines or lines[0] != "ProtoLink":
@@ -66,13 +83,17 @@ def _parse_headless_summary(label: str, output: str, install_root: Path) -> dict
 
     fields: dict[str, str] = {}
     for line in lines[1:]:
-        if ": " not in line:
+        separator = "："
+        if separator in line:
+            key, value = line.split(separator, 1)
+            fields[key.strip()] = value.strip()
             continue
-        key, value = line.split(": ", 1)
-        fields[key] = value
+        if ": " in line:
+            key, value = line.split(": ", 1)
+            fields[key.strip()] = value.strip()
 
-    workspace = Path(fields.get("Workspace", "")).resolve()
-    settings = Path(fields.get("Settings", "")).resolve()
+    workspace = Path(fields.get("工作区", "")).resolve()
+    settings = Path(fields.get("设置", "")).resolve()
     install_root = install_root.resolve()
     if not workspace.exists():
         raise SystemExit(f"{label} reported a workspace that does not exist: {workspace}")
@@ -149,8 +170,7 @@ def main() -> int:
         if not site_packages.exists():
             raise SystemExit(f"Bundled site-packages directory was not installed: {site_packages}")
 
-        runtime_env = os.environ.copy()
-        runtime_env["PYTHONPATH"] = str(site_packages)
+        runtime_env = _sanitized_environment(python_path=site_packages)
         installed_summary = _run_command(
             [str(runtime_python), "-m", "protolink", "--headless-summary"],
             env=runtime_env,
@@ -162,10 +182,7 @@ def main() -> int:
             install_dir,
         )
 
-        launcher_env = os.environ.copy()
-        launcher_env.pop("PYTHONPATH", None)
-        launcher_env.pop("PYTHONHOME", None)
-        launcher_env.pop("PROTOLINK_BASE_DIR", None)
+        launcher_env = _sanitized_environment()
         install_script_summary = _run_command(
             ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(installed_scripts["install_script"])],
             env=launcher_env,

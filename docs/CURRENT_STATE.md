@@ -1,6 +1,6 @@
 # ProtoLink Current State
 
-Last rebuilt: 2026-04-12
+Last rebuilt: 2026-04-14
 
 ## Canonical scope
 
@@ -109,10 +109,10 @@ This rebuild uses only:
   - targeted regression suites via `scripts/run_targeted_regressions.py`
   - clean release-staging verification via `scripts/verify_release_staging.py`
 
-## Validation truth (executed 2026-04-12)
+## Validation truth (executed 2026-04-14)
 
-- `uv run pytest -q` -> `263 passed`
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count 263` -> passed
+- `uv run pytest -q` -> `274 passed`
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count 274` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
 - `uv run pytest tests/test_script_console_service.py tests/test_ui_script_console_panel.py tests/test_ui_main_window.py tests/test_script_host_service.py -q` -> passed

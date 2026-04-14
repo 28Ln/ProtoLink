@@ -181,7 +181,7 @@ def test_modbus_tcp_panel_can_export_and_run_replay_plan(qapp: QApplication, tmp
     panel.run_replay_button.click()
     qapp.processEvents()
     assert replay_service.calls == [(str(replay_path), "tcp_client")]
-    assert "Replay completed:" in panel.replay_status_label.text()
+    assert "回放完成：" in panel.replay_status_label.text()
     panel.close()
 
 
@@ -232,7 +232,7 @@ def test_modbus_tcp_panel_end_to_end_workflow_can_send_export_and_replay(qapp: Q
             ),
         )
         _wait_until(qapp, lambda: len(server.received_payloads()) > count_before)
-        assert "Replay completed:" in panel.replay_status_label.text()
+        assert "回放完成：" in panel.replay_status_label.text()
 
         context.tcp_client_service.close_session()
         _wait_until(qapp, lambda: context.tcp_client_service.snapshot.connection_state == ConnectionState.DISCONNECTED)

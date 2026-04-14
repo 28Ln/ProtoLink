@@ -41,4 +41,4 @@ def can_transition_connection_state(current: ConnectionState, target: Connection
 def validate_connection_state_transition(current: ConnectionState, target: ConnectionState) -> None:
     if can_transition_connection_state(current, target):
         return
-    raise ValueError(f"Invalid connection state transition: {current} -> {target}")
+    raise ValueError(f"无效的连接状态流转：{current} -> {target}")

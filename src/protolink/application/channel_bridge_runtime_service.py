@@ -57,10 +57,11 @@ class ChannelBridgeRuntimeService:
         self._bridges: tuple[ChannelBridgeConfig, ...] = ()
         self._snapshot = ChannelBridgeRuntimeSnapshot()
         self._listeners: list[Callable[[ChannelBridgeRuntimeSnapshot], None]] = []
+        self._stop_event = threading.Event()
         self._dispatch_queue: queue.Queue[_BridgeDispatchTask | None] = queue.Queue()
         self._worker = threading.Thread(target=self._run_worker, name="ProtoLinkChannelBridgeRuntime", daemon=True)
         self._worker.start()
-        self._event_bus.subscribe(StructuredLogEntry, self._on_log_entry)
+        self._unsubscribe_log_entry = self._event_bus.subscribe(StructuredLogEntry, self._on_log_entry)
 
     @property
     def snapshot(self) -> ChannelBridgeRuntimeSnapshot:
@@ -92,13 +93,20 @@ class ChannelBridgeRuntimeService:
         self.set_bridges(())
 
     def shutdown(self) -> None:
+        self._stop_event.set()
+        unsubscribe = getattr(self, "_unsubscribe_log_entry", None)
+        if callable(unsubscribe):
+            unsubscribe()
+            self._unsubscribe_log_entry = None
         self._dispatch_queue.put(None)
-        self._worker.join(timeout=1.0)
+        self._worker.join(timeout=3.0)
 
     def _on_log_entry(self, entry: StructuredLogEntry) -> None:
+        if self._stop_event.is_set():
+            return
         if entry.category != "transport.message" or not entry.raw_payload:
             return
-        if not entry.message.lower().startswith("inbound "):
+        if not _is_inbound_entry(entry):
             return
         if not entry.transport_kind:
             return
@@ -123,7 +131,7 @@ class ChannelBridgeRuntimeService:
                 continue
             if bridge.source_transport_kind == bridge.target_transport_kind:
                 self._report_error(
-                    f"Bridge '{bridge.name}' cannot bridge a transport kind to itself.",
+                    f"桥接“{bridge.name}”不能在同一种传输类型之间回环。",
                     bridge=bridge,
                 )
                 continue
@@ -135,9 +143,14 @@ class ChannelBridgeRuntimeService:
             self._dispatch_queue.put(_BridgeDispatchTask(bridge=bridge, entry=entry, target=target))
 
     def _run_worker(self) -> None:
-        while True:
-            task = self._dispatch_queue.get()
+        while not self._stop_event.is_set():
+            try:
+                task = self._dispatch_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
             if task is None:
+                return
+            if self._stop_event.is_set():
                 return
             self._process_dispatch(task)
 
@@ -146,14 +159,18 @@ class ChannelBridgeRuntimeService:
             transformed = self._transform_payload(task.bridge, task.entry)
         except Exception as exc:
             self._report_error(
-                f"Bridge '{task.bridge.name}' script execution failed: {exc}",
+                f"桥接“{task.bridge.name}”脚本执行失败：{exc}",
                 bridge=task.bridge,
             )
+            return
+        if self._stop_event.is_set():
             return
         if transformed is None:
             return
 
         try:
+            if self._stop_event.is_set():
+                return
             task.target.send_replay_payload(
                 transformed,
                 {
@@ -165,7 +182,7 @@ class ChannelBridgeRuntimeService:
             )
         except Exception as exc:
             self._report_error(
-                f"Bridge '{task.bridge.name}' send failed: {exc}",
+                f"桥接“{task.bridge.name}”发送失败：{exc}",
                 bridge=task.bridge,
             )
             return
@@ -199,7 +216,7 @@ class ChannelBridgeRuntimeService:
         )
         if not result.success:
             self._report_error(
-                f"Bridge '{bridge.name}' script failed: {result.error}",
+                f"桥接“{bridge.name}”脚本失败：{result.error}",
                 bridge=bridge,
             )
             return None
@@ -210,7 +227,7 @@ class ChannelBridgeRuntimeService:
         if isinstance(result.result, str):
             return result.result.encode("utf-8")
         self._report_error(
-            f"Bridge '{bridge.name}' script result must be bytes, str, or None.",
+            f"桥接“{bridge.name}”脚本结果必须是 bytes、str 或 None。",
             bridge=bridge,
         )
         return None
@@ -254,3 +271,11 @@ def _target_selected_peer(target: object) -> str | None:
     snapshot = getattr(target, "snapshot", None)
     peer = getattr(snapshot, "selected_client_peer", None)
     return peer if isinstance(peer, str) and peer else None
+
+
+def _is_inbound_entry(entry: StructuredLogEntry) -> bool:
+    direction = str(entry.metadata.get("direction", "")).lower()
+    if direction:
+        return direction == "inbound"
+    message = entry.message.lower()
+    return message.startswith("inbound ") or message.startswith("入站")

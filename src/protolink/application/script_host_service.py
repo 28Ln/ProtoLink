@@ -79,7 +79,7 @@ else:
         result_payload["result_pickle"] = pickle.dumps(locals_scope.get("result"))
     except Exception as exc:
         result_payload["success"] = False
-        result_payload["error"] = f"Script result is not serializable: {{exc}}"
+        result_payload["error"] = f"脚本结果无法序列化：{{exc}}"
 
 sys.stdout.buffer.write(pickle.dumps(result_payload))
 """.format(allowed_names=repr(SAFE_PYTHON_BUILTIN_NAMES))
@@ -131,17 +131,17 @@ class PythonInlineScriptHost:
         except subprocess.TimeoutExpired:
             return ScriptExecutionResult(
                 success=False,
-                error=f"Script execution timed out after {timeout_seconds:.2f}s.",
+                error=f"脚本执行超时，已达到 {timeout_seconds:.2f} 秒。",
             )
         except Exception as exc:
             return ScriptExecutionResult(
                 success=False,
-                error=f"Script execution could not start: {exc}",
+                error=f"脚本执行启动失败：{exc}",
             )
 
         if not completed.stdout:
             stderr = completed.stderr.decode("utf-8", errors="replace").strip()
-            error_message = stderr or f"Script execution exited without a result (exit code {completed.returncode})."
+            error_message = stderr or f"脚本执行结束但未返回结果（退出码 {completed.returncode}）。"
             return ScriptExecutionResult(
                 success=False,
                 error=error_message,
@@ -152,7 +152,7 @@ class PythonInlineScriptHost:
         except Exception as exc:
             return ScriptExecutionResult(
                 success=False,
-                error=f"Script result payload could not be decoded: {exc}",
+                error=f"脚本结果负载无法解码：{exc}",
             )
 
         result_pickle = payload.get("result_pickle")
@@ -162,7 +162,7 @@ class PythonInlineScriptHost:
             return ScriptExecutionResult(
                 success=False,
                 output=str(payload.get("output", "")),
-                error=f"Script result payload could not be decoded: {exc}",
+                error=f"脚本结果负载无法解码：{exc}",
             )
 
         return ScriptExecutionResult(
@@ -203,11 +203,11 @@ class ScriptHostService:
             self._snapshot = ScriptHostSnapshot(
                 available_languages=self._snapshot.available_languages,
                 last_language=request.language,
-                last_error=f"Script host '{request.language.value}' is not registered.",
+                last_error=f"脚本宿主“{request.language.value}”未注册。",
             )
             return ScriptExecutionResult(
                 success=False,
-                error=f"Script host '{request.language.value}' is not registered.",
+                error=f"脚本宿主“{request.language.value}”未注册。",
             )
 
         result = host.execute(request)

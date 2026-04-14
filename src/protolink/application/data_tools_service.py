@@ -54,7 +54,7 @@ class DataToolsService:
     def run(self) -> str | None:
         text = self._snapshot.input_text
         if not text.strip():
-            self._set_snapshot(last_error="Input text is required before running Data Tools.")
+            self._set_snapshot(last_error="运行数据工具前请输入待处理文本。")
             return None
 
         try:

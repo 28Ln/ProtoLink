@@ -29,6 +29,7 @@ from protolink.core.packet_replay import PacketReplayPlan, PacketReplayStep, Rep
 from protolink.core.register_monitor import RegisterByteOrder, RegisterDataType
 from protolink.core.transport import ConnectionState, TransportKind
 from protolink.core.workspace import WorkspaceLayout
+from protolink.ui.text import READY_TEXT, connection_state_text, register_byte_order_text, register_data_type_text
 
 
 class ModbusTcpLabPanel(QWidget):
@@ -47,7 +48,7 @@ class ModbusTcpLabPanel(QWidget):
         self.inspector = inspector
         self.replay_service = replay_service
         self.workspace = workspace
-        self._last_action_text = "Ready."
+        self._last_action_text = "准备就绪"
         self._build_ui()
         self.tcp_client_service.subscribe(self._refresh_tcp_state)
         self.register_monitor_service.subscribe(self._refresh_monitor_state)
@@ -73,7 +74,7 @@ class ModbusTcpLabPanel(QWidget):
         frame_layout.setSpacing(10)
 
         header_layout = QHBoxLayout()
-        title = QLabel("Modbus TCP Lab")
+        title = QLabel("Modbus TCP 调试台")
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
@@ -96,8 +97,8 @@ class ModbusTcpLabPanel(QWidget):
         self.unit_id_spin.valueChanged.connect(self._refresh_request_preview)
 
         self.function_combo = QComboBox()
-        self.function_combo.addItem("Read Holding Registers (0x03)", 0x03)
-        self.function_combo.addItem("Read Input Registers (0x04)", 0x04)
+        self.function_combo.addItem("读保持寄存器 (0x03)", 0x03)
+        self.function_combo.addItem("读输入寄存器 (0x04)", 0x04)
         self.function_combo.currentIndexChanged.connect(self._refresh_request_preview)
 
         self.start_address_spin = QSpinBox()
@@ -109,25 +110,25 @@ class ModbusTcpLabPanel(QWidget):
         self.quantity_spin.setValue(2)
         self.quantity_spin.valueChanged.connect(self._refresh_request_preview)
 
-        self.send_request_button = QPushButton("Send TCP Request")
+        self.send_request_button = QPushButton("发送 TCP 请求")
         self.send_request_button.clicked.connect(self._on_send_request)
 
         self.point_name_input = QLineEdit()
-        self.point_name_input.setPlaceholderText("Register point name")
+        self.point_name_input.setPlaceholderText("寄存器点位名称")
 
         self.data_type_combo = QComboBox()
         for data_type in RegisterDataType:
-            self.data_type_combo.addItem(data_type.value, data_type)
+            self.data_type_combo.addItem(register_data_type_text(data_type), data_type)
 
         self.byte_order_combo = QComboBox()
         for byte_order in RegisterByteOrder:
-            self.byte_order_combo.addItem(byte_order.value, byte_order)
+            self.byte_order_combo.addItem(register_byte_order_text(byte_order), byte_order)
 
         self.scale_input = QLineEdit("1.0")
         self.offset_input = QLineEdit("0.0")
         self.unit_input = QLineEdit()
-        self.unit_input.setPlaceholderText("unit")
-        self.apply_point_button = QPushButton("Save Point at Start Address")
+        self.unit_input.setPlaceholderText("单位")
+        self.apply_point_button = QPushButton("在起始地址保存点位")
         self.apply_point_button.clicked.connect(self._on_apply_point)
 
         self.request_preview = QTextEdit()
@@ -138,21 +139,20 @@ class ModbusTcpLabPanel(QWidget):
 
         self.replay_plan_name_input = QLineEdit("modbus-tcp-request")
         self.replay_file_input = QLineEdit()
-        self.replay_file_input.setPlaceholderText("Replay plan path")
+        self.replay_file_input.setPlaceholderText("回放计划路径")
         self.replay_file_input.setReadOnly(True)
-        self.export_replay_button = QPushButton("Export Current Request Replay")
+        self.export_replay_button = QPushButton("导出当前请求回放")
         self.export_replay_button.clicked.connect(self._on_export_replay_plan)
-        self.run_replay_button = QPushButton("Run Saved Replay")
+        self.run_replay_button = QPushButton("运行已保存回放")
         self.run_replay_button.clicked.connect(self._on_run_replay)
-        self.export_capture_bundle_button = QPushButton("Export Capture Bundle")
+        self.export_capture_bundle_button = QPushButton("导出抓包")
         self.export_capture_bundle_button.clicked.connect(self._on_export_capture_bundle)
-        self.replay_status_label = QLabel("Replay: idle.")
+        self.replay_status_label = QLabel("回放：空闲。")
         self.replay_status_label.setObjectName("MetaLabel")
         self.replay_status_label.setWordWrap(True)
 
         self.workflow_hint = QLabel(
-            "Workflow hint: send requests here through the active TCP client, inspect raw bytes, export replay plans "
-            "and capture bundles, and use the saved point below to watch inbound Modbus TCP values."
+            "工作流提示：通过当前 TCP 客户端发送请求，检查原始字节流，导出回放计划与抓包，再用下方保存的点位观察 Modbus TCP 入向值。"
         )
         self.workflow_hint.setObjectName("MetaLabel")
         self.workflow_hint.setWordWrap(True)
@@ -165,36 +165,36 @@ class ModbusTcpLabPanel(QWidget):
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
-        grid.addWidget(QLabel("Transaction ID"), 0, 0)
+        grid.addWidget(QLabel("事务号"), 0, 0)
         grid.addWidget(self.transaction_id_spin, 0, 1)
-        grid.addWidget(QLabel("Unit ID"), 0, 2)
+        grid.addWidget(QLabel("从站地址"), 0, 2)
         grid.addWidget(self.unit_id_spin, 0, 3)
-        grid.addWidget(QLabel("Function"), 1, 0)
+        grid.addWidget(QLabel("功能码"), 1, 0)
         grid.addWidget(self.function_combo, 1, 1)
-        grid.addWidget(QLabel("Start Address"), 1, 2)
+        grid.addWidget(QLabel("起始地址"), 1, 2)
         grid.addWidget(self.start_address_spin, 1, 3)
-        grid.addWidget(QLabel("Quantity"), 2, 0)
+        grid.addWidget(QLabel("数量"), 2, 0)
         grid.addWidget(self.quantity_spin, 2, 1)
         grid.addWidget(self.send_request_button, 2, 4)
-        grid.addWidget(QLabel("Point Name"), 3, 0)
+        grid.addWidget(QLabel("点位名称"), 3, 0)
         grid.addWidget(self.point_name_input, 3, 1)
-        grid.addWidget(QLabel("Data Type"), 3, 2)
+        grid.addWidget(QLabel("数据类型"), 3, 2)
         grid.addWidget(self.data_type_combo, 3, 3)
-        grid.addWidget(QLabel("Byte Order"), 4, 0)
+        grid.addWidget(QLabel("字节序"), 4, 0)
         grid.addWidget(self.byte_order_combo, 4, 1)
-        grid.addWidget(QLabel("Scale"), 4, 2)
+        grid.addWidget(QLabel("缩放"), 4, 2)
         grid.addWidget(self.scale_input, 4, 3)
-        grid.addWidget(QLabel("Offset"), 5, 0)
+        grid.addWidget(QLabel("偏移"), 5, 0)
         grid.addWidget(self.offset_input, 5, 1)
-        grid.addWidget(QLabel("Unit"), 5, 2)
+        grid.addWidget(QLabel("单位"), 5, 2)
         grid.addWidget(self.unit_input, 5, 3)
         grid.addWidget(self.apply_point_button, 5, 4)
 
         frame_layout.addLayout(header_layout)
         frame_layout.addLayout(grid)
-        frame_layout.addWidget(QLabel("Request Preview"))
+        frame_layout.addWidget(QLabel("请求预览"))
         frame_layout.addWidget(self.request_preview)
-        frame_layout.addWidget(QLabel("Replay Plan Name"))
+        frame_layout.addWidget(QLabel("回放计划名"))
         frame_layout.addWidget(self.replay_plan_name_input)
         replay_controls = QHBoxLayout()
         replay_controls.addWidget(self.export_replay_button)
@@ -203,7 +203,7 @@ class ModbusTcpLabPanel(QWidget):
         frame_layout.addLayout(replay_controls)
         frame_layout.addWidget(self.replay_file_input)
         frame_layout.addWidget(self.replay_status_label)
-        frame_layout.addWidget(QLabel("Selected Packet Decode"))
+        frame_layout.addWidget(QLabel("选中报文解析"))
         frame_layout.addWidget(self.decode_preview)
         frame_layout.addWidget(self.workflow_hint)
         frame_layout.addWidget(self.monitor_summary_label)
@@ -223,7 +223,7 @@ class ModbusTcpLabPanel(QWidget):
         )
 
     def _refresh_tcp_state(self, snapshot: TcpClientSessionSnapshot) -> None:
-        state_label = snapshot.connection_state.value.upper()
+        state_label = connection_state_text(snapshot.connection_state)
         session_label = snapshot.active_session_id[:8] if snapshot.active_session_id else "-"
         target_label = f"{snapshot.host}:{snapshot.port}"
         self.register_monitor_service.set_live_scope(
@@ -231,7 +231,7 @@ class ModbusTcpLabPanel(QWidget):
             session_id=snapshot.active_session_id if snapshot.connection_state == ConnectionState.CONNECTED else None,
         )
         self.status_label.setText(
-            f"TCP Client: {state_label}    Target: {target_label}    Session: {session_label}"
+            f"TCP 客户端：{state_label}    目标：{target_label}    会话：{session_label}"
         )
         self.send_request_button.setEnabled(snapshot.connection_state == ConnectionState.CONNECTED)
         self.run_replay_button.setEnabled(
@@ -246,7 +246,7 @@ class ModbusTcpLabPanel(QWidget):
         decoded_value = snapshot.decoded_value or "-"
         source = snapshot.last_live_source or "-"
         self.monitor_summary_label.setText(
-            f"Register Monitor: point={selected_point}    source={source}    decoded={decoded_value}"
+            f"寄存器监控：点位={selected_point}    来源={source}    解码={decoded_value}"
         )
         self._refresh_error_label(snapshot.last_error)
 
@@ -257,7 +257,7 @@ class ModbusTcpLabPanel(QWidget):
         if latest_error:
             self.error_label.setText(latest_error)
             return
-        self.error_label.setText(self._last_action_text)
+        self.error_label.setText(self._last_action_text or READY_TEXT)
 
     def _on_send_request(self) -> None:
         payload = self._build_request_payload()
@@ -279,9 +279,9 @@ class ModbusTcpLabPanel(QWidget):
             },
         )
         self._last_action_text = (
-            f"Dispatched Modbus TCP request: tx={self.transaction_id_spin.value()} "
-            f"unit={self.unit_id_spin.value()} func=0x{function_code:02X} "
-            f"start={self.start_address_spin.value()} qty={self.quantity_spin.value()}"
+            f"已发送 Modbus TCP 请求：事务={self.transaction_id_spin.value()} "
+            f"从站={self.unit_id_spin.value()} 功能=0x{function_code:02X} "
+            f"起始={self.start_address_spin.value()} 数量={self.quantity_spin.value()}"
         )
         self._refresh_error_label(self.tcp_client_service.snapshot.last_error)
 
@@ -308,13 +308,13 @@ class ModbusTcpLabPanel(QWidget):
             unit=self.unit_input.text(),
         )
         self._last_action_text = (
-            f"Saved register point '{point_name}' at address {self.start_address_spin.value()} for TCP monitoring."
+            f"已在地址 {self.start_address_spin.value()} 为 TCP 监控保存点位 '{point_name}'。"
         )
         self._refresh_error_label(self.register_monitor_service.snapshot.last_error)
 
     def _on_export_replay_plan(self) -> None:
         if self.workspace is None:
-            self.replay_status_label.setText("Replay export requires a workspace.")
+            self.replay_status_label.setText("导出回放需要一个工作空间。")
             return
 
         plan_name = sanitize_artifact_name(self.replay_plan_name_input.text().strip() or "modbus-tcp-request")
@@ -338,37 +338,37 @@ class ModbusTcpLabPanel(QWidget):
                         "start_address": str(self.start_address_spin.value()),
                         "quantity": str(self.quantity_spin.value()),
                     },
-                    source_message="Modbus TCP Lab exported request",
+                    source_message="Modbus TCP 调试台导出的请求",
                 ),
             ),
         )
         plan_path = default_packet_replay_path(self.workspace.captures, plan.name, created_at=plan.created_at)
         save_packet_replay_plan(plan_path, plan)
         self.replay_file_input.setText(str(plan_path))
-        self.replay_status_label.setText(f"Replay plan exported: {plan_path.name}")
+        self.replay_status_label.setText(f"已导出回放计划：{plan_path.name}")
         self.run_replay_button.setEnabled(self.tcp_client_service.snapshot.connection_state == ConnectionState.CONNECTED)
         self.export_capture_bundle_button.setEnabled(self.workspace is not None)
 
     def _on_run_replay(self) -> None:
         if self.replay_service is None:
-            self.replay_status_label.setText("Replay service is unavailable.")
+            self.replay_status_label.setText("回放服务不可用。")
             return
         replay_path = self.replay_file_input.text().strip()
         if not replay_path:
-            self.replay_status_label.setText("Export or choose a replay plan before running.")
+            self.replay_status_label.setText("运行前请先导出或选择一个回放计划。")
             return
         try:
             self.replay_service.execute_saved_plan(replay_path, TransportKind.TCP_CLIENT)
         except Exception as exc:
-            self.replay_status_label.setText(f"Replay start failed: {exc}")
+            self.replay_status_label.setText(f"回放启动失败：{exc}")
 
     def _on_export_capture_bundle(self) -> None:
         if self.workspace is None:
-            self.replay_status_label.setText("Capture export requires a workspace.")
+            self.replay_status_label.setText("导出抓包需要一个工作空间。")
             return
         replay_path_text = self.replay_file_input.text().strip()
         if not replay_path_text:
-            self.replay_status_label.setText("Export a replay plan before packaging a capture bundle.")
+            self.replay_status_label.setText("打包抓包前请先导出一个回放计划。")
             return
         replay_path = Path(replay_path_text)
         plan_name = sanitize_artifact_name(self.replay_plan_name_input.text().strip() or replay_path.stem)
@@ -381,10 +381,10 @@ class ModbusTcpLabPanel(QWidget):
         try:
             manifest = materialize_export_bundle_from_file(plan, replay_path)
         except Exception as exc:
-            self.replay_status_label.setText(f"Capture export failed: {exc}")
+            self.replay_status_label.setText(f"抓包导出失败：{exc}")
             return
         self.replay_status_label.setText(
-            f"Capture bundle exported: {plan.bundle_dir.name} -> {manifest['payload_file']}"
+            f"抓包已导出：{plan.bundle_dir.name} -> {manifest['payload_file']}"
         )
 
     def _on_replay_snapshot(self, snapshot: PacketReplayExecutionSnapshot) -> None:
@@ -392,21 +392,21 @@ class ModbusTcpLabPanel(QWidget):
             return
         if snapshot.running:
             self.replay_status_label.setText(
-                f"Replay running: {snapshot.dispatched_steps}/{snapshot.total_steps}    plan={snapshot.plan_name or '-'}"
+                f"回放运行中：{snapshot.dispatched_steps}/{snapshot.total_steps}    计划={snapshot.plan_name or '-'}"
             )
             self._set_replay_controls_enabled(False)
             return
         self._set_replay_controls_enabled(True)
         if snapshot.last_error:
-            self.replay_status_label.setText(f"Replay error: {snapshot.last_error}")
+            self.replay_status_label.setText(f"回放出错：{snapshot.last_error}")
             return
         if snapshot.plan_name and snapshot.dispatched_steps >= snapshot.total_steps and snapshot.total_steps > 0:
             self.replay_status_label.setText(
-                f"Replay completed: {snapshot.plan_name}    {snapshot.dispatched_steps}/{snapshot.total_steps}"
+                f"回放完成：{snapshot.plan_name}    {snapshot.dispatched_steps}/{snapshot.total_steps}"
             )
             return
         if self.replay_service is not None:
-            self.replay_status_label.setText("Replay: idle.")
+            self.replay_status_label.setText("回放：空闲。")
 
     def _set_replay_controls_enabled(self, enabled: bool) -> None:
         has_workspace = self.workspace is not None

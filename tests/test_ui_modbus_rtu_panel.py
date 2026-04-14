@@ -145,13 +145,13 @@ def test_modbus_rtu_panel_can_export_and_run_replay_plan(qapp: QApplication, tmp
     replay_path = Path(panel.replay_file_input.text())
     assert replay_path.exists()
     assert replay_path.parent == workspace.captures
-    assert "Replay plan exported:" in panel.replay_status_label.text()
+    assert "已导出回放计划：" in panel.replay_status_label.text()
 
     panel.run_replay_button.click()
     qapp.processEvents()
 
     assert replay_service.calls == [(str(replay_path), "serial")]
-    assert "Replay completed:" in panel.replay_status_label.text()
+    assert "回放完成：" in panel.replay_status_label.text()
     panel.close()
 
 
@@ -189,7 +189,7 @@ def test_modbus_rtu_panel_can_export_capture_bundle_from_saved_replay(qapp: QApp
     payload_files = [path for path in export_dirs[-1].iterdir() if path.name != "manifest.json"]
     assert len(payload_files) == 1
     assert payload_files[0].read_bytes() == replay_path.read_bytes()
-    assert "Capture bundle exported:" in panel.replay_status_label.text()
+    assert "抓包已导出：" in panel.replay_status_label.text()
     panel.close()
 
 
@@ -271,7 +271,7 @@ def test_modbus_rtu_panel_end_to_end_workflow_can_send_export_and_replay(qapp: Q
     )
     _wait_until(qapp, lambda: len(context.log_store.latest(400)) > log_count_before_replay, timeout=5.0)
 
-    assert "Replay completed:" in panel.replay_status_label.text()
+    assert "回放完成：" in panel.replay_status_label.text()
     assert replay_path.parent == context.workspace.captures
 
     context.serial_session_service.close_session()

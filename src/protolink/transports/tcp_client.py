@@ -14,12 +14,13 @@ from protolink.core.transport import (
     TransportDescriptor,
     TransportKind,
 )
+from protolink.presentation import display_transport_name
 
 
 def _default_tcp_client_descriptor() -> TransportDescriptor:
     return TransportDescriptor(
         kind=TransportKind.TCP_CLIENT,
-        display_name="TCP Client",
+        display_name=display_transport_name(TransportKind.TCP_CLIENT),
         capabilities=TransportCapabilities(supports_binary_payloads=True, supports_tls=True),
     )
 
@@ -46,11 +47,11 @@ class TcpClientConnectionSettings:
 def parse_tcp_client_target(target: str) -> tuple[str, int]:
     host, separator, port_text = target.strip().rpartition(":")
     if separator != ":" or not host or not port_text:
-        raise ValueError("TCP client target must use the format host:port.")
+        raise ValueError("TCP 客户端目标必须使用 host:port 格式。")
 
     port = int(port_text)
     if not 1 <= port <= 65535:
-        raise ValueError("TCP client port must be between 1 and 65535.")
+        raise ValueError("TCP 客户端端口必须在 1 到 65535 之间。")
     return host, port
 
 
@@ -65,7 +66,7 @@ class TcpClientTransportAdapter(TransportAdapter):
 
     async def open(self, config: TransportConfig) -> None:
         if self._writer is not None:
-            raise RuntimeError("TCP client transport is already open.")
+            raise RuntimeError("TCP 客户端传输已打开。")
 
         settings = TcpClientConnectionSettings.from_transport_config(config)
         self.bind_session(config)
@@ -124,7 +125,7 @@ class TcpClientTransportAdapter(TransportAdapter):
 
     def _require_writer(self) -> asyncio.StreamWriter:
         if self._writer is None:
-            raise RuntimeError("TCP client transport is not open.")
+            raise RuntimeError("TCP 客户端传输未打开。")
         return self._writer
 
     async def _reader_loop(self) -> None:

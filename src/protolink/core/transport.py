@@ -143,7 +143,7 @@ class TransportAdapter(ABC):
 
     def emit_state(self, state: ConnectionState) -> None:
         if self._session is None:
-            raise RuntimeError("Session is not bound.")
+            raise RuntimeError("会话尚未绑定。")
         self._session = self._session.with_state(state)
         self.emit(
             TransportEvent(
@@ -159,7 +159,7 @@ class TransportAdapter(ABC):
         metadata: Mapping[str, str] | None = None,
     ) -> None:
         if self._session is None:
-            raise RuntimeError("Session is not bound.")
+            raise RuntimeError("会话尚未绑定。")
         message = RawTransportMessage(
             session_id=self._session.session_id,
             kind=self._session.kind,
@@ -177,7 +177,7 @@ class TransportAdapter(ABC):
 
     def emit_error(self, error: str) -> None:
         if self._session is None:
-            raise RuntimeError("Session is not bound.")
+            raise RuntimeError("会话尚未绑定。")
         self._session = self._session.with_state(ConnectionState.ERROR)
         self.emit(
             TransportEvent(
@@ -214,7 +214,7 @@ class TransportRegistry:
         try:
             factory = self._factories[kind]
         except KeyError as exc:
-            raise KeyError(f"Transport '{kind}' is not registered.") from exc
+            raise KeyError(f"传输类型“{kind}”未注册。") from exc
         return factory()
 
     def registered_kinds(self) -> tuple[TransportKind, ...]:

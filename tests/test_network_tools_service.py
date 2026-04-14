@@ -27,8 +27,8 @@ def test_network_tools_service_probes_tcp_read_only() -> None:
         service.set_target_host(server.host)
         service.set_target_port(server.port)
         result = service.probe_tcp()
-        assert result == f"reachable: {server.host}:{server.port}"
-        assert "reachable" in service.snapshot.tcp_probe_summary
+        assert result == f"可达：{server.host}:{server.port}"
+        assert "可达" in service.snapshot.tcp_probe_summary
 
 
 def test_network_tools_service_handles_local_info_resolution_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -39,9 +39,9 @@ def test_network_tools_service_handles_local_info_resolution_failure(monkeypatch
     assert service.snapshot.local_hostname
     assert service.snapshot.local_ip_addresses == ()
     assert service.snapshot.execution_count == 0
-    assert service.snapshot.last_error == "Local network info refresh failed: resolver down"
+    assert service.snapshot.last_error == "本机网络信息刷新失败：resolver down"
 
     service.refresh_local_info()
 
     assert service.snapshot.execution_count == 1
-    assert service.snapshot.last_error == "Local network info refresh failed: resolver down"
+    assert service.snapshot.last_error == "本机网络信息刷新失败：resolver down"

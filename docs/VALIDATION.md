@@ -4,8 +4,8 @@
 
 ### 当前验证基线
 
-- `uv run pytest -q` -> 263 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count 263` -> passed
+- `uv run pytest -q` -> 274 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count 274` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
 - `uv build` -> passed
@@ -40,7 +40,7 @@ uv run pytest
 ### 运行 canonical truth gate
 
 ```powershell
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count 263
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count 274
 ```
 
 ### 运行 targeted regression gate
@@ -73,5 +73,5 @@ uv run python scripts/verify_release_staging.py --name local
 
 ### 当前 full-suite snapshot
 
-- `263 passed`
+- `274 passed`
 - no warning summary

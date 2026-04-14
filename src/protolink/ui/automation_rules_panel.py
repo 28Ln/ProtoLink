@@ -64,7 +64,7 @@ class AutomationRulesPanel(QWidget):
         frame_layout.setSpacing(10)
 
         header = QHBoxLayout()
-        title = QLabel("Automation Rules")
+        title = QLabel("自动化规则")
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
@@ -74,7 +74,7 @@ class AutomationRulesPanel(QWidget):
         header.addStretch(1)
         header.addWidget(self.status_label)
         self.notice_label = QLabel(
-            "Controlled automation only. Stop/disable boundaries remain explicit before broader automation expansion."
+            "受控自动化，仅在明确的停止/禁用边界内开放，避免未授权扩展。"
         )
         self.notice_label.setObjectName("MetaLabel")
         self.notice_label.setWordWrap(True)
@@ -84,21 +84,21 @@ class AutomationRulesPanel(QWidget):
         grid.setVerticalSpacing(8)
 
         self.rule_combo = QComboBox()
-        self.rule_combo.addItem("Select Rule", None)
+        self.rule_combo.addItem("选择规则", None)
         self.rule_combo.currentIndexChanged.connect(self._on_rule_selected)
 
         self.name_input = QLineEdit()
-        self.name_input.setPlaceholderText("Rule name")
+        self.name_input.setPlaceholderText("规则名称")
 
         self.action_combo = QComboBox()
-        self.action_combo.addItem("Run Replay Plan", AutomationActionKind.RUN_REPLAY_PLAN)
-        self.action_combo.addItem("Enable Auto Response", AutomationActionKind.SET_AUTO_RESPONSE_ENABLED)
-        self.action_combo.addItem("Disable Auto Response", AutomationActionKind.SET_AUTO_RESPONSE_ENABLED)
-        self.action_combo.addItem("Prepare Device Scan", AutomationActionKind.PREPARE_DEVICE_SCAN)
+        self.action_combo.addItem("执行回放计划", AutomationActionKind.RUN_REPLAY_PLAN)
+        self.action_combo.addItem("启用自动响应", AutomationActionKind.SET_AUTO_RESPONSE_ENABLED)
+        self.action_combo.addItem("禁用自动响应", AutomationActionKind.SET_AUTO_RESPONSE_ENABLED)
+        self.action_combo.addItem("准备设备扫描", AutomationActionKind.PREPARE_DEVICE_SCAN)
         self.action_combo.currentIndexChanged.connect(self._refresh_action_specific_controls)
 
         self.replay_path_input = QLineEdit()
-        self.replay_path_input.setPlaceholderText("Replay plan path")
+        self.replay_path_input.setPlaceholderText("回放计划路径")
         self.replay_target_combo = QComboBox()
         for kind in (TransportKind.SERIAL, TransportKind.TCP_CLIENT, TransportKind.TCP_SERVER, TransportKind.UDP):
             self.replay_target_combo.addItem(kind.value, kind)
@@ -107,7 +107,7 @@ class AutomationRulesPanel(QWidget):
         for kind in DeviceScanTransportKind:
             self.scan_transport_combo.addItem(kind.value, kind)
         self.scan_target_input = QLineEdit()
-        self.scan_target_input.setPlaceholderText("Scan target")
+        self.scan_target_input.setPlaceholderText("扫描目标")
         self.scan_unit_start = QSpinBox()
         self.scan_unit_start.setRange(0, 247)
         self.scan_unit_start.setValue(1)
@@ -115,39 +115,39 @@ class AutomationRulesPanel(QWidget):
         self.scan_unit_end.setRange(0, 247)
         self.scan_unit_end.setValue(16)
 
-        self.save_button = QPushButton("Save Rule")
+        self.save_button = QPushButton("保存规则")
         self.save_button.clicked.connect(self._on_save_rule)
-        self.run_button = QPushButton("Run Rule")
+        self.run_button = QPushButton("运行规则")
         self.run_button.clicked.connect(self._on_run_rule)
-        self.delete_button = QPushButton("Delete Rule")
+        self.delete_button = QPushButton("删除规则")
         self.delete_button.clicked.connect(self._on_delete_rule)
-        self.clear_jobs_button = QPushButton("Clear Scan Jobs")
+        self.clear_jobs_button = QPushButton("清除扫描任务")
         self.clear_jobs_button.clicked.connect(self.service.clear_prepared_device_scan_jobs)
-        self.reload_button = QPushButton("Reload Saved Rules")
+        self.reload_button = QPushButton("重新加载规则")
         self.reload_button.clicked.connect(self.service.reload_rules)
 
         self.error_label = QLabel()
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
-        grid.addWidget(QLabel("Rule"), 0, 0)
+        grid.addWidget(QLabel("规则"), 0, 0)
         grid.addWidget(self.rule_combo, 0, 1, 1, 2)
         grid.addWidget(self.delete_button, 0, 3)
-        grid.addWidget(QLabel("Name"), 1, 0)
+        grid.addWidget(QLabel("名称"), 1, 0)
         grid.addWidget(self.name_input, 1, 1)
-        grid.addWidget(QLabel("Action"), 1, 2)
+        grid.addWidget(QLabel("操作"), 1, 2)
         grid.addWidget(self.action_combo, 1, 3)
-        grid.addWidget(QLabel("Replay Path"), 2, 0)
+        grid.addWidget(QLabel("回放计划"), 2, 0)
         grid.addWidget(self.replay_path_input, 2, 1, 1, 3)
-        grid.addWidget(QLabel("Replay Target"), 3, 0)
+        grid.addWidget(QLabel("回放目标"), 3, 0)
         grid.addWidget(self.replay_target_combo, 3, 1)
-        grid.addWidget(QLabel("Scan Transport"), 4, 0)
+        grid.addWidget(QLabel("扫描通道"), 4, 0)
         grid.addWidget(self.scan_transport_combo, 4, 1)
-        grid.addWidget(QLabel("Scan Target"), 4, 2)
+        grid.addWidget(QLabel("扫描目标"), 4, 2)
         grid.addWidget(self.scan_target_input, 4, 3)
-        grid.addWidget(QLabel("Unit Start"), 5, 0)
+        grid.addWidget(QLabel("起始寄存器"), 5, 0)
         grid.addWidget(self.scan_unit_start, 5, 1)
-        grid.addWidget(QLabel("Unit End"), 5, 2)
+        grid.addWidget(QLabel("结束寄存器"), 5, 2)
         grid.addWidget(self.scan_unit_end, 5, 3)
         grid.addWidget(self.save_button, 6, 1)
         grid.addWidget(self.run_button, 6, 2)
@@ -171,13 +171,13 @@ class AutomationRulesPanel(QWidget):
         finally:
             self._syncing_controls = False
         self.status_label.setText(
-            f"Rules: {len(snapshot.rule_names)}    "
-            f"Runs: {snapshot.execution_count}    "
-            f"Scan Jobs: {snapshot.prepared_device_scan_job_count}"
+            f"规则数: {len(snapshot.rule_names)}    "
+            f"运行次数: {snapshot.execution_count}    "
+            f"扫描任务: {snapshot.prepared_device_scan_job_count}"
         )
         profile_path = self.service.profile_path
-        self.profile_path_label.setText(f"Profile: {profile_path}" if profile_path is not None else "Profile: in-memory only")
-        self.error_label.setText(snapshot.last_error or "Ready.")
+        self.profile_path_label.setText(f"配置文件: {profile_path}" if profile_path is not None else "配置文件: 内存中")
+        self.error_label.setText(snapshot.last_error or "准备就绪")
         self._refresh_primary_actions(snapshot)
 
     def _build_runtime_safety_frame(self) -> QFrame:
@@ -189,14 +189,14 @@ class AutomationRulesPanel(QWidget):
         layout.setVerticalSpacing(8)
 
         row = 0
-        title = QLabel("Automation Runtime Safety")
+        title = QLabel("自动化运行安全")
         title.setObjectName("SectionTitle")
         layout.addWidget(title, row, 0, 1, 4)
         row += 1
 
-        self.auto_response_status_label = QLabel("Auto Response: unavailable")
-        self.enable_auto_response_button = QPushButton("Enable Auto Response")
-        self.disable_auto_response_button = QPushButton("Disable Auto Response")
+        self.auto_response_status_label = QLabel("自动响应：不可用")
+        self.enable_auto_response_button = QPushButton("启用自动响应")
+        self.disable_auto_response_button = QPushButton("禁用自动响应")
         if self.auto_response_service is not None:
             self.enable_auto_response_button.clicked.connect(lambda: self.auto_response_service.set_enabled(True))
             self.disable_auto_response_button.clicked.connect(lambda: self.auto_response_service.set_enabled(False))
@@ -208,9 +208,9 @@ class AutomationRulesPanel(QWidget):
         layout.addWidget(self.disable_auto_response_button, row, 3)
         row += 1
 
-        self.timed_task_status_label = QLabel("Timed Tasks: unavailable")
-        self.start_timed_tasks_button = QPushButton("Start Timed Tasks")
-        self.stop_timed_tasks_button = QPushButton("Stop Timed Tasks")
+        self.timed_task_status_label = QLabel("定时任务：不可用")
+        self.start_timed_tasks_button = QPushButton("启动定时任务")
+        self.stop_timed_tasks_button = QPushButton("停止定时任务")
         if self.timed_task_service is not None:
             self.start_timed_tasks_button.clicked.connect(self.timed_task_service.start)
             self.stop_timed_tasks_button.clicked.connect(self.timed_task_service.stop)
@@ -222,8 +222,8 @@ class AutomationRulesPanel(QWidget):
         layout.addWidget(self.stop_timed_tasks_button, row, 3)
         row += 1
 
-        self.channel_bridge_status_label = QLabel("Channel Bridges: unavailable")
-        self.clear_bridges_button = QPushButton("Clear Bridges")
+        self.channel_bridge_status_label = QLabel("通道桥：不可用")
+        self.clear_bridges_button = QPushButton("清除桥接")
         if self.channel_bridge_service is not None:
             self.clear_bridges_button.clicked.connect(self.channel_bridge_service.clear_bridges)
         else:
@@ -234,21 +234,21 @@ class AutomationRulesPanel(QWidget):
 
     def _refresh_auto_response_status(self, snapshot: AutoResponseRuntimeSnapshot) -> None:
         self.auto_response_status_label.setText(
-            f"Auto Response: enabled={snapshot.enabled} rules={snapshot.rule_count} matched={snapshot.matched_count}"
+            f"自动响应：启用={snapshot.enabled} 规则={snapshot.rule_count} 匹配={snapshot.matched_count}"
         )
         self.enable_auto_response_button.setEnabled(self.auto_response_service is not None and not snapshot.enabled)
         self.disable_auto_response_button.setEnabled(self.auto_response_service is not None and snapshot.enabled)
 
     def _refresh_timed_task_status(self, snapshot: TimedTaskSnapshot) -> None:
         self.timed_task_status_label.setText(
-            f"Timed Tasks: running={snapshot.running} tasks={len(snapshot.task_names)} runs={snapshot.execution_count}"
+            f"定时任务：运行={snapshot.running} 任务={len(snapshot.task_names)} 次数={snapshot.execution_count}"
         )
         self.start_timed_tasks_button.setEnabled(self.timed_task_service is not None and not snapshot.running)
         self.stop_timed_tasks_button.setEnabled(self.timed_task_service is not None and snapshot.running)
 
     def _refresh_channel_bridge_status(self, snapshot: ChannelBridgeRuntimeSnapshot) -> None:
         self.channel_bridge_status_label.setText(
-            f"Channel Bridges: total={len(snapshot.bridge_names)} enabled={len(snapshot.enabled_bridge_names)} bridged={snapshot.bridged_count}"
+            f"通道桥：总数={len(snapshot.bridge_names)} 已启用={len(snapshot.enabled_bridge_names)} 桥接={snapshot.bridged_count}"
         )
         self.clear_bridges_button.setEnabled(self.channel_bridge_service is not None and bool(snapshot.bridge_names))
 
@@ -279,7 +279,7 @@ class AutomationRulesPanel(QWidget):
     def _on_save_rule(self) -> None:
         name = " ".join(self.name_input.text().strip().split())
         if not name:
-            self.error_label.setText("Rule name is required.")
+            self.error_label.setText("请输入规则名称。")
             return
         action_kind = self.action_combo.currentData()
         if not isinstance(action_kind, AutomationActionKind):
@@ -328,7 +328,7 @@ class AutomationRulesPanel(QWidget):
     def _on_run_rule(self) -> None:
         name = self.rule_combo.currentData() or self.name_input.text().strip()
         if not name:
-            self.error_label.setText("Select a rule before running.")
+            self.error_label.setText("请先选择规则。")
             return
         self.service.run_rule(str(name))
 

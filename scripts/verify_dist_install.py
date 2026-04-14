@@ -22,18 +22,18 @@ class VerificationError(RuntimeError):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Verify ProtoLink wheel and sdist can fresh-install from dist/ and run headless summary in isolation."
+        description="校验 ProtoLink 的 wheel 和 sdist 能否从 dist/ 全新安装，并在隔离环境中运行无界面摘要。"
     )
     parser.add_argument(
         "--dist-dir",
         type=Path,
         default=DEFAULT_DIST_DIR,
-        help="Directory containing built distribution artifacts. Defaults to ./dist.",
+        help="包含已构建分发产物的目录，默认为 ./dist。",
     )
     parser.add_argument(
         "--keep-artifacts",
         action="store_true",
-        help="Keep the temporary virtual environments and working directories.",
+        help="保留临时虚拟环境和工作目录。",
     )
     return parser
 
@@ -53,6 +53,7 @@ def _sanitized_environment(*, isolated_base_dir: Path | None = None) -> dict[str
         PROTOLINK_BASE_DIR_ENV,
     ):
         env.pop(variable, None)
+    env["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
     if isolated_base_dir is not None:
         env[PROTOLINK_BASE_DIR_ENV] = str(isolated_base_dir)
     return env
@@ -154,20 +155,24 @@ def _parse_headless_summary(kind: str, output: str, isolated_base_dir: Path) -> 
 
     fields: dict[str, str] = {}
     for line in lines[1:]:
-        if ": " not in line:
+        separator = "："
+        if separator in line:
+            key, value = line.split(separator, 1)
+            fields[key.strip()] = value.strip()
             continue
-        key, value = line.split(": ", 1)
-        fields[key] = value
+        if ": " in line:
+            key, value = line.split(": ", 1)
+            fields[key.strip()] = value.strip()
 
-    required_fields = ("Workspace", "Settings", "Registered transports", "Modules")
+    required_fields = ("工作区", "设置", "已注册传输", "模块数")
     missing_fields = [field for field in required_fields if field not in fields]
     if missing_fields:
         raise VerificationError(
             f"[{kind}] Headless summary is missing expected fields: {', '.join(missing_fields)}.\n\nstdout:\n{output}"
         )
 
-    workspace = Path(fields["Workspace"]).resolve()
-    settings = Path(fields["Settings"]).resolve()
+    workspace = Path(fields["工作区"]).resolve()
+    settings = Path(fields["设置"]).resolve()
     settings_root = settings.parent
     isolated_root = isolated_base_dir.resolve()
 
@@ -219,7 +224,19 @@ def _verify_artifact(kind: str, artifact_file: Path, temp_root: Path) -> dict[st
 
     _print_step(label, f"installing {artifact_file.name}")
     _run_command(
-        [str(python_executable), "-m", "pip", "install", "--no-cache-dir", str(artifact_file)],
+        [
+            str(python_executable),
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--default-timeout",
+            "300",
+            "--retries",
+            "5",
+            "--no-cache-dir",
+            str(artifact_file),
+        ],
         label=f"[{label}] pip install",
         cwd=temp_root,
         env=install_env,

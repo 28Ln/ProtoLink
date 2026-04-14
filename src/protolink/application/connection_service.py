@@ -10,6 +10,7 @@ from protolink.application.runtime import AsyncTaskRunner
 from protolink.core.event_bus import EventBus
 from protolink.core.transport import ConnectionState, TransportConfig, TransportEvent, TransportEventType, TransportKind, TransportRegistry
 from protolink.core.wiring import bind_transport_to_event_bus
+from protolink.presentation import display_transport_name
 
 SnapshotT = TypeVar("SnapshotT")
 PresetT = TypeVar("PresetT")
@@ -18,6 +19,15 @@ DraftT = TypeVar("DraftT")
 
 def _identity(value: Any) -> Any:
     return value
+
+
+def _operation_failed_message(operation: str, error: Exception) -> str:
+    label = {
+        "open": "打开",
+        "send": "发送",
+        "subscribe": "订阅",
+    }.get(operation, operation)
+    return f"{label}失败：{error}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +99,7 @@ class ConnectionSessionServiceBase(Generic[SnapshotT]):
             lambda: self._send_payload(
                 payload,
                 replay_metadata,
-                not_connected_error=f"Open the {self._transport_kind.value.replace('_', ' ')} transport before replay dispatch.",
+                not_connected_error=f"请先打开{display_transport_name(self._transport_kind)}后再发送回放数据。",
             )
         )
 
@@ -140,7 +150,7 @@ class ConnectionSessionServiceBase(Generic[SnapshotT]):
         if event.event_type == TransportEventType.ERROR:
             error_message = event.error or self._unknown_error_message
             if self._snapshot.connection_state == ConnectionState.CONNECTING:
-                error_message = f"Open failed: {error_message}"
+                error_message = f"打开失败：{error_message}"
             self._set_snapshot(
                 connection_state=ConnectionState.ERROR,
                 active_session_id=event.session.session_id,
@@ -171,7 +181,7 @@ class ConnectionSessionServiceBase(Generic[SnapshotT]):
                 if operation != "close":
                     self._set_snapshot(
                         connection_state=ConnectionState.ERROR,
-                        last_error=f"{operation.title()} failed: {exc}",
+                        last_error=_operation_failed_message(operation, exc),
                     )
                 if self._adapter is adapter:
                     self._adapter = None
@@ -238,7 +248,7 @@ class PresetConnectionSessionServiceBase(ConnectionSessionServiceBase[SnapshotT]
     def save_preset(self, name: str) -> None:
         normalized = self._normalize_preset_name(name)
         if not normalized:
-            self._set_snapshot(last_error="Preset name is required.")
+            self._set_snapshot(last_error="预设名称不能为空。")
             return
 
         preset = self._build_preset(normalized)
@@ -257,7 +267,7 @@ class PresetConnectionSessionServiceBase(ConnectionSessionServiceBase[SnapshotT]
 
         preset = self._presets_by_name.get(name)
         if preset is None:
-            self._set_snapshot(last_error=f"Preset '{name}' was not found.")
+            self._set_snapshot(last_error=f"未找到预设“{name}”。")
             return
 
         self._set_snapshot(
@@ -268,12 +278,12 @@ class PresetConnectionSessionServiceBase(ConnectionSessionServiceBase[SnapshotT]
 
     def delete_preset(self, name: str | None) -> None:
         if not name:
-            self._set_snapshot(last_error="Select a preset before deleting.")
+            self._set_snapshot(last_error="删除前请先选择预设。")
             return
 
         removed = self._presets_by_name.pop(name, None)
         if removed is None:
-            self._set_snapshot(last_error=f"Preset '{name}' was not found.")
+            self._set_snapshot(last_error=f"未找到预设“{name}”。")
             return
 
         selected_preset_name = None if self._snapshot.selected_preset_name == name else self._snapshot.selected_preset_name

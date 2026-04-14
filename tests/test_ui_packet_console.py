@@ -33,9 +33,11 @@ def cleanup_widgets(qapp: QApplication):
     yield
     for widget in QApplication.topLevelWidgets():
         try:
-            widget.close()
-            widget.deleteLater()
-        except RuntimeError:
+            if hasattr(widget, "close"):
+                widget.close()
+            if hasattr(widget, "deleteLater"):
+                widget.deleteLater()
+        except (AttributeError, RuntimeError):
             continue
     qapp.processEvents()
 
@@ -218,7 +220,7 @@ def test_packet_console_replay_controls_dispatch_saved_plan(qapp: QApplication, 
     qapp.processEvents()
 
     assert replay_service.calls == [(str(plan_path), TransportKind.TCP_CLIENT)]
-    assert "Replay completed: bench" in widget.replay_status_label.text()
+    assert "重放完成：bench" in widget.replay_status_label.text()
     widget.close()
 
 
@@ -253,5 +255,5 @@ def test_packet_console_can_build_replay_plan_from_visible_rows(qapp: QApplicati
     plan = load_packet_replay_plan(built_path)
     assert len(plan.steps) == 1
     assert plan.steps[0].payload == b"PING"
-    assert "Replay plan built:" in widget.replay_status_label.text()
+    assert "重放计划构建完成：" in widget.replay_status_label.text()
     widget.close()

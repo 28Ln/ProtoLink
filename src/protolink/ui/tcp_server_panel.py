@@ -21,6 +21,7 @@ from protolink.application.tcp_server_service import (
     TcpServerSessionSnapshot,
 )
 from protolink.core.transport import ConnectionState
+from protolink.ui.text import CURRENT_DRAFT_TEXT, READY_TEXT, connection_state_text
 
 
 class TcpServerPanel(QWidget):
@@ -44,7 +45,7 @@ class TcpServerPanel(QWidget):
         frame_layout.setSpacing(10)
 
         header_layout = QHBoxLayout()
-        title = QLabel("TCP Server Controls")
+        title = QLabel("TCP 服务端")
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
@@ -65,62 +66,62 @@ class TcpServerPanel(QWidget):
         self.port_input.valueChanged.connect(self._on_port_changed)
 
         self.mode_combo = QComboBox()
-        self.mode_combo.addItem("HEX", TcpServerSendEncoding.HEX.value)
-        self.mode_combo.addItem("ASCII", TcpServerSendEncoding.ASCII.value)
-        self.mode_combo.addItem("UTF-8", TcpServerSendEncoding.UTF8.value)
+        self.mode_combo.addItem("十六进制（HEX）", TcpServerSendEncoding.HEX.value)
+        self.mode_combo.addItem("ASCII 文本", TcpServerSendEncoding.ASCII.value)
+        self.mode_combo.addItem("UTF-8 文本", TcpServerSendEncoding.UTF8.value)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
 
         self.line_ending_combo = QComboBox()
-        self.line_ending_combo.addItem("None", TcpServerLineEnding.NONE.value)
+        self.line_ending_combo.addItem("无", TcpServerLineEnding.NONE.value)
         self.line_ending_combo.addItem("CR", TcpServerLineEnding.CR.value)
         self.line_ending_combo.addItem("LF", TcpServerLineEnding.LF.value)
         self.line_ending_combo.addItem("CRLF", TcpServerLineEnding.CRLF.value)
         self.line_ending_combo.currentIndexChanged.connect(self._on_line_ending_changed)
 
         self.preset_combo = QComboBox()
-        self.preset_combo.addItem("Current Draft", None)
+        self.preset_combo.addItem(CURRENT_DRAFT_TEXT, None)
         self.preset_combo.currentIndexChanged.connect(self._on_preset_selected)
 
         self.preset_name_input = QLineEdit()
-        self.preset_name_input.setPlaceholderText("Preset name")
+        self.preset_name_input.setPlaceholderText("预设名称")
 
         self.client_target_combo = QComboBox()
-        self.client_target_combo.addItem("Broadcast", None)
+        self.client_target_combo.addItem("广播", None)
         self.client_target_combo.currentIndexChanged.connect(self._on_client_target_changed)
 
-        self.open_button = QPushButton("Open")
+        self.open_button = QPushButton("开启")
         self.open_button.clicked.connect(self.service.open_session)
-        self.close_button = QPushButton("Close")
+        self.close_button = QPushButton("断开")
         self.close_button.clicked.connect(self.service.close_session)
-        self.send_button = QPushButton("Broadcast")
+        self.send_button = QPushButton("广播")
         self.send_button.clicked.connect(self.service.send_current_payload)
-        self.save_preset_button = QPushButton("Save Preset")
+        self.save_preset_button = QPushButton("保存预设")
         self.save_preset_button.clicked.connect(self._on_save_preset)
-        self.delete_preset_button = QPushButton("Delete Preset")
+        self.delete_preset_button = QPushButton("删除预设")
         self.delete_preset_button.clicked.connect(self._on_delete_preset)
 
         self.send_text = QTextEdit()
-        self.send_text.setPlaceholderText("HEX: 01 03 00 01\nASCII: READY\nUTF-8: hello 世界")
+        self.send_text.setPlaceholderText("十六进制：01 03 00 01\nASCII：READY\nUTF-8：hello 世界")
         self.send_text.textChanged.connect(self._on_send_text_changed)
 
         self.error_label = QLabel()
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
-        grid.addWidget(QLabel("Host"), 0, 0)
+        grid.addWidget(QLabel("主机"), 0, 0)
         grid.addWidget(self.host_input, 0, 1, 1, 2)
-        grid.addWidget(QLabel("Port"), 0, 3)
+        grid.addWidget(QLabel("端口"), 0, 3)
         grid.addWidget(self.port_input, 0, 4)
-        grid.addWidget(QLabel("Send Mode"), 1, 0)
+        grid.addWidget(QLabel("发送模式"), 1, 0)
         grid.addWidget(self.mode_combo, 1, 1)
-        grid.addWidget(QLabel("Line Ending"), 1, 2)
+        grid.addWidget(QLabel("行结束符"), 1, 2)
         grid.addWidget(self.line_ending_combo, 1, 3)
-        grid.addWidget(QLabel("Preset"), 2, 0)
+        grid.addWidget(QLabel("预设"), 2, 0)
         grid.addWidget(self.preset_combo, 2, 1)
         grid.addWidget(self.preset_name_input, 2, 2)
         grid.addWidget(self.save_preset_button, 2, 3)
         grid.addWidget(self.delete_preset_button, 2, 4)
-        grid.addWidget(QLabel("Target Client"), 3, 0)
+        grid.addWidget(QLabel("目标客户端"), 3, 0)
         grid.addWidget(self.client_target_combo, 3, 1, 1, 2)
         grid.addWidget(self.open_button, 4, 2)
         grid.addWidget(self.close_button, 4, 3)
@@ -128,7 +129,7 @@ class TcpServerPanel(QWidget):
 
         frame_layout.addLayout(header_layout)
         frame_layout.addLayout(grid)
-        frame_layout.addWidget(QLabel("Payload"))
+        frame_layout.addWidget(QLabel("帧负载"))
         frame_layout.addWidget(self.send_text)
         frame_layout.addWidget(self.error_label)
         layout.addWidget(frame)
@@ -147,21 +148,21 @@ class TcpServerPanel(QWidget):
         finally:
             self._syncing_controls = False
 
-        state_label = snapshot.connection_state.value.upper()
+        state_label = connection_state_text(ConnectionState(snapshot.connection_state))
         session_label = snapshot.active_session_id[:8] if snapshot.active_session_id else "-"
-        target_label = snapshot.selected_client_peer or "broadcast"
-        preset_label = snapshot.selected_preset_name or "draft"
+        target_label = snapshot.selected_client_peer or "广播"
+        preset_label = snapshot.selected_preset_name or CURRENT_DRAFT_TEXT
         self.status_label.setText(
-            f"State: {state_label}    Session: {session_label}    Clients: {snapshot.client_count}    Target: {target_label}    Preset: {preset_label}"
+            f"状态: {state_label}    会话: {session_label}    客户端数: {snapshot.client_count}    目标: {target_label}    预设: {preset_label}"
         )
-        self.error_label.setText(snapshot.last_error or "Ready.")
+        self.error_label.setText(snapshot.last_error or READY_TEXT)
 
         is_connected = snapshot.connection_state == ConnectionState.CONNECTED
         is_busy = snapshot.connection_state == ConnectionState.CONNECTING
         self.open_button.setEnabled(bool(snapshot.host) and not is_connected and not is_busy)
         self.close_button.setEnabled(snapshot.connection_state in {ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.ERROR})
         self.send_button.setEnabled(is_connected and snapshot.client_count > 0)
-        self.send_button.setText("Send to Client" if snapshot.selected_client_peer else "Broadcast")
+        self.send_button.setText("发送到客户端" if snapshot.selected_client_peer else "广播")
         self.delete_preset_button.setEnabled(bool(snapshot.selected_preset_name))
 
     def _on_host_changed(self, text: str) -> None:
@@ -243,7 +244,7 @@ class TcpServerPanel(QWidget):
         if current_data != desired_data:
             self.preset_combo.blockSignals(True)
             self.preset_combo.clear()
-            self.preset_combo.addItem("Current Draft", None)
+            self.preset_combo.addItem(CURRENT_DRAFT_TEXT, None)
             for preset_name in snapshot.preset_names:
                 self.preset_combo.addItem(preset_name, preset_name)
             self.preset_combo.blockSignals(False)
@@ -255,7 +256,7 @@ class TcpServerPanel(QWidget):
         if current_data != desired_data:
             self.client_target_combo.blockSignals(True)
             self.client_target_combo.clear()
-            self.client_target_combo.addItem("Broadcast", None)
+            self.client_target_combo.addItem("广播", None)
             for peer in snapshot.connected_clients:
                 self.client_target_combo.addItem(peer, peer)
             self.client_target_combo.blockSignals(False)

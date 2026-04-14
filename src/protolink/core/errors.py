@@ -25,12 +25,12 @@ def format_cli_error(error: ProtoLinkUserError, *, fallback_action: str | None =
     action = error.action or fallback_action
     parts: list[str] = []
     if action:
-        parts.append(f"{action} failed:")
+        parts.append(f"{action}失败：")
     parts.append(error.message)
     if error.recovery:
-        parts.append(f"Recovery: {error.recovery}")
+        parts.append(f"恢复建议：{error.recovery}")
     return " ".join(parts)
 
 
 def format_unexpected_cli_error(action: str, error: Exception) -> str:
-    return f"{action} failed: {error}"
+    return f"{action}失败：{error}"

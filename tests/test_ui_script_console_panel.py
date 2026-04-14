@@ -40,5 +40,5 @@ def test_script_console_panel_runs_script_and_persists_workspace_artifact(qapp: 
     assert panel.result_label.text() == "22"
     assert context.script_console_service.snapshot.last_script_file is not None
     assert Path(context.script_console_service.snapshot.last_script_file).exists()
-    assert "Controlled execution only" in panel.notice_label.text()
+    assert "受控执行" in panel.notice_label.text()
     panel.close()

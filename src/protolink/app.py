@@ -13,6 +13,7 @@ from protolink import __version__
 from protolink.catalog import build_module_catalog
 from protolink.core.bootstrap import AppContext, bootstrap_app_context
 from protolink.core.errors import CliExitCode, ProtoLinkUserError, format_cli_error, format_unexpected_cli_error
+from protolink.core.models import ModuleStatus
 from protolink.core.import_export import (
     ArtifactKind,
     build_export_bundle_plan,
@@ -63,166 +64,167 @@ from protolink.core.packet_replay import (
 )
 from protolink.core.settings import resolve_application_base_dir
 from protolink.core.workspace import migrate_workspace, workspace_manifest_path
+from protolink.presentation import APPLICATION_SUBTITLE, APPLICATION_TITLE, HEADLESS_GOAL
 from protolink.transports.serial import list_serial_ports
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="ProtoLink desktop application")
-    parser.add_argument("--version", action="store_true", help="Print the application version and exit.")
+    parser = argparse.ArgumentParser(description="ProtoLink 桌面端工具")
+    parser.add_argument("--version", action="store_true", help="输出应用版本并退出。")
     parser.add_argument(
         "--print-workspace",
         action="store_true",
-        help="Initialize the default workspace and print its path.",
+        help="初始化默认工作区并输出其路径。",
     )
     parser.add_argument(
         "--headless-summary",
         action="store_true",
-        help="Print a non-GUI project summary for CI or quick verification.",
+        help="输出无界面项目摘要，供 CI 或快速核验使用。",
     )
     parser.add_argument(
         "--workspace",
         type=str,
-        help="Use the given workspace path and remember it as the active workspace.",
+        help="使用指定工作区路径，并将其记为当前活动工作区。",
     )
     parser.add_argument(
         "--list-recent-workspaces",
         action="store_true",
-        help="Print recently used workspaces and exit.",
+        help="输出最近使用的工作区并退出。",
     )
     parser.add_argument(
         "--print-settings",
         action="store_true",
-        help="Print the path of the persisted settings file and exit.",
+        help="输出持久化设置文件路径并退出。",
     )
     parser.add_argument(
         "--list-serial-ports",
         action="store_true",
-        help="Print detected serial ports and exit.",
+        help="输出检测到的串口列表并退出。",
     )
     parser.add_argument(
         "--create-export-scaffold",
         nargs=3,
         metavar=("KIND", "NAME", "EXT"),
-        help="Create an export bundle scaffold under the active workspace exports directory.",
+        help="在当前工作区的 exports 目录下创建导出包骨架。",
     )
     parser.add_argument(
         "--export-runtime-log",
         metavar="NAME",
-        help="Export the current workspace runtime transport log into a real export bundle.",
+        help="将当前工作区运行期传输日志导出为正式导出包。",
     )
     parser.add_argument(
         "--export-latest-capture",
         metavar="NAME",
-        help="Export the latest workspace capture artifact into a real export bundle.",
+        help="将工作区最新抓包产物导出为正式导出包。",
     )
     parser.add_argument(
         "--export-latest-profile",
         metavar="NAME",
-        help="Export the latest workspace profile artifact into a real export bundle.",
+        help="将工作区最新配置产物导出为正式导出包。",
     )
     parser.add_argument(
         "--smoke-check",
         action="store_true",
-        help="Run the built-in offscreen smoke check and exit.",
+        help="执行内置离屏冒烟检查并退出。",
     )
     parser.add_argument(
         "--migrate-workspace",
         action="store_true",
-        help="Ensure the active workspace matches the current workspace format and print the migration report.",
+        help="确保当前工作区符合最新格式，并输出迁移报告。",
     )
     parser.add_argument(
         "--release-preflight",
         action="store_true",
-        help="Run a release-preparation preflight against the active workspace and print a JSON report.",
+        help="针对当前工作区执行发布预检，并输出 JSON 报告。",
     )
     parser.add_argument(
         "--export-release-bundle",
         metavar="NAME",
-        help="Export a release bundle that packages the latest runtime log, capture, profile, and preflight report.",
+        help="导出发布包，包含最新运行日志、抓包、配置和预检报告。",
     )
     parser.add_argument(
         "--generate-smoke-artifacts",
         action="store_true",
-        help="Generate real workspace runtime artifacts using a controlled smoke flow.",
+        help="通过受控冒烟流程生成真实工作区运行产物。",
     )
     parser.add_argument(
         "--prepare-release",
         metavar="NAME",
-        help="Run workspace migration, generate missing smoke artifacts when needed, verify preflight, and export a release bundle.",
+        help="执行工作区迁移、按需补齐冒烟产物、完成预检，并导出发布包。",
     )
     parser.add_argument(
         "--package-release",
         metavar="NAME",
-        help="Run release preparation and package the resulting release bundle into a zip archive.",
+        help="执行发布准备，并将发布包压缩为 zip 归档。",
     )
     parser.add_argument(
         "--build-portable-package",
         metavar="NAME",
-        help="Build a portable package zip that contains the packaged release archive plus install metadata.",
+        help="构建便携包 zip，包含发布归档及安装元数据。",
     )
     parser.add_argument(
         "--install-portable-package",
         nargs=2,
         metavar=("ARCHIVE", "TARGET_DIR"),
-        help="Extract a portable package archive into the target directory.",
+        help="将便携包归档安装到目标目录。",
     )
     parser.add_argument(
         "--uninstall-portable-package",
         metavar="TARGET_DIR",
-        help="Remove files previously installed by a portable package using its install receipt.",
+        help="依据安装回执卸载便携包已安装文件。",
     )
     parser.add_argument(
         "--verify-portable-package",
         metavar="ARCHIVE",
-        help="Verify the portable package archive manifest, release archive, and checksums.",
+        help="校验便携包归档的清单、发布归档和校验和。",
     )
     parser.add_argument(
         "--build-distribution-package",
         metavar="NAME",
-        help="Build a distributable package zip that contains portable/release archives plus distribution metadata.",
+        help="构建分发包 zip，包含便携包、发布归档及分发元数据。",
     )
     parser.add_argument(
         "--verify-distribution-package",
         metavar="ARCHIVE",
-        help="Verify the distribution package archive manifest, referenced portable/release archives, and checksums.",
+        help="校验分发包归档的清单、引用的便携包/发布归档及校验和。",
     )
     parser.add_argument(
         "--install-distribution-package",
         nargs=3,
         metavar=("ARCHIVE", "STAGING_DIR", "INSTALL_DIR"),
-        help="Extract a distribution package into a staging directory and install its portable package into the target directory.",
+        help="将分发包解压到暂存目录，并把其中的便携包安装到目标目录。",
     )
     parser.add_argument(
         "--build-installer-staging",
         metavar="NAME",
-        help="Build an installer-staging package that wraps a distribution archive with install metadata and launch scripts.",
+        help="构建安装器暂存包，封装分发归档、安装元数据和启动脚本。",
     )
     parser.add_argument(
         "--install-installer-staging",
         nargs=3,
         metavar=("ARCHIVE", "STAGING_DIR", "INSTALL_DIR"),
-        help="Extract an installer-staging archive, stage its distribution package, and install the portable package into the target directory.",
+        help="解压安装器暂存归档，暂存其中分发包，并安装便携包到目标目录。",
     )
     parser.add_argument(
         "--verify-installer-staging",
         metavar="ARCHIVE",
-        help="Verify the installer-staging archive manifest, referenced distribution archive, and checksum.",
+        help="校验安装器暂存归档的清单、引用的分发归档及校验和。",
     )
     parser.add_argument(
         "--build-installer-package",
         metavar="NAME",
-        help="Build a top-level installer package archive that wraps the installer-staging package with install metadata.",
+        help="构建顶层安装器归档，封装安装器暂存包和安装元数据。",
     )
     parser.add_argument(
         "--verify-installer-package",
         metavar="ARCHIVE",
-        help="Verify the installer package archive manifest, referenced installer-staging archive, and checksum.",
+        help="校验安装器归档的清单、引用的安装器暂存归档及校验和。",
     )
     parser.add_argument(
         "--install-installer-package",
         nargs=3,
         metavar=("ARCHIVE", "STAGING_DIR", "INSTALL_DIR"),
-        help="Extract an installer package archive, stage its installer package, and install the portable package into the target directory.",
+        help="解压安装器归档，暂存其中安装器包，并安装便携包到目标目录。",
     )
     return parser
 
@@ -607,11 +609,11 @@ def generate_smoke_artifacts(context) -> dict[str, object]:
     service.open_session()
     _wait_until(lambda: service.snapshot.connection_state.name in {"CONNECTED", "ERROR"})
     if service.snapshot.connection_state.name != "CONNECTED":
-        raise RuntimeError(service.snapshot.last_error or "Serial smoke session failed to connect.")
+        raise RuntimeError(service.snapshot.last_error or "串口冒烟会话连接失败。")
 
     session_id = service.snapshot.active_session_id
     if not session_id:
-        raise RuntimeError("Serial smoke session did not expose an active session id.")
+        raise RuntimeError("串口冒烟会话未暴露有效的活动会话 ID。")
 
     service.send_replay_payload(b"\x01\x03\x00\x0A\x00\x02", {"source": "release_smoke", "protocol": "modbus_rtu"})
 
@@ -646,7 +648,7 @@ def generate_smoke_artifacts(context) -> dict[str, object]:
         include_directions={ReplayDirection.OUTBOUND, ReplayDirection.INBOUND},
     )
     if not _capture_plan_has_round_trip(plan):
-        raise RuntimeError("Smoke capture did not produce a valid outbound/inbound round trip.")
+        raise RuntimeError("冒烟抓包未生成有效的出站/入站往返链路。")
     capture_path = default_packet_replay_path(context.workspace.captures, plan.name, created_at=plan.created_at)
     save_packet_replay_plan(capture_path, plan)
 
@@ -676,8 +678,8 @@ def prepare_release_bundle(context, name: str) -> dict[str, object]:
         blocking = ", ".join(str(item) for item in preflight_report["blocking_items"]) or "unknown"
         raise ProtoLinkUserError(
             "Release preflight is not ready.",
-            action="prepare release",
-            recovery=f"Resolve blocking items: {blocking}.",
+            action="准备发布",
+            recovery=f"请先处理以下阻断项：{blocking}。",
         )
 
     plan = build_release_bundle_plan(
@@ -778,13 +780,16 @@ def main(argv: list[str] | None = None) -> int:
             modules = build_module_catalog()
             counts = Counter(module.status.value for module in modules)
             print("ProtoLink")
-            print("Goal: Windows-first industrial communication and protocol debugging platform")
-            print(f"Workspace: {context.workspace.root}")
-            print(f"Settings: {context.settings_layout.settings_file}")
-            print(f"Registered transports: {len(context.transport_registry.registered_kinds())}")
-            print(f"Modules: {len(modules)}")
-            for name in ("Bootstrapped", "Next", "Planned"):
-                print(f"{name}: {counts.get(name, 0)}")
+            print(f"定位：{HEADLESS_GOAL}")
+            print(f"工作区：{context.workspace.root}")
+            print(f"设置：{context.settings_layout.settings_file}")
+            print(f"应用标题：{APPLICATION_TITLE}")
+            print(f"应用副标题：{APPLICATION_SUBTITLE}")
+            print(f"已注册传输：{len(context.transport_registry.registered_kinds())}")
+            print(f"模块数：{len(modules)}")
+            print(f"已落地：{counts.get(ModuleStatus.BOOTSTRAPPED.value, 0)}")
+            print(f"下一阶段：{counts.get(ModuleStatus.NEXT.value, 0)}")
+            print(f"规划中：{counts.get(ModuleStatus.PLANNED.value, 0)}")
             return int(CliExitCode.OK)
 
         if args.create_export_scaffold:
@@ -871,7 +876,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(run_ui_smoke_check())
                 return int(CliExitCode.OK)
             except ModuleNotFoundError:
-                print("GUI dependencies are not installed. Run: uv sync --python 3.11 --extra dev --extra ui")
+                print("未安装 GUI 依赖。请执行：uv sync --python 3.11 --extra dev --extra ui")
                 return int(CliExitCode.GUI_DEPENDENCY_MISSING)
 
         if args.migrate_workspace:
@@ -1261,7 +1266,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return int(CliExitCode.OK)
     except ProtoLinkUserError as exc:
-        formatted_error = format_cli_error(exc, fallback_action="CLI command")
+        formatted_error = format_cli_error(exc, fallback_action="命令行命令")
         _record_cli_failure(
             context,
             code="cli_user_error",
@@ -1273,7 +1278,7 @@ def main(argv: list[str] | None = None) -> int:
         print(formatted_error)
         return int(CliExitCode.USER_ERROR)
     except Exception as exc:
-        formatted_error = format_unexpected_cli_error("CLI command", exc)
+        formatted_error = format_unexpected_cli_error("命令行命令", exc)
         _record_cli_failure(
             context,
             code="cli_runtime_error",
@@ -1287,7 +1292,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from PySide6.QtWidgets import QApplication
     except ModuleNotFoundError:
-        print("GUI dependencies are not installed. Run: uv sync --python 3.11 --extra dev --extra ui")
+        print("未安装 GUI 依赖。请执行：uv sync --python 3.11 --extra dev --extra ui")
         return int(CliExitCode.GUI_DEPENDENCY_MISSING)
 
     from protolink.ui.main_window import ProtoLinkMainWindow

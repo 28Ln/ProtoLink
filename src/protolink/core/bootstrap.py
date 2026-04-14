@@ -53,6 +53,7 @@ from protolink.core.transport import (
 )
 from protolink.core.workspace import WorkspaceLayout, ensure_workspace_layout
 from protolink.core.wiring import wire_packet_inspector, wire_transport_logging
+from protolink.presentation import display_transport_name
 from protolink.transports.serial import SerialTransportAdapter
 from protolink.transports.mqtt_client import MqttClientTransportAdapter
 from protolink.transports.mqtt_server import MqttServerTransportAdapter
@@ -99,45 +100,45 @@ class PlaceholderTransportAdapter(TransportAdapter):
 
     async def open(self, config: TransportConfig) -> None:
         self.bind_session(config)
-        raise NotImplementedError(f"{self.descriptor.display_name} is not implemented yet.")
+        raise NotImplementedError(f"{self.descriptor.display_name}尚未实现。")
 
     async def close(self) -> None:
         return None
 
     async def send(self, payload: bytes, metadata=None) -> None:
-        raise NotImplementedError(f"{self.descriptor.display_name} is not implemented yet.")
+        raise NotImplementedError(f"{self.descriptor.display_name}尚未实现。")
 
 
 def default_transport_descriptors() -> tuple[TransportDescriptor, ...]:
     return (
         TransportDescriptor(
             kind=TransportKind.SERIAL,
-            display_name="Serial Studio",
+            display_name=display_transport_name(TransportKind.SERIAL),
             capabilities=TransportCapabilities(supports_binary_payloads=True, supports_reconnect=True),
         ),
         TransportDescriptor(
             kind=TransportKind.TCP_CLIENT,
-            display_name="TCP Client",
+            display_name=display_transport_name(TransportKind.TCP_CLIENT),
             capabilities=TransportCapabilities(supports_binary_payloads=True, supports_tls=True),
         ),
         TransportDescriptor(
             kind=TransportKind.TCP_SERVER,
-            display_name="TCP Server",
+            display_name=display_transport_name(TransportKind.TCP_SERVER),
             capabilities=TransportCapabilities(can_listen=True, can_accept_clients=True, supports_binary_payloads=True),
         ),
         TransportDescriptor(
             kind=TransportKind.UDP,
-            display_name="UDP Lab",
+            display_name=display_transport_name(TransportKind.UDP),
             capabilities=TransportCapabilities(can_listen=True, supports_binary_payloads=True),
         ),
         TransportDescriptor(
             kind=TransportKind.MQTT_CLIENT,
-            display_name="MQTT Client",
+            display_name=display_transport_name(TransportKind.MQTT_CLIENT),
             capabilities=TransportCapabilities(supports_topics=True, supports_binary_payloads=True, supports_tls=True),
         ),
         TransportDescriptor(
             kind=TransportKind.MQTT_SERVER,
-            display_name="MQTT Server",
+            display_name=display_transport_name(TransportKind.MQTT_SERVER),
             capabilities=TransportCapabilities(
                 can_listen=True,
                 can_accept_clients=True,

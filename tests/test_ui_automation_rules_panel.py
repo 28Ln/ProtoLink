@@ -128,10 +128,10 @@ def test_automation_rules_panel_exposes_runtime_safety_controls(qapp: QApplicati
     )
     qapp.processEvents()
 
-    assert "Auto Response:" in panel.auto_response_status_label.text()
-    assert "Timed Tasks:" in panel.timed_task_status_label.text()
-    assert "Channel Bridges:" in panel.channel_bridge_status_label.text()
-    assert "Stop/disable boundaries remain explicit" in panel.notice_label.text()
+    assert "自动响应：" in panel.auto_response_status_label.text()
+    assert "定时任务：" in panel.timed_task_status_label.text()
+    assert "通道桥：" in panel.channel_bridge_status_label.text()
+    assert "受控自动化" in panel.notice_label.text()
 
     panel.disable_auto_response_button.click()
     qapp.processEvents()

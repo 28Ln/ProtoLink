@@ -19,12 +19,13 @@ from protolink.core.transport import (
     TransportDescriptor,
     TransportKind,
 )
+from protolink.presentation import display_transport_name
 
 
 def _default_serial_descriptor() -> TransportDescriptor:
     return TransportDescriptor(
         kind=TransportKind.SERIAL,
-        display_name="Serial Studio",
+        display_name=display_transport_name(TransportKind.SERIAL),
         capabilities=TransportCapabilities(supports_binary_payloads=True, supports_reconnect=True),
     )
 
@@ -106,7 +107,7 @@ class SerialTransportAdapter(TransportAdapter):
 
     async def open(self, config: TransportConfig) -> None:
         if self._serial_handle is not None:
-            raise RuntimeError("Serial transport is already open.")
+            raise RuntimeError("串口传输已打开。")
 
         settings = SerialPortSettings.from_transport_config(config)
         self.bind_session(config)
@@ -161,7 +162,7 @@ class SerialTransportAdapter(TransportAdapter):
 
     def _require_serial_handle(self) -> Any:
         if self._serial_handle is None:
-            raise RuntimeError("Serial transport is not open.")
+            raise RuntimeError("串口传输未打开。")
         return self._serial_handle
 
     def _reader_loop(self) -> None:

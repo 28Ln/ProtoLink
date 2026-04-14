@@ -14,6 +14,7 @@ from protolink.core.mqtt_client_profiles import (
 )
 from protolink.core.transport import ConnectionState, MessageDirection, TransportConfig, TransportEvent, TransportEventType, TransportKind, TransportRegistry
 from protolink.core.workspace import WorkspaceLayout
+from protolink.presentation import display_transport_name
 
 
 class MqttClientSendEncoding(StrEnum):
@@ -61,7 +62,7 @@ class MqttClientSessionService(MappedProfileSessionServiceBase[MqttClientSession
             event_bus,
             transport_kind=TransportKind.MQTT_CLIENT,
             initial_snapshot=MqttClientSessionSnapshot(),
-            unknown_error_message="Unknown MQTT client error.",
+            unknown_error_message="MQTT 客户端出现未知异常。",
             profile_path=default_mqtt_client_profile_path(workspace.profiles),
             profile_loader=load_mqtt_client_profile,
             profile_saver=save_mqtt_client_profile,
@@ -77,10 +78,10 @@ class MqttClientSessionService(MappedProfileSessionServiceBase[MqttClientSession
         try:
             value = int(str(port).strip())
         except ValueError:
-            self._set_snapshot(last_error="MQTT port must be an integer.")
+            self._set_snapshot(last_error="MQTT 端口必须是整数。")
             return
         if not 1 <= value <= 65535:
-            self._set_snapshot(last_error="MQTT port must be between 1 and 65535.")
+            self._set_snapshot(last_error="MQTT 端口必须在 1 到 65535 之间。")
             return
         self._set_snapshot(port=value, last_error=None, selected_preset_name=None)
 
@@ -101,13 +102,13 @@ class MqttClientSessionService(MappedProfileSessionServiceBase[MqttClientSession
 
     def open_session(self) -> None:
         if not self._snapshot.host:
-            self._set_snapshot(last_error="Enter an MQTT host before opening.")
+            self._set_snapshot(last_error="打开前请输入 MQTT 主机地址。")
             return
 
         self._open_transport(
             TransportConfig(
                 kind=TransportKind.MQTT_CLIENT,
-                name="MQTT Client",
+                name=display_transport_name(TransportKind.MQTT_CLIENT),
                 target=self._target(),
                 options={"client_id": self._snapshot.client_id, "open_timeout": 2.0},
             )
@@ -119,10 +120,10 @@ class MqttClientSessionService(MappedProfileSessionServiceBase[MqttClientSession
     def subscribe_current_topic(self) -> None:
         adapter = self._adapter
         if adapter is None or self._snapshot.connection_state != ConnectionState.CONNECTED:
-            self._set_snapshot(last_error="Open the MQTT client before subscribing.")
+            self._set_snapshot(last_error="订阅前请先打开 MQTT 客户端。")
             return
         if not self._snapshot.subscribe_topic:
-            self._set_snapshot(last_error="Enter a subscribe topic before subscribing.")
+            self._set_snapshot(last_error="订阅前请输入订阅主题。")
             return
 
         future = self._ensure_runtime().submit(adapter.subscribe(self._snapshot.subscribe_topic))
@@ -131,10 +132,10 @@ class MqttClientSessionService(MappedProfileSessionServiceBase[MqttClientSession
 
     def send_current_payload(self) -> None:
         if not self._snapshot.publish_topic:
-            self._set_snapshot(last_error="Enter a publish topic before sending.")
+            self._set_snapshot(last_error="发送前请输入发布主题。")
             return
         if self._adapter is None or self._snapshot.connection_state != ConnectionState.CONNECTED:
-            self._set_snapshot(last_error="Open the MQTT client before sending.")
+            self._set_snapshot(last_error="发送前请先打开 MQTT 客户端。")
             return
 
         try:
@@ -146,7 +147,7 @@ class MqttClientSessionService(MappedProfileSessionServiceBase[MqttClientSession
         self._send_payload(
             payload,
             {"encoding": self._snapshot.send_mode.value, "topic": self._snapshot.publish_topic},
-            not_connected_error="Open the MQTT client before sending.",
+            not_connected_error="发送前请先打开 MQTT 客户端。",
         )
 
     def _target(self) -> str:
@@ -177,7 +178,7 @@ class MqttClientSessionService(MappedProfileSessionServiceBase[MqttClientSession
 
     def _encode_payload(self, text: str, mode: MqttClientSendEncoding) -> bytes:
         if not text.strip():
-            raise ValueError("Enter payload text before sending.")
+            raise ValueError("发送前请输入报文内容。")
 
         if mode == MqttClientSendEncoding.UTF8:
             return text.encode("utf-8")
@@ -185,8 +186,8 @@ class MqttClientSessionService(MappedProfileSessionServiceBase[MqttClientSession
             try:
                 return text.encode("ascii")
             except UnicodeEncodeError as exc:
-                raise ValueError("ASCII payload can only contain 7-bit ASCII characters.") from exc
+                raise ValueError("ASCII 报文只能包含 7 位 ASCII 字符。") from exc
         try:
             return bytes.fromhex(text)
         except ValueError as exc:
-            raise ValueError("HEX payload must contain complete hexadecimal bytes.") from exc
+            raise ValueError("HEX 报文必须由完整的十六进制字节组成。") from exc

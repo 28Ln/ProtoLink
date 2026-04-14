@@ -44,4 +44,4 @@ def test_script_console_service_surfaces_context_errors(tmp_path: Path) -> None:
     result = service.run_script()
 
     assert result is None
-    assert service.snapshot.last_error == "Script context must be a JSON object."
+    assert service.snapshot.last_error == "脚本上下文必须是 JSON 对象。"

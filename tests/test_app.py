@@ -194,9 +194,9 @@ def test_main_returns_user_error_exit_code_for_expected_cli_failures(monkeypatch
         "protolink.app.list_serial_ports",
         lambda: (_ for _ in ()).throw(
             ProtoLinkUserError(
-                "Port enumeration is unavailable.",
-                action="list serial ports",
-                recovery="Check the local driver installation and retry.",
+                "串口枚举不可用。",
+                action="列出串口",
+                recovery="请检查本机驱动安装后重试。",
             )
         ),
     )
@@ -205,8 +205,8 @@ def test_main_returns_user_error_exit_code_for_expected_cli_failures(monkeypatch
     captured = capsys.readouterr()
 
     assert exit_code == int(CliExitCode.USER_ERROR)
-    assert "list serial ports failed: Port enumeration is unavailable." in captured.out
-    assert "Recovery: Check the local driver installation and retry." in captured.out
+    assert "列出串口失败： 串口枚举不可用。" in captured.out
+    assert "恢复建议：请检查本机驱动安装后重试。" in captured.out
 
 
 def test_main_returns_runtime_error_exit_code_for_unexpected_cli_failures(monkeypatch, capsys) -> None:
@@ -219,7 +219,7 @@ def test_main_returns_runtime_error_exit_code_for_unexpected_cli_failures(monkey
     captured = capsys.readouterr()
 
     assert exit_code == int(CliExitCode.RUNTIME_ERROR)
-    assert captured.out.strip() == "CLI command failed: disk offline"
+    assert captured.out.strip() == "命令行命令失败：disk offline"
 
 
 def test_main_creates_export_scaffold_under_workspace(monkeypatch, tmp_path, capsys) -> None:
@@ -243,7 +243,7 @@ def test_main_returns_user_error_for_invalid_export_kind(monkeypatch, tmp_path, 
     captured = capsys.readouterr()
 
     assert exit_code == int(CliExitCode.USER_ERROR)
-    assert "create export scaffold failed: Unsupported export kind 'badkind'." in captured.out
+    assert "创建导出骨架失败： 不支持的导出类型“badkind”。" in captured.out
 
 
 def test_main_records_cli_user_error_to_workspace_evidence(monkeypatch, tmp_path, capsys) -> None:
@@ -256,7 +256,7 @@ def test_main_records_cli_user_error_to_workspace_evidence(monkeypatch, tmp_path
     evidence_file, evidence_entries, evidence_error = load_runtime_failure_evidence(workspace_logs)
 
     assert exit_code == int(CliExitCode.USER_ERROR)
-    assert "locate workspace artifact failed:" in captured.out
+    assert "定位工作区产物失败：" in captured.out
     assert workspace_log.exists()
     log_lines = workspace_log.read_text(encoding="utf-8").strip().splitlines()
     assert '"category": "cli.error"' in log_lines[-1]
@@ -273,9 +273,9 @@ def test_main_records_cli_user_error_to_explicit_workspace_without_context(monke
 
     def fail_bootstrap(*args, **kwargs):
         raise ProtoLinkUserError(
-            "Workspace bootstrap failed.",
-            action="bootstrap workspace",
-            recovery="Repair the workspace configuration and retry.",
+            "工作区初始化失败。",
+            action="初始化工作区",
+            recovery="请修复工作区配置后重试。",
         )
 
     monkeypatch.setattr("protolink.app.bootstrap_app_context", fail_bootstrap)
@@ -287,7 +287,7 @@ def test_main_records_cli_user_error_to_explicit_workspace_without_context(monke
     evidence_file, evidence_entries, evidence_error = load_runtime_failure_evidence(workspace_logs)
 
     assert exit_code == int(CliExitCode.USER_ERROR)
-    assert "bootstrap workspace failed: Workspace bootstrap failed." in captured.out
+    assert "初始化工作区失败： 工作区初始化失败。" in captured.out
     assert workspace_log.exists()
     assert '"category": "cli.error"' in workspace_log.read_text(encoding="utf-8")
     assert evidence_error is None

@@ -73,7 +73,7 @@ class NetworkToolsService:
                 local_hostname=hostname,
                 local_ip_addresses=(),
                 execution_count=self._snapshot.execution_count + 1 if count_execution else self._snapshot.execution_count,
-                last_error=f"Local network info refresh failed: {exc}",
+                last_error=f"本机网络信息刷新失败：{exc}",
             )
             return
         self._set_snapshot(
@@ -86,7 +86,7 @@ class NetworkToolsService:
     def resolve_target(self) -> str | None:
         host = self._snapshot.target_host.strip()
         if not host:
-            self._set_snapshot(last_error="Target host is required before resolving.")
+            self._set_snapshot(last_error="解析前请输入目标主机。")
             return None
         try:
             _, _, addresses = socket.gethostbyname_ex(host)
@@ -104,15 +104,15 @@ class NetworkToolsService:
     def probe_tcp(self, *, timeout_seconds: float = 1.0) -> str | None:
         host = self._snapshot.target_host.strip()
         if not host:
-            self._set_snapshot(last_error="Target host is required before probing.")
+            self._set_snapshot(last_error="探测前请输入目标主机。")
             return None
         try:
             with socket.create_connection((host, self._snapshot.target_port), timeout=timeout_seconds):
                 pass
         except OSError as exc:
-            self._set_snapshot(last_error=str(exc), tcp_probe_summary=f"TCP probe failed: {exc}")
+            self._set_snapshot(last_error=str(exc), tcp_probe_summary=f"TCP 探测失败：{exc}")
             return None
-        result = f"reachable: {host}:{self._snapshot.target_port}"
+        result = f"可达：{host}:{self._snapshot.target_port}"
         self._set_snapshot(
             tcp_probe_summary=result,
             execution_count=self._snapshot.execution_count + 1,

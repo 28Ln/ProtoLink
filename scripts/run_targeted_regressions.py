@@ -19,6 +19,7 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/test_auto_response_runtime_service.py",
         "tests/test_channel_bridge_runtime_service.py",
         "tests/test_packet_replay_service.py",
+        "tests/test_tcp_server_service.py",
     ),
     "pl006_automation_owner_surface": (
         "tests/test_rule_engine_service.py",
@@ -48,6 +49,9 @@ SUITES: dict[str, tuple[str, ...]] = {
         "tests/test_ui_script_console_panel.py",
         "tests/test_ui_data_tools_panel.py",
         "tests/test_ui_network_tools_panel.py",
+        "tests/test_ui_register_monitor_panel.py",
+        "tests/test_modbus_rtu_workflow_acceptance.py",
+        "tests/test_modbus_tcp_workflow_acceptance.py",
         "tests/test_ui_main_window.py",
     ),
 }

@@ -36,5 +36,5 @@ def test_data_tools_panel_runs_selected_tool(qapp: QApplication) -> None:
     qapp.processEvents()
 
     assert panel.output_text.toPlainText() == "UHJvdG9MaW5r"
-    assert "No live transport session is required" in panel.notice_label.text()
+    assert "不依赖实时传输" in panel.notice_label.text()
     panel.close()

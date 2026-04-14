@@ -14,6 +14,7 @@ from protolink.core.mqtt_server_profiles import (
 )
 from protolink.core.transport import ConnectionState, TransportConfig, TransportKind, TransportRegistry
 from protolink.core.workspace import WorkspaceLayout
+from protolink.presentation import display_transport_name
 
 
 class MqttServerSendEncoding(StrEnum):
@@ -56,7 +57,7 @@ class MqttServerSessionService(MappedProfileSessionServiceBase[MqttServerSession
             event_bus,
             transport_kind=TransportKind.MQTT_SERVER,
             initial_snapshot=MqttServerSessionSnapshot(),
-            unknown_error_message="Unknown MQTT server error.",
+            unknown_error_message="MQTT 服务端出现未知异常。",
             profile_path=default_mqtt_server_profile_path(workspace.profiles),
             profile_loader=load_mqtt_server_profile,
             profile_saver=save_mqtt_server_profile,
@@ -72,10 +73,10 @@ class MqttServerSessionService(MappedProfileSessionServiceBase[MqttServerSession
         try:
             value = int(str(port).strip())
         except ValueError:
-            self._set_snapshot(last_error="MQTT server port must be an integer.")
+            self._set_snapshot(last_error="MQTT 服务端端口必须是整数。")
             return
         if not 1 <= value <= 65535:
-            self._set_snapshot(last_error="MQTT server port must be between 1 and 65535.")
+            self._set_snapshot(last_error="MQTT 服务端端口必须在 1 到 65535 之间。")
             return
         self._set_snapshot(port=value, last_error=None, selected_preset_name=None)
 
@@ -90,13 +91,13 @@ class MqttServerSessionService(MappedProfileSessionServiceBase[MqttServerSession
 
     def open_session(self) -> None:
         if not self._snapshot.host:
-            self._set_snapshot(last_error="Enter an MQTT server host before opening.")
+            self._set_snapshot(last_error="打开前请输入 MQTT 服务端主机地址。")
             return
 
         self._open_transport(
             TransportConfig(
                 kind=TransportKind.MQTT_SERVER,
-                name="MQTT Server",
+                name=display_transport_name(TransportKind.MQTT_SERVER),
                 target=self._target(),
                 options={},
             )
@@ -107,7 +108,7 @@ class MqttServerSessionService(MappedProfileSessionServiceBase[MqttServerSession
 
     def send_current_payload(self) -> None:
         if not self._snapshot.publish_topic:
-            self._set_snapshot(last_error="Enter a publish topic before sending.")
+            self._set_snapshot(last_error="发送前请输入发布主题。")
             return
 
         try:
@@ -119,7 +120,7 @@ class MqttServerSessionService(MappedProfileSessionServiceBase[MqttServerSession
         self._send_payload(
             payload,
             {"topic": self._snapshot.publish_topic, "encoding": self._snapshot.send_mode.value},
-            not_connected_error="Open the MQTT server before sending.",
+            not_connected_error="发送前请先打开 MQTT 服务端。",
         )
 
     def _target(self) -> str:
@@ -127,7 +128,7 @@ class MqttServerSessionService(MappedProfileSessionServiceBase[MqttServerSession
 
     def _encode_payload(self, text: str, mode: MqttServerSendEncoding) -> bytes:
         if not text.strip():
-            raise ValueError("Enter payload text before sending.")
+            raise ValueError("发送前请输入报文内容。")
 
         if mode == MqttServerSendEncoding.UTF8:
             return text.encode("utf-8")
@@ -135,8 +136,8 @@ class MqttServerSessionService(MappedProfileSessionServiceBase[MqttServerSession
             try:
                 return text.encode("ascii")
             except UnicodeEncodeError as exc:
-                raise ValueError("ASCII payload can only contain 7-bit ASCII characters.") from exc
+                raise ValueError("ASCII 报文只能包含 7 位 ASCII 字符。") from exc
         try:
             return bytes.fromhex(text)
         except ValueError as exc:
-            raise ValueError("HEX payload must contain complete hexadecimal bytes.") from exc
+            raise ValueError("HEX 报文必须由完整的十六进制字节组成。") from exc

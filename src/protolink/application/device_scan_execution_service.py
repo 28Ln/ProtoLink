@@ -75,15 +75,15 @@ class DeviceScanExecutionService:
     def execute_scan(self, config: DeviceScanConfig, target_transport_kind: TransportKind) -> None:
         target = self._targets.get(target_transport_kind)
         if target is None:
-            self._set_snapshot(last_error=f"Device scan target '{target_transport_kind.value}' is not registered.")
+            self._set_snapshot(last_error=f"设备扫描目标“{target_transport_kind.value}”未注册。")
             return
         if not hasattr(target, "is_connected") or not target.is_connected():
-            self._set_snapshot(last_error=f"Device scan target '{target_transport_kind.value}' is not connected.")
+            self._set_snapshot(last_error=f"设备扫描目标“{target_transport_kind.value}”未连接。")
             return
 
         requests = build_device_scan_requests(config)
         if not requests:
-            self._set_snapshot(last_error="Device scan request set is empty.")
+            self._set_snapshot(last_error="设备扫描请求集为空。")
             return
 
         self._active_config = config
@@ -123,12 +123,12 @@ class DeviceScanExecutionService:
                 dispatched += 1
                 self._set_snapshot(dispatched_requests=dispatched)
         except Exception as exc:
-            self._set_snapshot(running=False, last_error=f"Device scan dispatch failed: {exc}")
+            self._set_snapshot(running=False, last_error=f"设备扫描下发失败：{exc}")
 
     def finalize_current_scan(self) -> DeviceScanSummary | None:
         config = self._active_config
         if config is None:
-            self._set_snapshot(last_error="No device scan is active.")
+            self._set_snapshot(last_error="当前没有正在执行的设备扫描。")
             return None
 
         summary = build_device_scan_summary(config, tuple(self._outcomes_by_unit.values()))
@@ -149,7 +149,7 @@ class DeviceScanExecutionService:
             return
         if entry.category != "transport.message" or not entry.raw_payload:
             return
-        if not entry.message.lower().startswith("inbound "):
+        if not _is_inbound_entry(entry):
             return
         if self._active_config is None or self._active_target_kind is None:
             return
@@ -211,3 +211,11 @@ def _target_selected_peer(target: object) -> str | None:
     snapshot = getattr(target, "snapshot", None)
     peer = getattr(snapshot, "selected_client_peer", None)
     return peer if isinstance(peer, str) and peer else None
+
+
+def _is_inbound_entry(entry: StructuredLogEntry) -> bool:
+    direction = str(entry.metadata.get("direction", "")).lower()
+    if direction:
+        return direction == "inbound"
+    message = entry.message.lower()
+    return message.startswith("inbound ") or message.startswith("入站")

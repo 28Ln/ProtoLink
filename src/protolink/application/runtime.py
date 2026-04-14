@@ -29,7 +29,7 @@ class AsyncTaskRunner:
 
     def submit(self, coroutine: Any) -> Future[Any]:
         if self._loop is None:
-            raise RuntimeError("Async task runner is not ready.")
+            raise RuntimeError("异步任务执行器尚未就绪。")
         return asyncio.run_coroutine_threadsafe(coroutine, self._loop)
 
     def shutdown(self) -> None:

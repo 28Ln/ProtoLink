@@ -15,12 +15,13 @@ from protolink.core.transport import (
     TransportKind,
     TransportSession,
 )
+from protolink.presentation import display_transport_name
 
 
 def _default_tcp_server_descriptor() -> TransportDescriptor:
     return TransportDescriptor(
         kind=TransportKind.TCP_SERVER,
-        display_name="TCP Server",
+        display_name=display_transport_name(TransportKind.TCP_SERVER),
         capabilities=TransportCapabilities(can_listen=True, can_accept_clients=True, supports_binary_payloads=True),
     )
 
@@ -45,11 +46,11 @@ class TcpServerConnectionSettings:
 def parse_tcp_server_target(target: str) -> tuple[str, int]:
     host, separator, port_text = target.strip().rpartition(":")
     if separator != ":" or not host or not port_text:
-        raise ValueError("TCP server target must use the format host:port.")
+        raise ValueError("TCP 服务端目标必须使用 host:port 格式。")
 
     port = int(port_text)
     if not 0 <= port <= 65535:
-        raise ValueError("TCP server port must be between 0 and 65535.")
+        raise ValueError("TCP 服务端端口必须在 0 到 65535 之间。")
     return host, port
 
 
@@ -64,7 +65,7 @@ class TcpServerTransportAdapter(TransportAdapter):
 
     async def open(self, config: TransportConfig) -> None:
         if self._server is not None:
-            raise RuntimeError("TCP server transport is already open.")
+            raise RuntimeError("TCP 服务端传输已打开。")
 
         settings = TcpServerConnectionSettings.from_transport_config(config)
         self.bind_session(config)
@@ -117,7 +118,7 @@ class TcpServerTransportAdapter(TransportAdapter):
 
     async def send(self, payload: bytes, metadata: Mapping[str, str] | None = None) -> None:
         if self._server is None:
-            raise RuntimeError("TCP server transport is not open.")
+            raise RuntimeError("TCP 服务端传输未打开。")
 
         outbound_metadata = dict(metadata or {})
         outbound_metadata.setdefault("client_count", str(len(self._client_writers)))
@@ -129,7 +130,7 @@ class TcpServerTransportAdapter(TransportAdapter):
             try:
                 writers = [(target_peer, self._client_writers[target_peer])]
             except KeyError as exc:
-                raise RuntimeError(f"TCP server client '{target_peer}' is not connected.") from exc
+                raise RuntimeError(f"TCP 服务端客户端“{target_peer}”未连接。") from exc
         else:
             writers = list(self._client_writers.items())
             outbound_metadata.setdefault("peer", "broadcast")
@@ -196,7 +197,7 @@ class TcpServerTransportAdapter(TransportAdapter):
         peer = writer.get_extra_info("peername")
         if isinstance(peer, tuple) and len(peer) >= 2:
             return f"{peer[0]}:{peer[1]}"
-        return "unknown"
+        return "未知"
 
     def _sync_bound_target(self) -> None:
         if self._server is None or self._session is None or not self._server.sockets:

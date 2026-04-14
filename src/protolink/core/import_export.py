@@ -106,9 +106,9 @@ def resolve_artifact_kind(value: str) -> ArtifactKind:
     except ValueError as exc:
         supported = ", ".join(kind.value for kind in ArtifactKind)
         raise ProtoLinkUserError(
-            f"Unsupported export kind '{value}'.",
-            action="create export scaffold",
-            recovery=f"Choose one of: {supported}.",
+            f"不支持的导出类型“{value}”。",
+            action="创建导出骨架",
+            recovery=f"请从以下类型中选择：{supported}。",
         ) from exc
 
 
@@ -123,9 +123,9 @@ def materialize_export_bundle(plan: ExportBundlePlan, payload: bytes = b"") -> d
 def materialize_export_bundle_from_file(plan: ExportBundlePlan, source_file: Path) -> dict[str, str]:
     if not source_file.exists() or not source_file.is_file():
         raise ProtoLinkUserError(
-            f"Source file '{source_file}' was not found.",
-            action="export workspace artifact",
-            recovery="Generate the runtime artifact first and retry the export.",
+            f"未找到源文件“{source_file}”。",
+            action="导出工作区产物",
+            recovery="请先生成运行期产物后再重试导出。",
         )
     plan.bundle_dir.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source_file, plan.payload_file)
@@ -138,16 +138,16 @@ def materialize_export_bundle_from_file(plan: ExportBundlePlan, source_file: Pat
 def find_latest_artifact_file(source_dir: Path) -> Path:
     if not source_dir.exists():
         raise ProtoLinkUserError(
-            f"Source directory '{source_dir}' does not exist.",
-            action="locate workspace artifact",
-            recovery="Initialize the workspace artifact directory and retry.",
+            f"源目录“{source_dir}”不存在。",
+            action="定位工作区产物",
+            recovery="请先初始化工作区产物目录后再重试。",
         )
     candidates = [path for path in source_dir.iterdir() if path.is_file()]
     if not candidates:
         raise ProtoLinkUserError(
-            f"No exportable artifacts were found under '{source_dir}'.",
-            action="locate workspace artifact",
-            recovery="Generate at least one runtime artifact before exporting.",
+            f"目录“{source_dir}”下没有可导出的产物。",
+            action="定位工作区产物",
+            recovery="请至少生成一个运行期产物后再导出。",
         )
     return max(candidates, key=lambda path: path.stat().st_mtime)
 
@@ -230,9 +230,9 @@ def materialize_release_bundle(
 def package_release_bundle(bundle_dir: Path) -> Path:
     if not bundle_dir.exists() or not bundle_dir.is_dir():
         raise ProtoLinkUserError(
-            f"Release bundle directory '{bundle_dir}' was not found.",
-            action="package release bundle",
-            recovery="Generate the release bundle first and retry.",
+            f"未找到发布包目录“{bundle_dir}”。",
+            action="打包发布包",
+            recovery="请先生成发布包目录后再重试。",
         )
     archive_path = bundle_dir.parent / f"{bundle_dir.name}.zip"
     if archive_path.exists():
@@ -246,20 +246,20 @@ def normalize_export_extension(extension: str) -> str:
     value = extension.strip()
     if not value:
         raise ProtoLinkUserError(
-            "Export extension is required.",
-            action="build export plan",
-            recovery="Provide a file suffix such as .json or .bin.",
+            "导出扩展名不能为空。",
+            action="构建导出计划",
+            recovery="请提供文件后缀，例如 .json 或 .bin。",
         )
     if any(separator in value for separator in ("/", "\\")):
         raise ProtoLinkUserError(
-            "Export extension cannot contain path separators.",
-            action="build export plan",
-            recovery="Use only the file suffix, for example .json.",
+            "导出扩展名不能包含路径分隔符。",
+            action="构建导出计划",
+            recovery="请仅填写文件后缀，例如 .json。",
         )
     if value == ".":
         raise ProtoLinkUserError(
-            "Export extension must include a file suffix.",
-            action="build export plan",
-            recovery="Provide a suffix such as .json or .bin.",
+            "导出扩展名必须包含文件后缀。",
+            action="构建导出计划",
+            recovery="请提供后缀，例如 .json 或 .bin。",
         )
     return value if value.startswith(".") else f".{value}"

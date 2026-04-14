@@ -14,6 +14,7 @@ from protolink.core.serial_profiles import (
 )
 from protolink.core.transport import ConnectionState, TransportConfig, TransportKind, TransportRegistry
 from protolink.core.workspace import WorkspaceLayout
+from protolink.presentation import display_transport_name
 from protolink.transports.serial import SerialPortSummary, list_serial_ports
 
 
@@ -65,7 +66,7 @@ class SerialSessionService(MappedProfileSessionServiceBase[SerialSessionSnapshot
             event_bus,
             transport_kind=TransportKind.SERIAL,
             initial_snapshot=SerialSessionSnapshot(),
-            unknown_error_message="Unknown serial transport error.",
+            unknown_error_message="串口传输出现未知异常。",
             profile_path=default_serial_studio_profile_path(workspace.profiles),
             profile_loader=load_serial_studio_profile,
             profile_saver=save_serial_studio_profile,
@@ -89,7 +90,7 @@ class SerialSessionService(MappedProfileSessionServiceBase[SerialSessionSnapshot
         try:
             value = int(str(baudrate).strip())
         except ValueError:
-            self._set_snapshot(last_error="Baudrate must be an integer.")
+            self._set_snapshot(last_error="波特率必须是整数。")
             return
         self._set_snapshot(baudrate=value, last_error=None, selected_preset_name=None)
 
@@ -104,13 +105,13 @@ class SerialSessionService(MappedProfileSessionServiceBase[SerialSessionSnapshot
 
     def open_session(self) -> None:
         if not self._snapshot.target:
-            self._set_snapshot(last_error="Select or enter a serial target before opening.")
+            self._set_snapshot(last_error="打开前请先选择或输入串口目标。")
             return
 
         self._open_transport(
             TransportConfig(
                 kind=TransportKind.SERIAL,
-                name="Serial Studio",
+                name=display_transport_name(TransportKind.SERIAL),
                 target=self._snapshot.target,
                 options={"baudrate": self._snapshot.baudrate},
             )
@@ -121,7 +122,7 @@ class SerialSessionService(MappedProfileSessionServiceBase[SerialSessionSnapshot
 
     def send_current_payload(self) -> None:
         if self._adapter is None or self._snapshot.connection_state != ConnectionState.CONNECTED:
-            self._set_snapshot(last_error="Open the serial session before sending.")
+            self._set_snapshot(last_error="发送前请先打开串口会话。")
             return
 
         try:
@@ -133,12 +134,12 @@ class SerialSessionService(MappedProfileSessionServiceBase[SerialSessionSnapshot
         self._send_payload(
             payload,
             {"encoding": self._snapshot.send_mode.value},
-            not_connected_error="Open the serial session before sending.",
+            not_connected_error="发送前请先打开串口会话。",
         )
 
     def _encode_payload(self, text: str, mode: SerialSendEncoding) -> bytes:
         if not text.strip():
-            raise ValueError("Enter payload text before sending.")
+            raise ValueError("发送前请输入报文内容。")
         payload: bytes
         if mode == SerialSendEncoding.UTF8:
             payload = text.encode("utf-8")
@@ -146,12 +147,12 @@ class SerialSessionService(MappedProfileSessionServiceBase[SerialSessionSnapshot
             try:
                 payload = text.encode("ascii")
             except UnicodeEncodeError as exc:
-                raise ValueError("ASCII payload can only contain 7-bit ASCII characters.") from exc
+                raise ValueError("ASCII 报文只能包含 7 位 ASCII 字符。") from exc
         else:
             try:
                 payload = bytes.fromhex(text)
             except ValueError as exc:
-                raise ValueError("HEX payload must contain complete hexadecimal bytes.") from exc
+                raise ValueError("HEX 报文必须由完整的十六进制字节组成。") from exc
         return payload + self._line_ending_bytes(self._snapshot.line_ending)
 
     def _line_ending_bytes(self, line_ending: SerialLineEnding) -> bytes:

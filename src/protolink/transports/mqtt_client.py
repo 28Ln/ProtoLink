@@ -16,12 +16,13 @@ from protolink.core.transport import (
     TransportDescriptor,
     TransportKind,
 )
+from protolink.presentation import display_transport_name
 
 
 def _default_mqtt_client_descriptor() -> TransportDescriptor:
     return TransportDescriptor(
         kind=TransportKind.MQTT_CLIENT,
-        display_name="MQTT Client",
+        display_name=display_transport_name(TransportKind.MQTT_CLIENT),
         capabilities=TransportCapabilities(supports_topics=True, supports_binary_payloads=True, supports_tls=True),
     )
 
@@ -50,11 +51,11 @@ class MqttClientConnectionSettings:
 def parse_mqtt_client_target(target: str) -> tuple[str, int]:
     host, separator, port_text = target.strip().rpartition(":")
     if separator != ":" or not host or not port_text:
-        raise ValueError("MQTT client target must use the format host:port.")
+        raise ValueError("MQTT 客户端目标必须使用 host:port 格式。")
 
     port = int(port_text)
     if not 1 <= port <= 65535:
-        raise ValueError("MQTT client port must be between 1 and 65535.")
+        raise ValueError("MQTT 客户端端口必须在 1 到 65535 之间。")
     return host, port
 
 
@@ -70,7 +71,7 @@ class MqttClientTransportAdapter(TransportAdapter):
 
     async def open(self, config: TransportConfig) -> None:
         if self._client is not None:
-            raise RuntimeError("MQTT client transport is already open.")
+            raise RuntimeError("MQTT 客户端传输已打开。")
 
         settings = MqttClientConnectionSettings.from_transport_config(config)
         self.bind_session(config)
@@ -97,7 +98,7 @@ class MqttClientTransportAdapter(TransportAdapter):
             client.loop_start()
             await asyncio.wait_for(self._open_future, timeout=settings.open_timeout)
         except Exception:
-            self.emit_error("MQTT connection failed.")
+            self.emit_error("MQTT 连接失败。")
             if self._open_future is not None and not self._open_future.done():
                 self._open_future.cancel()
             await self.close()
@@ -134,7 +135,7 @@ class MqttClientTransportAdapter(TransportAdapter):
         message_metadata = dict(metadata or {})
         topic = message_metadata.get("topic")
         if not topic:
-            raise RuntimeError("MQTT publish requires a topic in metadata.")
+            raise RuntimeError("MQTT 发布需要在 metadata 中提供 topic。")
 
         self.emit_message(MessageDirection.OUTBOUND, payload, message_metadata)
         info = client.publish(topic, payload=payload, qos=int(message_metadata.get("qos", "0") or 0))
@@ -145,7 +146,7 @@ class MqttClientTransportAdapter(TransportAdapter):
     async def subscribe(self, topic: str, qos: int = 0) -> None:
         client = self._require_client()
         if self._loop is None:
-            raise RuntimeError("MQTT client loop is not ready.")
+            raise RuntimeError("MQTT 客户端循环尚未就绪。")
         result, mid = client.subscribe(topic, qos=qos)
         if result != mqtt.MQTT_ERR_SUCCESS:
             raise RuntimeError(mqtt.error_string(result))
@@ -156,7 +157,7 @@ class MqttClientTransportAdapter(TransportAdapter):
 
     def _require_client(self) -> mqtt.Client:
         if self._client is None:
-            raise RuntimeError("MQTT client transport is not open.")
+            raise RuntimeError("MQTT 客户端传输未打开。")
         return self._client
 
     def _on_connect(
@@ -188,7 +189,7 @@ class MqttClientTransportAdapter(TransportAdapter):
             return
 
         def fail_open() -> None:
-            message = "MQTT connection failed."
+            message = "MQTT 连接失败。"
             self.emit_error(message)
             if self._open_future is not None and not self._open_future.done():
                 self._open_future.set_exception(RuntimeError(message))

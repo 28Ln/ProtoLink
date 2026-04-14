@@ -111,13 +111,13 @@ class RawPacketComposerState:
             try:
                 return text.encode("ascii")
             except UnicodeEncodeError as exc:
-                raise ValueError("ASCII payload can only contain 7-bit ASCII characters.") from exc
+                raise ValueError("ASCII 报文只能包含 7 位 ASCII 字符。") from exc
         if not text.strip():
             return b""
         try:
             return bytes.fromhex(text)
         except ValueError as exc:
-            raise ValueError("HEX payload must contain complete hexadecimal bytes.") from exc
+            raise ValueError("HEX 报文必须由完整的十六进制字节组成。") from exc
 
     def _line_ending_bytes(self, line_ending: RawPacketLineEnding) -> bytes:
         return {

@@ -21,6 +21,7 @@ from protolink.application.tcp_client_service import (
     TcpClientSessionSnapshot,
 )
 from protolink.core.transport import ConnectionState
+from protolink.ui.text import CURRENT_DRAFT_TEXT, READY_TEXT, connection_state_text
 
 
 class TcpClientPanel(QWidget):
@@ -44,7 +45,7 @@ class TcpClientPanel(QWidget):
         frame_layout.setSpacing(10)
 
         header_layout = QHBoxLayout()
-        title = QLabel("TCP Client Controls")
+        title = QLabel("TCP 客户端")
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
@@ -65,53 +66,53 @@ class TcpClientPanel(QWidget):
         self.port_input.valueChanged.connect(self._on_port_changed)
 
         self.mode_combo = QComboBox()
-        self.mode_combo.addItem("HEX", TcpClientSendEncoding.HEX.value)
-        self.mode_combo.addItem("ASCII", TcpClientSendEncoding.ASCII.value)
-        self.mode_combo.addItem("UTF-8", TcpClientSendEncoding.UTF8.value)
+        self.mode_combo.addItem("十六进制（HEX）", TcpClientSendEncoding.HEX.value)
+        self.mode_combo.addItem("ASCII 文本", TcpClientSendEncoding.ASCII.value)
+        self.mode_combo.addItem("UTF-8 文本", TcpClientSendEncoding.UTF8.value)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
 
         self.line_ending_combo = QComboBox()
-        self.line_ending_combo.addItem("None", TcpClientLineEnding.NONE.value)
+        self.line_ending_combo.addItem("无", TcpClientLineEnding.NONE.value)
         self.line_ending_combo.addItem("CR", TcpClientLineEnding.CR.value)
         self.line_ending_combo.addItem("LF", TcpClientLineEnding.LF.value)
         self.line_ending_combo.addItem("CRLF", TcpClientLineEnding.CRLF.value)
         self.line_ending_combo.currentIndexChanged.connect(self._on_line_ending_changed)
 
         self.preset_combo = QComboBox()
-        self.preset_combo.addItem("Current Draft", None)
+        self.preset_combo.addItem(CURRENT_DRAFT_TEXT, None)
         self.preset_combo.currentIndexChanged.connect(self._on_preset_selected)
 
         self.preset_name_input = QLineEdit()
-        self.preset_name_input.setPlaceholderText("Preset name")
+        self.preset_name_input.setPlaceholderText("预设名称")
 
-        self.open_button = QPushButton("Open")
+        self.open_button = QPushButton("连接")
         self.open_button.clicked.connect(self.service.open_session)
-        self.close_button = QPushButton("Close")
+        self.close_button = QPushButton("断开")
         self.close_button.clicked.connect(self.service.close_session)
-        self.send_button = QPushButton("Send")
+        self.send_button = QPushButton("发送")
         self.send_button.clicked.connect(self.service.send_current_payload)
-        self.save_preset_button = QPushButton("Save Preset")
+        self.save_preset_button = QPushButton("保存预设")
         self.save_preset_button.clicked.connect(self._on_save_preset)
-        self.delete_preset_button = QPushButton("Delete Preset")
+        self.delete_preset_button = QPushButton("删除预设")
         self.delete_preset_button.clicked.connect(self._on_delete_preset)
 
         self.send_text = QTextEdit()
-        self.send_text.setPlaceholderText("HEX: 01 03 00 01\nASCII: PING\nUTF-8: hello 世界")
+        self.send_text.setPlaceholderText("十六进制：01 03 00 01\nASCII：PING\nUTF-8：hello 世界")
         self.send_text.textChanged.connect(self._on_send_text_changed)
 
         self.error_label = QLabel()
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
-        grid.addWidget(QLabel("Host"), 0, 0)
+        grid.addWidget(QLabel("主机"), 0, 0)
         grid.addWidget(self.host_input, 0, 1, 1, 2)
-        grid.addWidget(QLabel("Port"), 0, 3)
+        grid.addWidget(QLabel("端口"), 0, 3)
         grid.addWidget(self.port_input, 0, 4)
-        grid.addWidget(QLabel("Send Mode"), 1, 0)
+        grid.addWidget(QLabel("发送模式"), 1, 0)
         grid.addWidget(self.mode_combo, 1, 1)
-        grid.addWidget(QLabel("Line Ending"), 1, 2)
+        grid.addWidget(QLabel("行结束符"), 1, 2)
         grid.addWidget(self.line_ending_combo, 1, 3)
-        grid.addWidget(QLabel("Preset"), 2, 0)
+        grid.addWidget(QLabel("预设"), 2, 0)
         grid.addWidget(self.preset_combo, 2, 1)
         grid.addWidget(self.preset_name_input, 2, 2)
         grid.addWidget(self.save_preset_button, 2, 3)
@@ -122,7 +123,7 @@ class TcpClientPanel(QWidget):
 
         frame_layout.addLayout(header_layout)
         frame_layout.addLayout(grid)
-        frame_layout.addWidget(QLabel("Payload"))
+        frame_layout.addWidget(QLabel("帧负载"))
         frame_layout.addWidget(self.send_text)
         frame_layout.addWidget(self.error_label)
         layout.addWidget(frame)
@@ -140,11 +141,13 @@ class TcpClientPanel(QWidget):
         finally:
             self._syncing_controls = False
 
-        state_label = snapshot.connection_state.value.upper()
+        state_label = connection_state_text(ConnectionState(snapshot.connection_state))
         session_label = snapshot.active_session_id[:8] if snapshot.active_session_id else "-"
-        preset_label = snapshot.selected_preset_name or "draft"
-        self.status_label.setText(f"State: {state_label}    Session: {session_label}    Preset: {preset_label}")
-        self.error_label.setText(snapshot.last_error or "Ready.")
+        preset_label = snapshot.selected_preset_name or CURRENT_DRAFT_TEXT
+        self.status_label.setText(
+            f"状态: {state_label}    会话: {session_label}    预设: {preset_label}"
+        )
+        self.error_label.setText(snapshot.last_error or READY_TEXT)
 
         is_connected = snapshot.connection_state == ConnectionState.CONNECTED
         is_busy = snapshot.connection_state == ConnectionState.CONNECTING
@@ -227,7 +230,7 @@ class TcpClientPanel(QWidget):
         if current_data != desired_data:
             self.preset_combo.blockSignals(True)
             self.preset_combo.clear()
-            self.preset_combo.addItem("Current Draft", None)
+            self.preset_combo.addItem(CURRENT_DRAFT_TEXT, None)
             for preset_name in snapshot.preset_names:
                 self.preset_combo.addItem(preset_name, preset_name)
             self.preset_combo.blockSignals(False)

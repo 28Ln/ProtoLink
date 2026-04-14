@@ -14,6 +14,7 @@ from protolink.core.tcp_client_profiles import (
 )
 from protolink.core.transport import ConnectionState, TransportConfig, TransportKind, TransportRegistry
 from protolink.core.workspace import WorkspaceLayout
+from protolink.presentation import display_transport_name
 
 
 class TcpClientSendEncoding(StrEnum):
@@ -63,7 +64,7 @@ class TcpClientSessionService(MappedProfileSessionServiceBase[TcpClientSessionSn
             event_bus,
             transport_kind=TransportKind.TCP_CLIENT,
             initial_snapshot=TcpClientSessionSnapshot(),
-            unknown_error_message="Unknown TCP client error.",
+            unknown_error_message="TCP 客户端出现未知异常。",
             profile_path=default_tcp_client_profile_path(workspace.profiles),
             profile_loader=load_tcp_client_profile,
             profile_saver=save_tcp_client_profile,
@@ -79,10 +80,10 @@ class TcpClientSessionService(MappedProfileSessionServiceBase[TcpClientSessionSn
         try:
             value = int(str(port).strip())
         except ValueError:
-            self._set_snapshot(last_error="TCP port must be an integer.")
+            self._set_snapshot(last_error="TCP 端口必须是整数。")
             return
         if not 1 <= value <= 65535:
-            self._set_snapshot(last_error="TCP port must be between 1 and 65535.")
+            self._set_snapshot(last_error="TCP 端口必须在 1 到 65535 之间。")
             return
         self._set_snapshot(port=value, last_error=None, selected_preset_name=None)
 
@@ -97,13 +98,13 @@ class TcpClientSessionService(MappedProfileSessionServiceBase[TcpClientSessionSn
 
     def open_session(self) -> None:
         if not self._snapshot.host:
-            self._set_snapshot(last_error="Enter a TCP host before opening.")
+            self._set_snapshot(last_error="打开前请输入 TCP 主机地址。")
             return
 
         self._open_transport(
             TransportConfig(
                 kind=TransportKind.TCP_CLIENT,
-                name="TCP Client",
+                name=display_transport_name(TransportKind.TCP_CLIENT),
                 target=self._target(),
                 options={"connect_timeout": 3.0},
             )
@@ -114,7 +115,7 @@ class TcpClientSessionService(MappedProfileSessionServiceBase[TcpClientSessionSn
 
     def send_current_payload(self) -> None:
         if self._adapter is None or self._snapshot.connection_state != ConnectionState.CONNECTED:
-            self._set_snapshot(last_error="Open the TCP client session before sending.")
+            self._set_snapshot(last_error="发送前请先打开 TCP 客户端会话。")
             return
 
         try:
@@ -129,7 +130,7 @@ class TcpClientSessionService(MappedProfileSessionServiceBase[TcpClientSessionSn
                 "encoding": self._snapshot.send_mode.value,
                 "line_ending": self._snapshot.line_ending.value,
             },
-            not_connected_error="Open the TCP client session before sending.",
+            not_connected_error="发送前请先打开 TCP 客户端会话。",
         )
 
     def _target(self) -> str:
@@ -142,7 +143,7 @@ class TcpClientSessionService(MappedProfileSessionServiceBase[TcpClientSessionSn
         line_ending: TcpClientLineEnding,
     ) -> bytes:
         if not text.strip():
-            raise ValueError("Enter payload text before sending.")
+            raise ValueError("发送前请输入报文内容。")
 
         if mode == TcpClientSendEncoding.UTF8:
             payload = text.encode("utf-8")
@@ -150,12 +151,12 @@ class TcpClientSessionService(MappedProfileSessionServiceBase[TcpClientSessionSn
             try:
                 payload = text.encode("ascii")
             except UnicodeEncodeError as exc:
-                raise ValueError("ASCII payload can only contain 7-bit ASCII characters.") from exc
+                raise ValueError("ASCII 报文只能包含 7 位 ASCII 字符。") from exc
         else:
             try:
                 payload = bytes.fromhex(text)
             except ValueError as exc:
-                raise ValueError("HEX payload must contain complete hexadecimal bytes.") from exc
+                raise ValueError("HEX 报文必须由完整的十六进制字节组成。") from exc
 
         return payload + {
             TcpClientLineEnding.NONE: b"",

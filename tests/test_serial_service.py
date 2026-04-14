@@ -47,7 +47,7 @@ def test_serial_session_service_requires_open_session_before_send(tmp_path: Path
 
     service.send_current_payload()
 
-    assert "Open the serial session before sending." == service.snapshot.last_error
+    assert "发送前请先打开串口会话。" == service.snapshot.last_error
     service.shutdown()
 
 
@@ -60,7 +60,7 @@ def test_serial_session_service_surfaces_open_errors_in_snapshot_and_logs(tmp_pa
     _wait_until(lambda: service.snapshot.connection_state == ConnectionState.ERROR)
 
     assert service.snapshot.last_error is not None
-    assert service.snapshot.last_error.startswith("Open failed:")
+    assert service.snapshot.last_error.startswith("打开失败：")
     assert any(entry.category == "transport.error" for entry in context.log_store.latest(10))
     service.shutdown()
 

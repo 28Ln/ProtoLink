@@ -60,7 +60,7 @@ def test_tcp_client_service_surfaces_open_errors(tmp_path: Path) -> None:
     _wait_until(lambda: service.snapshot.connection_state == ConnectionState.ERROR)
 
     assert service.snapshot.last_error is not None
-    assert service.snapshot.last_error.startswith("Open failed:")
+    assert service.snapshot.last_error.startswith("打开失败：")
     assert any(entry.category == "transport.error" for entry in context.log_store.latest(10))
     service.shutdown()
 

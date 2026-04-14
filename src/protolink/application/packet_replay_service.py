@@ -67,21 +67,21 @@ class PacketReplayExecutionService:
 
     def execute_plan(self, plan: PacketReplayPlan, target_kind: TransportKind) -> None:
         if self._snapshot.running:
-            self._set_snapshot(last_error="A replay job is already running.")
+            self._set_snapshot(last_error="当前已有回放任务正在执行。")
             return
 
         target = self._targets.get(target_kind)
         if target is None:
-            self._set_snapshot(last_error=f"Replay target '{target_kind.value}' is not registered.")
+            self._set_snapshot(last_error=f"回放目标“{target_kind.value}”未注册。")
             return
         if not target.is_connected():
-            self._set_snapshot(last_error=f"Replay target '{target_kind.value}' is not connected.")
+            self._set_snapshot(last_error=f"回放目标“{target_kind.value}”未连接。")
             return
 
         target_steps = self._select_target_steps(plan, target_kind)
         if not target_steps:
             self._set_snapshot(
-                last_error=f"No replay steps matched target '{target_kind.value}' in plan '{plan.name}'.",
+                last_error=f"回放计划“{plan.name}”中没有匹配目标“{target_kind.value}”的步骤。",
             )
             return
 
@@ -138,11 +138,11 @@ class PacketReplayExecutionService:
             current_target_session_id = _target_active_session_id(target)
             if current_target_session_id != self._snapshot.target_session_id:
                 if current_target_session_id is not None or self._snapshot.target_session_id is not None:
-                    raise RuntimeError("Replay target session changed during execution.")
+                    raise RuntimeError("回放执行期间目标会话已变更。")
             current_target_peer = _target_selected_peer(target)
             if current_target_peer != self._snapshot.target_peer:
                 if current_target_peer is not None or self._snapshot.target_peer is not None:
-                    raise RuntimeError("Replay target peer changed during execution.")
+                    raise RuntimeError("回放执行期间目标对端已变更。")
 
             metadata = {
                 **dict(step.metadata),
@@ -171,7 +171,7 @@ class PacketReplayExecutionService:
         except Exception as exc:
             self._set_snapshot(
                 running=False,
-                last_error=f"Replay execution failed: {exc}",
+                last_error=f"回放执行失败：{exc}",
                 finished_at=datetime.now(UTC),
             )
             return

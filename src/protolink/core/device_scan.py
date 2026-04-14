@@ -154,12 +154,12 @@ def evaluate_device_scan_response(
         if not parsed.is_frame:
             return DeviceScanOutcome(expected_unit_id, reachable=False, error=parsed.summary)
         if not parsed.crc_ok:
-            return DeviceScanOutcome(expected_unit_id, reachable=False, error="CRC mismatch.")
+            return DeviceScanOutcome(expected_unit_id, reachable=False, error="CRC 校验不匹配。")
         if parsed.address != expected_unit_id:
             return DeviceScanOutcome(
                 expected_unit_id,
                 reachable=False,
-                error=f"Unit ID mismatch: expected {expected_unit_id}, got {parsed.address}.",
+                error=f"单元 ID 不匹配：期望 {expected_unit_id}，实际 {parsed.address}。",
             )
         if parsed.kind == ModbusRtuFrameKind.EXCEPTION:
             code = parsed.data[0] if parsed.data else None
@@ -173,7 +173,7 @@ def evaluate_device_scan_response(
         return DeviceScanOutcome(
             expected_unit_id,
             reachable=False,
-            error=f"Unit ID mismatch: expected {expected_unit_id}, got {parsed.unit_id}.",
+            error=f"单元 ID 不匹配：期望 {expected_unit_id}，实际 {parsed.unit_id}。",
         )
     if parsed.kind == ModbusTcpFrameKind.EXCEPTION:
         code = parsed.data[0] if parsed.data else None

@@ -28,7 +28,7 @@ def test_network_tools_panel_runs_resolve_and_probe(qapp: QApplication) -> None:
     panel = NetworkToolsPanel(service)
     assert panel.notice_label is panel.read_only_notice
     assert panel.notice_label.wordWrap() is True
-    assert "Runs: 0" in panel.status_label.text()
+    assert "执行次数: 0" in panel.status_label.text()
     assert panel.resolve_button.isEnabled() is True
     assert panel.probe_button.isEnabled() is True
     with TcpEchoServer() as server:
@@ -46,6 +46,6 @@ def test_network_tools_panel_runs_resolve_and_probe(qapp: QApplication) -> None:
         panel.probe_button.click()
         qapp.processEvents()
         assert panel.resolve_text.toPlainText()
-        assert "reachable" in panel.probe_label.text().lower()
-        assert "Read-only diagnostics only" in panel.notice_label.text()
+        assert "reachable" in panel.probe_label.text().lower() or "可达" in panel.probe_label.text()
+        assert "只读诊断面板" in panel.notice_label.text()
     panel.close()

@@ -40,7 +40,7 @@ def test_register_monitor_service_validates_point_and_register_inputs() -> None:
         scale=1.0,
         offset=0.0,
     )
-    assert service.snapshot.last_error == "Point name is required."
+    assert service.snapshot.last_error == "点位名称不能为空。"
 
     service.upsert_point(
         name="Counter",
@@ -56,7 +56,7 @@ def test_register_monitor_service_validates_point_and_register_inputs() -> None:
 
     service.set_register_words_text("xyz")
     service.decode_current_words()
-    assert service.snapshot.last_error == "Invalid register word 'xyz'."
+    assert service.snapshot.last_error == "寄存器字“xyz”无效。"
 
 
 def test_register_monitor_service_decodes_live_modbus_tcp_and_rtu_entries() -> None:
@@ -81,7 +81,7 @@ def test_register_monitor_service_decodes_live_modbus_tcp_and_rtu_entries() -> N
         )
     )
     assert service.snapshot.decoded_value == "42 rpm"
-    assert service.snapshot.last_live_source == "modbus_tcp"
+    assert service.snapshot.last_live_source == "Modbus TCP 响应"
 
     rtu_body = bytes([0x01, 0x03, 0x02, 0x00, 0x2B])
     event_bus.publish(
@@ -93,7 +93,7 @@ def test_register_monitor_service_decodes_live_modbus_tcp_and_rtu_entries() -> N
         )
     )
     assert service.snapshot.decoded_value == "43 rpm"
-    assert service.snapshot.last_live_source == "modbus_rtu"
+    assert service.snapshot.last_live_source == "Modbus RTU 响应"
 
 
 def test_register_monitor_service_filters_live_updates_by_bound_session_scope() -> None:

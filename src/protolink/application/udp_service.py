@@ -8,6 +8,7 @@ from protolink.core.event_bus import EventBus
 from protolink.core.udp_profiles import UdpDraft, UdpPreset, default_udp_profile_path, load_udp_profile, save_udp_profile
 from protolink.core.transport import ConnectionState, TransportConfig, TransportKind, TransportRegistry
 from protolink.core.workspace import WorkspaceLayout
+from protolink.presentation import display_transport_name
 
 
 class UdpSendEncoding(StrEnum):
@@ -61,7 +62,7 @@ class UdpSessionService(MappedProfileSessionServiceBase[UdpSessionSnapshot, UdpD
             event_bus,
             transport_kind=TransportKind.UDP,
             initial_snapshot=UdpSessionSnapshot(),
-            unknown_error_message="Unknown UDP transport error.",
+            unknown_error_message="UDP 传输出现未知异常。",
             profile_path=default_udp_profile_path(workspace.profiles),
             profile_loader=load_udp_profile,
             profile_saver=save_udp_profile,
@@ -77,10 +78,10 @@ class UdpSessionService(MappedProfileSessionServiceBase[UdpSessionSnapshot, UdpD
         try:
             value = int(str(port).strip())
         except ValueError:
-            self._set_snapshot(last_error="UDP local port must be an integer.")
+            self._set_snapshot(last_error="UDP 本地端口必须是整数。")
             return
         if not 0 <= value <= 65535:
-            self._set_snapshot(last_error="UDP local port must be between 0 and 65535.")
+            self._set_snapshot(last_error="UDP 本地端口必须在 0 到 65535 之间。")
             return
         self._set_snapshot(local_port=value, last_error=None, selected_preset_name=None)
 
@@ -91,10 +92,10 @@ class UdpSessionService(MappedProfileSessionServiceBase[UdpSessionSnapshot, UdpD
         try:
             value = int(str(port).strip())
         except ValueError:
-            self._set_snapshot(last_error="UDP remote port must be an integer.")
+            self._set_snapshot(last_error="UDP 远端端口必须是整数。")
             return
         if not 0 <= value <= 65535:
-            self._set_snapshot(last_error="UDP remote port must be between 0 and 65535.")
+            self._set_snapshot(last_error="UDP 远端端口必须在 0 到 65535 之间。")
             return
         self._set_snapshot(remote_port=value, last_error=None, selected_preset_name=None)
 
@@ -109,13 +110,13 @@ class UdpSessionService(MappedProfileSessionServiceBase[UdpSessionSnapshot, UdpD
 
     def open_session(self) -> None:
         if not self._snapshot.local_host:
-            self._set_snapshot(last_error="Enter a UDP local host before opening.")
+            self._set_snapshot(last_error="打开前请输入 UDP 本地主机地址。")
             return
 
         self._open_transport(
             TransportConfig(
                 kind=TransportKind.UDP,
-                name="UDP Lab",
+                name=display_transport_name(TransportKind.UDP),
                 target=self._local_target(),
                 options={"remote_host": self._snapshot.remote_host, "remote_port": self._snapshot.remote_port},
             )
@@ -126,7 +127,7 @@ class UdpSessionService(MappedProfileSessionServiceBase[UdpSessionSnapshot, UdpD
 
     def send_current_payload(self) -> None:
         if not self._snapshot.remote_host:
-            self._set_snapshot(last_error="Enter a UDP remote host before sending.")
+            self._set_snapshot(last_error="发送前请输入 UDP 远端主机地址。")
             return
 
         try:
@@ -142,7 +143,7 @@ class UdpSessionService(MappedProfileSessionServiceBase[UdpSessionSnapshot, UdpD
                 "line_ending": self._snapshot.line_ending.value,
                 "peer": self._remote_target(),
             },
-            not_connected_error="Open the UDP transport before sending.",
+            not_connected_error="发送前请先打开 UDP 传输。",
         )
 
     def _local_target(self) -> str:
@@ -153,7 +154,7 @@ class UdpSessionService(MappedProfileSessionServiceBase[UdpSessionSnapshot, UdpD
 
     def _encode_payload(self, text: str, mode: UdpSendEncoding, line_ending: UdpLineEnding) -> bytes:
         if not text.strip():
-            raise ValueError("Enter payload text before sending.")
+            raise ValueError("发送前请输入报文内容。")
 
         if mode == UdpSendEncoding.UTF8:
             payload = text.encode("utf-8")
@@ -161,12 +162,12 @@ class UdpSessionService(MappedProfileSessionServiceBase[UdpSessionSnapshot, UdpD
             try:
                 payload = text.encode("ascii")
             except UnicodeEncodeError as exc:
-                raise ValueError("ASCII payload can only contain 7-bit ASCII characters.") from exc
+                raise ValueError("ASCII 报文只能包含 7 位 ASCII 字符。") from exc
         else:
             try:
                 payload = bytes.fromhex(text)
             except ValueError as exc:
-                raise ValueError("HEX payload must contain complete hexadecimal bytes.") from exc
+                raise ValueError("HEX 报文必须由完整的十六进制字节组成。") from exc
 
         return payload + {
             UdpLineEnding.NONE: b"",

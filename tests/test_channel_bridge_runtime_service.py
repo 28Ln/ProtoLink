@@ -175,7 +175,7 @@ def test_channel_bridge_runtime_service_applies_script_transform_and_rejects_inv
             )
         )
         _wait_until(lambda: service.snapshot.last_error is not None)
-        assert service.snapshot.last_error == "Bridge 'Invalid Loop' cannot bridge a transport kind to itself."
+        assert service.snapshot.last_error == "桥接“Invalid Loop”不能在同一种传输类型之间回环。"
     finally:
         service.shutdown()
 
@@ -220,7 +220,7 @@ def test_channel_bridge_runtime_service_logs_script_and_send_failures() -> None:
             )
         )
         _wait_until(lambda: service.snapshot.last_error is not None)
-        assert service.snapshot.last_error == "Bridge 'Broken Script' script failed: boom"
+        assert service.snapshot.last_error == "桥接“Broken Script”脚本失败：boom"
 
         event_bus.publish(
             create_log_entry(
@@ -231,12 +231,12 @@ def test_channel_bridge_runtime_service_logs_script_and_send_failures() -> None:
                 raw_payload=b"PONG",
             )
         )
-        _wait_until(lambda: any(entry.message == "Bridge 'Send Failure' send failed: bridge sink offline" for entry in captured))
+        _wait_until(lambda: any(entry.message == "桥接“Send Failure”发送失败：bridge sink offline" for entry in captured))
 
         error_entries = [entry for entry in captured if entry.category == "automation.channel_bridge.error"]
         assert [entry.message for entry in error_entries] == [
-            "Bridge 'Broken Script' script failed: boom",
-            "Bridge 'Send Failure' send failed: bridge sink offline",
+            "桥接“Broken Script”脚本失败：boom",
+            "桥接“Send Failure”发送失败：bridge sink offline",
         ]
         assert error_entries[0].metadata == {
             "bridge_name": "Broken Script",
@@ -301,9 +301,9 @@ def test_channel_bridge_runtime_service_preserves_script_failures_during_host_st
         _wait_until(lambda: service.snapshot.last_error is not None)
 
         assert observed_timeouts and observed_timeouts[0] > BRIDGE_SCRIPT_TIMEOUT_SECONDS
-        assert service.snapshot.last_error == "Bridge 'Broken Script' script failed: boom"
+        assert service.snapshot.last_error == "桥接“Broken Script”脚本失败：boom"
         assert any(
-            entry.message == "Bridge 'Broken Script' script failed: boom"
+            entry.message == "桥接“Broken Script”脚本失败：boom"
             for entry in captured
             if entry.category == "automation.channel_bridge.error"
         )
@@ -372,8 +372,8 @@ def test_channel_bridge_runtime_service_times_out_scripts_without_blocking_publi
         allow_timeout.set()
         _wait_until(lambda: any(entry.category == "automation.channel_bridge.error" for entry in captured))
 
-        assert "timed out" in (service.snapshot.last_error or "")
-        assert any("timed out" in entry.message for entry in captured if entry.category == "automation.channel_bridge.error")
+        assert "超时" in (service.snapshot.last_error or "")
+        assert any("超时" in entry.message for entry in captured if entry.category == "automation.channel_bridge.error")
     finally:
         service.shutdown()
 

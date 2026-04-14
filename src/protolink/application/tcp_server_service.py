@@ -14,6 +14,7 @@ from protolink.core.tcp_server_profiles import (
 )
 from protolink.core.transport import ConnectionState, MessageDirection, TransportConfig, TransportEvent, TransportEventType, TransportKind, TransportRegistry
 from protolink.core.workspace import WorkspaceLayout
+from protolink.presentation import display_transport_name
 
 
 class TcpServerSendEncoding(StrEnum):
@@ -61,7 +62,7 @@ class TcpServerSessionService(MappedProfileSessionServiceBase[TcpServerSessionSn
             event_bus,
             transport_kind=TransportKind.TCP_SERVER,
             initial_snapshot=TcpServerSessionSnapshot(),
-            unknown_error_message="Unknown TCP server error.",
+            unknown_error_message="TCP 服务端出现未知异常。",
             profile_path=default_tcp_server_profile_path(workspace.profiles),
             profile_loader=load_tcp_server_profile,
             profile_saver=save_tcp_server_profile,
@@ -77,10 +78,10 @@ class TcpServerSessionService(MappedProfileSessionServiceBase[TcpServerSessionSn
         try:
             value = int(str(port).strip())
         except ValueError:
-            self._set_snapshot(last_error="TCP server port must be an integer.")
+            self._set_snapshot(last_error="TCP 服务端端口必须是整数。")
             return
         if not 0 <= value <= 65535:
-            self._set_snapshot(last_error="TCP server port must be between 0 and 65535.")
+            self._set_snapshot(last_error="TCP 服务端端口必须在 0 到 65535 之间。")
             return
         self._set_snapshot(port=value, last_error=None, selected_preset_name=None)
 
@@ -98,13 +99,13 @@ class TcpServerSessionService(MappedProfileSessionServiceBase[TcpServerSessionSn
 
     def open_session(self) -> None:
         if not self._snapshot.host:
-            self._set_snapshot(last_error="Enter a TCP server host before opening.")
+            self._set_snapshot(last_error="打开前请输入 TCP 服务端主机地址。")
             return
 
         self._open_transport(
             TransportConfig(
                 kind=TransportKind.TCP_SERVER,
-                name="TCP Server",
+                name=display_transport_name(TransportKind.TCP_SERVER),
                 target=self._target(),
                 options={"read_size": 4096},
             )
@@ -115,14 +116,14 @@ class TcpServerSessionService(MappedProfileSessionServiceBase[TcpServerSessionSn
 
     def send_current_payload(self) -> None:
         if self._snapshot.client_count <= 0:
-            self._set_snapshot(last_error="No TCP clients are connected.")
+            self._set_snapshot(last_error="当前没有已连接的 TCP 客户端。")
             return
         if self._adapter is None or self._snapshot.connection_state != ConnectionState.CONNECTED:
-            self._set_snapshot(last_error="Open the TCP server before sending.")
+            self._set_snapshot(last_error="发送前请先打开 TCP 服务端。")
             return
 
         if self._snapshot.selected_client_peer and self._snapshot.selected_client_peer not in self._snapshot.connected_clients:
-            self._set_snapshot(last_error=f"TCP client '{self._snapshot.selected_client_peer}' is no longer connected.")
+            self._set_snapshot(last_error=f"TCP 客户端“{self._snapshot.selected_client_peer}”已断开连接。")
             return
 
         try:
@@ -139,7 +140,7 @@ class TcpServerSessionService(MappedProfileSessionServiceBase[TcpServerSessionSn
                 "client_count": str(self._snapshot.client_count),
                 "peer": self._snapshot.selected_client_peer or "broadcast",
             },
-            not_connected_error="Open the TCP server before sending.",
+            not_connected_error="发送前请先打开 TCP 服务端。",
         )
 
     def _target(self) -> str:
@@ -183,7 +184,7 @@ class TcpServerSessionService(MappedProfileSessionServiceBase[TcpServerSessionSn
         line_ending: TcpServerLineEnding,
     ) -> bytes:
         if not text.strip():
-            raise ValueError("Enter payload text before sending.")
+            raise ValueError("发送前请输入报文内容。")
 
         if mode == TcpServerSendEncoding.UTF8:
             payload = text.encode("utf-8")
@@ -191,12 +192,12 @@ class TcpServerSessionService(MappedProfileSessionServiceBase[TcpServerSessionSn
             try:
                 payload = text.encode("ascii")
             except UnicodeEncodeError as exc:
-                raise ValueError("ASCII payload can only contain 7-bit ASCII characters.") from exc
+                raise ValueError("ASCII 报文只能包含 7 位 ASCII 字符。") from exc
         else:
             try:
                 payload = bytes.fromhex(text)
             except ValueError as exc:
-                raise ValueError("HEX payload must contain complete hexadecimal bytes.") from exc
+                raise ValueError("HEX 报文必须由完整的十六进制字节组成。") from exc
 
         return payload + {
             TcpServerLineEnding.NONE: b"",

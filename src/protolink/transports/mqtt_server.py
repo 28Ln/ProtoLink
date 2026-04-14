@@ -19,12 +19,13 @@ from protolink.core.transport import (
     TransportDescriptor,
     TransportKind,
 )
+from protolink.presentation import display_transport_name
 
 
 def _default_mqtt_server_descriptor() -> TransportDescriptor:
     return TransportDescriptor(
         kind=TransportKind.MQTT_SERVER,
-        display_name="MQTT Server",
+        display_name=display_transport_name(TransportKind.MQTT_SERVER),
         capabilities=TransportCapabilities(
             can_listen=True,
             can_accept_clients=True,
@@ -58,11 +59,11 @@ class MqttServerConnectionSettings:
 def parse_mqtt_server_target(target: str) -> tuple[str, int]:
     host, separator, port_text = target.strip().rpartition(":")
     if separator != ":" or not host or not port_text:
-        raise ValueError("MQTT server target must use the format host:port.")
+        raise ValueError("MQTT 服务端目标必须使用 host:port 格式。")
 
     port = int(port_text)
     if not 1 <= port <= 65535:
-        raise ValueError("MQTT server port must be between 1 and 65535.")
+        raise ValueError("MQTT 服务端端口必须在 1 到 65535 之间。")
     return host, port
 
 
@@ -80,7 +81,7 @@ class MqttServerTransportAdapter(TransportAdapter):
 
     async def open(self, config: TransportConfig) -> None:
         if self._broker is not None or self._client is not None:
-            raise RuntimeError("MQTT server transport is already open.")
+            raise RuntimeError("MQTT 服务端传输已打开。")
 
         settings = MqttServerConnectionSettings.from_transport_config(config)
         self._settings = settings
@@ -117,7 +118,7 @@ class MqttServerTransportAdapter(TransportAdapter):
             await asyncio.wait_for(self._subscribe_future, timeout=settings.open_timeout)
             self.emit_state(ConnectionState.CONNECTED)
         except Exception:
-            self.emit_error("MQTT broker startup failed.")
+            self.emit_error("MQTT 服务端启动失败。")
             await self.close()
             raise
 
@@ -161,7 +162,7 @@ class MqttServerTransportAdapter(TransportAdapter):
         outbound_metadata = dict(metadata or {})
         topic = outbound_metadata.get("topic")
         if not topic:
-            raise RuntimeError("MQTT broker publish requires a topic in metadata.")
+            raise RuntimeError("MQTT 服务端发布需要在 metadata 中提供 topic。")
 
         self.emit_message(MessageDirection.OUTBOUND, payload, outbound_metadata)
         info = client.publish(topic, payload=payload, qos=int(outbound_metadata.get("qos", "0") or 0))
@@ -169,14 +170,14 @@ class MqttServerTransportAdapter(TransportAdapter):
             raise RuntimeError(mqtt.error_string(info.rc))
         await asyncio.to_thread(info.wait_for_publish)
         if not info.is_published():
-            raise RuntimeError("MQTT broker publish did not complete.")
+            raise RuntimeError("MQTT 服务端发布未完成。")
 
     async def _ensure_connected(self) -> None:
         client = self._require_client()
         settings = self._settings
         loop = self._loop
         if settings is None or loop is None:
-            raise RuntimeError("MQTT server transport is not ready.")
+            raise RuntimeError("MQTT 服务端传输尚未就绪。")
         if client.is_connected():
             return
 
@@ -190,7 +191,7 @@ class MqttServerTransportAdapter(TransportAdapter):
 
     def _require_client(self) -> mqtt.Client:
         if self._client is None:
-            raise RuntimeError("MQTT server transport is not open.")
+            raise RuntimeError("MQTT 服务端传输未打开。")
         return self._client
 
     def _on_connect(

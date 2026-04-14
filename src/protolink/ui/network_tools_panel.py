@@ -36,15 +36,15 @@ class NetworkToolsPanel(QWidget):
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(8)
 
-        title = QLabel("Network Tools")
+        title = QLabel("网络诊断")
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
-        self.notice_label = QLabel("Read-only diagnostics only. No network/system write operations are exposed.")
+        self.notice_label = QLabel("只读诊断面板，禁止任何网络或系统写入操作。")
         self.notice_label.setObjectName("MetaLabel")
         self.notice_label.setWordWrap(True)
         self.read_only_notice = self.notice_label
-        self.local_info_button = QPushButton("Refresh Local Info")
+        self.local_info_button = QPushButton("刷新本地信息")
         self.local_info_button.clicked.connect(self.service.refresh_local_info)
         self.host_input = QLineEdit()
         self.target_host_input = self.host_input
@@ -53,9 +53,9 @@ class NetworkToolsPanel(QWidget):
         self.target_port_spin = self.port_spin
         self.port_spin.setRange(1, 65535)
         self.port_spin.valueChanged.connect(self._on_target_port_changed)
-        self.resolve_button = QPushButton("Resolve Host")
+        self.resolve_button = QPushButton("解析主机")
         self.resolve_button.clicked.connect(self.service.resolve_target)
-        self.probe_button = QPushButton("Probe TCP")
+        self.probe_button = QPushButton("TCP 探测")
         self.probe_button.clicked.connect(self.service.probe_tcp)
         self.local_text = QTextEdit()
         self.local_text.setReadOnly(True)
@@ -73,19 +73,19 @@ class NetworkToolsPanel(QWidget):
         grid.addWidget(self.status_label, 0, 2, 1, 2)
         grid.addWidget(self.notice_label, 1, 0, 1, 4)
         grid.addWidget(self.local_info_button, 2, 3)
-        grid.addWidget(QLabel("Target Host"), 3, 0)
+        grid.addWidget(QLabel("目标主机"), 3, 0)
         grid.addWidget(self.host_input, 3, 1, 1, 2)
-        grid.addWidget(QLabel("Port"), 3, 3)
+        grid.addWidget(QLabel("端口"), 3, 3)
         grid.addWidget(self.port_spin, 3, 4)
         grid.addWidget(self.resolve_button, 4, 3)
         grid.addWidget(self.probe_button, 4, 4)
-        grid.addWidget(QLabel("Local Info"), 5, 0)
+        grid.addWidget(QLabel("本地信息"), 5, 0)
         grid.addWidget(self.local_text, 5, 1, 1, 4)
-        grid.addWidget(QLabel("Resolved Addresses"), 6, 0)
+        grid.addWidget(QLabel("解析结果"), 6, 0)
         grid.addWidget(self.resolve_text, 6, 1, 1, 4)
-        grid.addWidget(QLabel("Probe Result"), 7, 0)
+        grid.addWidget(QLabel("探测结果"), 7, 0)
         grid.addWidget(self.probe_label, 7, 1, 1, 4)
-        grid.addWidget(QLabel("Error"), 8, 0)
+        grid.addWidget(QLabel("错误"), 8, 0)
         grid.addWidget(self.error_label, 8, 1, 1, 4)
 
         layout.addWidget(frame)
@@ -99,11 +99,11 @@ class NetworkToolsPanel(QWidget):
         finally:
             self._syncing = False
 
-        self.status_label.setText(f"Runs: {snapshot.execution_count}    Host: {snapshot.local_hostname or '-'}")
+        self.status_label.setText(f"执行次数: {snapshot.execution_count}    主机: {snapshot.local_hostname or '-'}")
         self.local_text.setPlainText("\n".join(snapshot.local_ip_addresses))
         self.resolve_text.setPlainText("\n".join(snapshot.resolved_ip_addresses))
         self.probe_label.setText(snapshot.tcp_probe_summary or "-")
-        self.error_label.setText(snapshot.last_error or "Ready.")
+        self.error_label.setText(snapshot.last_error or "准备就绪")
         self._refresh_action_state(snapshot)
 
     def _on_target_host_changed(self) -> None:

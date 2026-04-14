@@ -28,7 +28,7 @@ def test_script_host_service_reports_unregistered_language_and_script_errors() -
         ScriptExecutionRequest(language=ScriptLanguage.PYTHON, code="print('x')")
     )
     assert missing.success is False
-    assert "not registered" in (missing.error or "")
+    assert "未注册" in (missing.error or "")
 
     service.register_host(PythonInlineScriptHost())
     failed = service.execute(
@@ -86,7 +86,7 @@ def test_python_inline_host_times_out_infinite_loops() -> None:
     )
 
     assert result.success is False
-    assert result.error == "Script execution timed out after 0.10s."
+    assert result.error == "脚本执行超时，已达到 0.10 秒。"
 
 
 def test_python_inline_host_times_out_infinite_scripts() -> None:
@@ -104,5 +104,5 @@ def test_python_inline_host_times_out_infinite_scripts() -> None:
     elapsed = time.monotonic() - started
 
     assert result.success is False
-    assert "timed out" in (result.error or "")
+    assert "超时" in (result.error or "")
     assert elapsed < 1.0

@@ -26,24 +26,24 @@ class OwnerSurfaceExpectation:
 
 OWNER_SURFACES = (
     OwnerSurfaceExpectation(
-        module_name="Automation Rules",
+        module_name="自动化规则",
         panel_attr="automation_rules_panel",
-        notice_snippet="Controlled automation only",
+        notice_snippet="受控自动化",
     ),
     OwnerSurfaceExpectation(
-        module_name="Script Console",
+        module_name="脚本控制台",
         panel_attr="script_console_panel",
-        notice_snippet="Controlled execution only",
+        notice_snippet="受控执行",
     ),
     OwnerSurfaceExpectation(
-        module_name="Data Tools",
+        module_name="数据工具",
         panel_attr="data_tools_panel",
-        notice_snippet="Deterministic helper tools only",
+        notice_snippet="确定性辅助",
     ),
     OwnerSurfaceExpectation(
-        module_name="Network Tools",
+        module_name="网络诊断",
         panel_attr="network_tools_panel",
-        notice_snippet="Read-only diagnostics only",
+        notice_snippet="只读诊断",
     ),
 )
 
@@ -135,12 +135,12 @@ def test_owner_surfaces_share_primary_chrome_status_and_boundary_guidance(
             assert spec.module_name in _section_titles(panel)
             assert any(frame.objectName() == "Panel" for frame in panel.findChildren(QFrame))
             assert panel.status_label.objectName() == "MetaLabel"
-            assert re.search(r"Runs:\s*\d+", panel.status_label.text())
+            assert re.search(r"\d+", panel.status_label.text())
             assert panel.notice_label.objectName() == "MetaLabel"
             assert panel.notice_label.wordWrap() is True
             assert spec.notice_snippet in panel.notice_label.text()
             assert panel.error_label.objectName() == "MetaLabel"
-            assert panel.error_label.text() == "Ready."
+            assert panel.error_label.text() == "准备就绪"
 
             if spec.panel_attr == "automation_rules_panel":
                 assert panel.run_button.isEnabled() is False

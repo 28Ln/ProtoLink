@@ -69,12 +69,26 @@ def _create_fake_runtime_bundle(root: Path) -> tuple[Path, Path]:
     site_packages = root / "site-packages-src"
     (runtime_root / "DLLs").mkdir(parents=True)
     (runtime_root / "Lib" / "encodings").mkdir(parents=True)
+    (runtime_root / "Lib" / "test").mkdir(parents=True)
     (site_packages / "demo_pkg").mkdir(parents=True)
+    (site_packages / "pytest").mkdir(parents=True)
+    (site_packages / "_pytest").mkdir(parents=True)
+    (site_packages / "iniconfig").mkdir(parents=True)
+    (site_packages / "tests").mkdir(parents=True)
+    (site_packages / "pytest-8.4.2.dist-info").mkdir(parents=True)
     for file_name in ("python.exe", "pythonw.exe", "python3.dll", "python311.dll", "vcruntime140.dll", "vcruntime140_1.dll"):
         (runtime_root / file_name).write_bytes(b"runtime")
     (runtime_root / "DLLs" / "libcrypto-3.dll").write_bytes(b"dll")
     (runtime_root / "Lib" / "encodings" / "__init__.py").write_text("# encodings\n", encoding="utf-8")
+    (runtime_root / "Lib" / "test" / "support.py").write_text("# test support\n", encoding="utf-8")
     (site_packages / "demo_pkg" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
+    (site_packages / "pytest" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
+    (site_packages / "_pytest" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
+    (site_packages / "iniconfig" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
+    (site_packages / "tests" / "__init__.py").write_text("__all__ = []\n", encoding="utf-8")
+    (site_packages / "pytest-8.4.2.dist-info" / "METADATA").write_text("Name: pytest\n", encoding="utf-8")
+    (site_packages / "__editable__.protolink-0.1.0.pth").write_text("D:/Project_2026/ProtoLink/src\n", encoding="utf-8")
+    (site_packages / "demo.egg-link").write_text("D:/Project_2026/ProtoLink/src\n", encoding="utf-8")
     return runtime_root, site_packages
 
 
@@ -171,8 +185,16 @@ def test_materialize_portable_package_copies_release_archive_and_metadata(tmp_pa
     assert "runtime/python.exe" in names
     assert "runtime/pythonw.exe" in names
     assert "runtime/Lib/encodings/__init__.py" in names
+    assert "runtime/Lib/test/support.py" not in names
     assert "sp/demo_pkg/__init__.py" in names
     assert "sp/protolink/__init__.py" in names
+    assert "sp/pytest/__init__.py" not in names
+    assert "sp/_pytest/__init__.py" not in names
+    assert "sp/iniconfig/__init__.py" not in names
+    assert "sp/tests/__init__.py" not in names
+    assert "sp/pytest-8.4.2.dist-info/METADATA" not in names
+    assert "sp/__editable__.protolink-0.1.0.pth" not in names
+    assert "sp/demo.egg-link" not in names
     assert "INSTALL.ps1" in names
     assert "Launch-ProtoLink.ps1" in names
     assert "Launch-ProtoLink.bat" in names

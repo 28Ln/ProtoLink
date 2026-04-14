@@ -9,10 +9,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6.QtWidgets")
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDockWidget, QLabel
 
 from protolink.core.bootstrap import bootstrap_app_context
 from protolink.core.packet_inspector import PacketInspectorState
+from protolink.presentation import APPLICATION_TITLE
 from protolink.ui.main_window import ProtoLinkMainWindow
 
 
@@ -51,68 +53,77 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     dock = window.findChild(QDockWidget, "PacketInspectorDock")
 
     assert dock is not None
-    assert dock.windowTitle() == "Packet Inspector"
+    assert dock.windowTitle() == "报文分析台"
     assert dock.widget() is window.packet_console
     labels = [label.text() for label in window.findChildren(QLabel)]
     assert any("docs/MAINLINE_STATUS.md" in text for text in labels)
-    modbus_rtu_index = next(index for index, module in enumerate(window.modules) if module.name == "Modbus RTU Lab")
+    assert window.windowTitle() == APPLICATION_TITLE
+    assert window.windowFlags() & Qt.WindowType.FramelessWindowHint
+    assert window.title_bar.context_label.text() == "工作台总览"
+    assert window.title_bar.maximize_button.text() == "□"
+    modbus_rtu_index = next(index for index, module in enumerate(window.modules) if module.key == "modbus_rtu_lab")
     window.module_list.setCurrentRow(modbus_rtu_index)
     qapp.processEvents()
+    assert window.name_label.text() == "Modbus RTU 调试台"
+    assert window.title_bar.context_label.text() == "Modbus RTU 调试台"
     assert window.modbus_rtu_panel.isVisible() is True
     assert window.serial_panel.isVisible() is False
-    tcp_index = next(index for index, module in enumerate(window.modules) if module.name == "TCP Client")
+    tcp_index = next(index for index, module in enumerate(window.modules) if module.key == "tcp_client")
     window.module_list.setCurrentRow(tcp_index)
     qapp.processEvents()
+    assert window.name_label.text() == "TCP 客户端"
     assert window.tcp_client_panel.isVisible() is True
     assert window.modbus_rtu_panel.isVisible() is False
-    mqtt_index = next(index for index, module in enumerate(window.modules) if module.name == "MQTT Client")
+    mqtt_index = next(index for index, module in enumerate(window.modules) if module.key == "mqtt_client")
     window.module_list.setCurrentRow(mqtt_index)
     qapp.processEvents()
     assert window.mqtt_client_panel.isVisible() is True
     assert window.tcp_client_panel.isVisible() is False
-    mqtt_server_index = next(index for index, module in enumerate(window.modules) if module.name == "MQTT Server")
+    mqtt_server_index = next(index for index, module in enumerate(window.modules) if module.key == "mqtt_server")
     window.module_list.setCurrentRow(mqtt_server_index)
     qapp.processEvents()
     assert window.mqtt_server_panel.isVisible() is True
     assert window.mqtt_client_panel.isVisible() is False
-    modbus_tcp_index = next(index for index, module in enumerate(window.modules) if module.name == "Modbus TCP Lab")
+    modbus_tcp_index = next(index for index, module in enumerate(window.modules) if module.key == "modbus_tcp_lab")
     window.module_list.setCurrentRow(modbus_tcp_index)
     qapp.processEvents()
     assert window.modbus_tcp_panel.isVisible() is True
     assert window.mqtt_server_panel.isVisible() is False
-    tcp_server_index = next(index for index, module in enumerate(window.modules) if module.name == "TCP Server")
+    tcp_server_index = next(index for index, module in enumerate(window.modules) if module.key == "tcp_server")
     window.module_list.setCurrentRow(tcp_server_index)
     qapp.processEvents()
     assert window.tcp_server_panel.isVisible() is True
     assert window.modbus_tcp_panel.isVisible() is False
-    udp_index = next(index for index, module in enumerate(window.modules) if module.name == "UDP Lab")
+    udp_index = next(index for index, module in enumerate(window.modules) if module.key == "udp_lab")
     window.module_list.setCurrentRow(udp_index)
     qapp.processEvents()
     assert window.udp_panel.isVisible() is True
     assert window.tcp_server_panel.isVisible() is False
-    register_index = next(index for index, module in enumerate(window.modules) if module.name == "Register Monitor")
+    register_index = next(index for index, module in enumerate(window.modules) if module.key == "register_monitor")
     window.module_list.setCurrentRow(register_index)
     qapp.processEvents()
     assert window.register_monitor_panel.isVisible() is True
     assert window.udp_panel.isVisible() is False
-    automation_index = next(index for index, module in enumerate(window.modules) if module.name == "Automation Rules")
+    automation_index = next(index for index, module in enumerate(window.modules) if module.key == "automation_rules")
     window.module_list.setCurrentRow(automation_index)
     qapp.processEvents()
     assert window.automation_rules_panel.isVisible() is True
     assert window.register_monitor_panel.isVisible() is False
-    data_tools_index = next(index for index, module in enumerate(window.modules) if module.name == "Data Tools")
+    data_tools_index = next(index for index, module in enumerate(window.modules) if module.key == "data_tools")
     window.module_list.setCurrentRow(data_tools_index)
     qapp.processEvents()
     assert window.data_tools_panel.isVisible() is True
     assert window.automation_rules_panel.isVisible() is False
-    network_tools_index = next(index for index, module in enumerate(window.modules) if module.name == "Network Tools")
+    network_tools_index = next(index for index, module in enumerate(window.modules) if module.key == "network_tools")
     window.module_list.setCurrentRow(network_tools_index)
     qapp.processEvents()
+    assert window.name_label.text() == "网络诊断"
     assert window.network_tools_panel.isVisible() is True
     assert window.data_tools_panel.isVisible() is False
-    script_index = next(index for index, module in enumerate(window.modules) if module.name == "Script Console")
+    script_index = next(index for index, module in enumerate(window.modules) if module.key == "script_console")
     window.module_list.setCurrentRow(script_index)
     qapp.processEvents()
+    assert window.name_label.text() == "脚本控制台"
     assert window.script_console_panel is not None
     assert window.script_console_panel.isVisible() is True
     assert window.network_tools_panel.isVisible() is False

@@ -21,7 +21,7 @@ This repository now treats those projects as references only. The formal ProtoLi
 - `src/protolink/` contains the formal ProtoLink application shell
 - `docs/` contains the canonical current-state, project-status, backlog, mainline, architecture, archive, and validation documents
 - `TASKS.md` is now a legacy redirect stub; the canonical backlog lives under `docs/`
-- Current validation baseline: `uv run pytest -q` -> 263 passed on 2026-04-12
+- Current validation baseline: `uv run pytest -q` -> 274 passed on 2026-04-14
 - Current canonical mainline: `PL-011` carry-over dirty workspace reconciliation (`docs/MAINLINE_STATUS.md`)
 - Project-local CI lives in `.github/workflows/ci.yml` and now runs compileall, full pytest, canonical-truth verification, targeted regression suites, headless summary, UI smoke check, release preflight, release-staging verification via `scripts/verify_release_staging.py` (including portable/distribution/installer verify + install/uninstall), and `uv build`
 - Clean release-staging sign-off is now executable through `scripts/verify_release_staging.py`

@@ -86,7 +86,7 @@ def test_device_scan_execution_service_handles_rtu_and_connection_errors() -> No
     )
 
     service.execute_scan(config, TransportKind.SERIAL)
-    assert service.snapshot.last_error == "Device scan target 'serial' is not connected."
+    assert service.snapshot.last_error == "设备扫描目标“serial”未连接。"
 
     connected = _FakeScanTarget()
     service = DeviceScanExecutionService(event_bus, {TransportKind.SERIAL: connected})

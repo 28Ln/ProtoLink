@@ -1,6 +1,6 @@
 # ProtoLink Worktree Reconciliation
 
-Last rebuilt: 2026-04-12
+Last rebuilt: 2026-04-14
 
 ## Purpose
 
@@ -139,7 +139,7 @@ Until `PL-011` is closed:
 
 The reconciled stack is currently evidenced by:
 
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count 263`
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-011 --expected-pytest-count 274`
 - `uv run python scripts/run_targeted_regressions.py --suite all`
 - `uv run pytest -q`
 - `uv run protolink --headless-summary`

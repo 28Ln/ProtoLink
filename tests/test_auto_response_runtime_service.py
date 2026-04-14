@@ -137,10 +137,10 @@ def test_auto_response_runtime_service_logs_send_failures() -> None:
         )
     )
 
-    assert service.snapshot.last_error == "Auto response send failed: sink offline"
+    assert service.snapshot.last_error == "自动响应发送失败：sink offline"
     error_entries = [entry for entry in captured if entry.category == "automation.auto_response.error"]
     assert len(error_entries) == 1
-    assert error_entries[0].message == "Auto response send failed: sink offline"
+    assert error_entries[0].message == "自动响应发送失败：sink offline"
     assert error_entries[0].metadata == {
         "rule_name": "Ping Rule",
         "protocol": "raw_bytes",

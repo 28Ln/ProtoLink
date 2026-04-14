@@ -36,7 +36,7 @@ class _ReplayServiceStub:
 class _FailingReplayServiceStub(_ReplayServiceStub):
     def execute_saved_plan(self, path: Path | str, target_kind: TransportKind) -> None:
         self.calls.append((str(path), target_kind))
-        self.snapshot = _ReplaySnapshot(running=False, last_error="Replay execution failed: boom")
+        self.snapshot = _ReplaySnapshot(running=False, last_error="回放执行失败：boom")
         for listener in list(self._listeners):
             listener(self.snapshot)
 
@@ -70,7 +70,7 @@ def test_capture_replay_job_service_surfaces_missing_and_failed_jobs(tmp_path: P
     service = CaptureReplayJobService(replay_service)  # type: ignore[arg-type]
 
     service.run_job("Missing")
-    assert service.snapshot.last_error == "Replay job 'Missing' was not found."
+    assert service.snapshot.last_error == "未找到回放任务“Missing”。"
 
     replay_path = tmp_path / "demo.json"
     replay_path.write_text("{}", encoding="utf-8")
@@ -84,4 +84,4 @@ def test_capture_replay_job_service_surfaces_missing_and_failed_jobs(tmp_path: P
     service.run_job("Broken Replay")
 
     assert replay_service.calls == [(str(replay_path), TransportKind.UDP)]
-    assert service.snapshot.last_error == "Replay execution failed: boom"
+    assert service.snapshot.last_error == "回放执行失败：boom"

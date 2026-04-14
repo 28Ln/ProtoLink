@@ -35,23 +35,23 @@ class DataToolsPanel(QWidget):
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(8)
 
-        title = QLabel("Data Tools")
+        title = QLabel("数据工具")
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
-        self.notice_label = QLabel("Deterministic helper tools only. No live transport session is required.")
+        self.notice_label = QLabel("确定性辅助工具，仅提供格式转换与校验，不依赖实时传输。")
         self.notice_label.setObjectName("MetaLabel")
         self.notice_label.setWordWrap(True)
         self.mode_combo = QComboBox()
-        self.mode_combo.addItem("UTF-8 → HEX", DataToolMode.UTF8_TO_HEX)
-        self.mode_combo.addItem("HEX → UTF-8", DataToolMode.HEX_TO_UTF8)
-        self.mode_combo.addItem("HEX → Modbus CRC16", DataToolMode.HEX_MODBUS_CRC16)
-        self.mode_combo.addItem("Pretty JSON", DataToolMode.PRETTY_JSON)
-        self.mode_combo.addItem("UTF-8 → Base64", DataToolMode.UTF8_TO_BASE64)
+        self.mode_combo.addItem("UTF-8 → 十六进制", DataToolMode.UTF8_TO_HEX)
+        self.mode_combo.addItem("十六进制 → UTF-8", DataToolMode.HEX_TO_UTF8)
+        self.mode_combo.addItem("十六进制 → Modbus CRC16", DataToolMode.HEX_MODBUS_CRC16)
+        self.mode_combo.addItem("美化 JSON", DataToolMode.PRETTY_JSON)
+        self.mode_combo.addItem("UTF-8 → Base64 编码", DataToolMode.UTF8_TO_BASE64)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         self.input_text = QTextEdit()
         self.input_text.textChanged.connect(self._on_input_changed)
-        self.run_button = QPushButton("Run Tool")
+        self.run_button = QPushButton("运行工具")
         self.run_button.clicked.connect(self.service.run)
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
@@ -62,14 +62,14 @@ class DataToolsPanel(QWidget):
         grid.addWidget(title, 0, 0, 1, 2)
         grid.addWidget(self.status_label, 0, 2, 1, 2)
         grid.addWidget(self.notice_label, 1, 0, 1, 4)
-        grid.addWidget(QLabel("Tool"), 2, 0)
+        grid.addWidget(QLabel("工具"), 2, 0)
         grid.addWidget(self.mode_combo, 2, 1, 1, 3)
-        grid.addWidget(QLabel("Input"), 3, 0)
+        grid.addWidget(QLabel("输入"), 3, 0)
         grid.addWidget(self.input_text, 3, 1, 1, 3)
         grid.addWidget(self.run_button, 4, 3)
-        grid.addWidget(QLabel("Output"), 5, 0)
+        grid.addWidget(QLabel("输出"), 5, 0)
         grid.addWidget(self.output_text, 5, 1, 1, 3)
-        grid.addWidget(QLabel("Error"), 6, 0)
+        grid.addWidget(QLabel("错误"), 6, 0)
         grid.addWidget(self.error_label, 6, 1, 1, 3)
 
         layout.addWidget(frame)
@@ -85,11 +85,10 @@ class DataToolsPanel(QWidget):
         finally:
             self._syncing = False
 
-        self.status_label.setText(
-            f"Tool: {snapshot.selected_mode.value}    Runs: {snapshot.execution_count}"
-        )
+        selected_text = self.mode_combo.currentText() or snapshot.selected_mode.value
+        self.status_label.setText(f"模式: {selected_text}    运行次数: {snapshot.execution_count}")
         self.output_text.setPlainText(snapshot.output_text)
-        self.error_label.setText(snapshot.last_error or "Ready.")
+        self.error_label.setText(snapshot.last_error or "准备就绪")
         self.run_button.setEnabled(bool(snapshot.input_text.strip()))
 
     def _on_mode_changed(self) -> None:

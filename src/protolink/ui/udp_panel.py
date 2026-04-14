@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from protolink.application.udp_service import UdpLineEnding, UdpSendEncoding, UdpSessionService, UdpSessionSnapshot
 from protolink.core.transport import ConnectionState
+from protolink.ui.text import CURRENT_DRAFT_TEXT, READY_TEXT, connection_state_text
 
 
 class UdpPanel(QWidget):
@@ -39,7 +40,7 @@ class UdpPanel(QWidget):
         frame_layout.setSpacing(10)
 
         header_layout = QHBoxLayout()
-        title = QLabel("UDP Lab Controls")
+        title = QLabel("UDP 工作台")
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
@@ -68,57 +69,57 @@ class UdpPanel(QWidget):
         self.remote_port_input.valueChanged.connect(self._on_remote_port_changed)
 
         self.mode_combo = QComboBox()
-        self.mode_combo.addItem("HEX", UdpSendEncoding.HEX.value)
-        self.mode_combo.addItem("ASCII", UdpSendEncoding.ASCII.value)
-        self.mode_combo.addItem("UTF-8", UdpSendEncoding.UTF8.value)
+        self.mode_combo.addItem("十六进制（HEX）", UdpSendEncoding.HEX.value)
+        self.mode_combo.addItem("ASCII 文本", UdpSendEncoding.ASCII.value)
+        self.mode_combo.addItem("UTF-8 文本", UdpSendEncoding.UTF8.value)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
 
         self.line_ending_combo = QComboBox()
-        self.line_ending_combo.addItem("None", UdpLineEnding.NONE.value)
+        self.line_ending_combo.addItem("无", UdpLineEnding.NONE.value)
         self.line_ending_combo.addItem("CR", UdpLineEnding.CR.value)
         self.line_ending_combo.addItem("LF", UdpLineEnding.LF.value)
         self.line_ending_combo.addItem("CRLF", UdpLineEnding.CRLF.value)
         self.line_ending_combo.currentIndexChanged.connect(self._on_line_ending_changed)
 
         self.preset_combo = QComboBox()
-        self.preset_combo.addItem("Current Draft", None)
+        self.preset_combo.addItem(CURRENT_DRAFT_TEXT, None)
         self.preset_combo.currentIndexChanged.connect(self._on_preset_selected)
 
         self.preset_name_input = QLineEdit()
-        self.preset_name_input.setPlaceholderText("Preset name")
+        self.preset_name_input.setPlaceholderText("预设名称")
 
-        self.open_button = QPushButton("Open")
+        self.open_button = QPushButton("打开")
         self.open_button.clicked.connect(self.service.open_session)
-        self.close_button = QPushButton("Close")
+        self.close_button = QPushButton("关闭")
         self.close_button.clicked.connect(self.service.close_session)
-        self.send_button = QPushButton("Send")
+        self.send_button = QPushButton("发送")
         self.send_button.clicked.connect(self.service.send_current_payload)
-        self.save_preset_button = QPushButton("Save Preset")
+        self.save_preset_button = QPushButton("保存预设")
         self.save_preset_button.clicked.connect(self._on_save_preset)
-        self.delete_preset_button = QPushButton("Delete Preset")
+        self.delete_preset_button = QPushButton("删除预设")
         self.delete_preset_button.clicked.connect(self._on_delete_preset)
 
         self.send_text = QTextEdit()
-        self.send_text.setPlaceholderText("HEX: 01 03 00 01\nASCII: READY\nUTF-8: hello 世界")
+        self.send_text.setPlaceholderText("十六进制：01 03 00 01\nASCII：READY\nUTF-8：hello 世界")
         self.send_text.textChanged.connect(self._on_send_text_changed)
 
         self.error_label = QLabel()
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
-        grid.addWidget(QLabel("Local Host"), 0, 0)
+        grid.addWidget(QLabel("本地主机"), 0, 0)
         grid.addWidget(self.local_host_input, 0, 1)
-        grid.addWidget(QLabel("Local Port"), 0, 2)
+        grid.addWidget(QLabel("本地端口"), 0, 2)
         grid.addWidget(self.local_port_input, 0, 3)
-        grid.addWidget(QLabel("Remote Host"), 1, 0)
+        grid.addWidget(QLabel("远程主机"), 1, 0)
         grid.addWidget(self.remote_host_input, 1, 1)
-        grid.addWidget(QLabel("Remote Port"), 1, 2)
+        grid.addWidget(QLabel("远程端口"), 1, 2)
         grid.addWidget(self.remote_port_input, 1, 3)
-        grid.addWidget(QLabel("Send Mode"), 2, 0)
+        grid.addWidget(QLabel("发送模式"), 2, 0)
         grid.addWidget(self.mode_combo, 2, 1)
-        grid.addWidget(QLabel("Line Ending"), 2, 2)
+        grid.addWidget(QLabel("行结束符"), 2, 2)
         grid.addWidget(self.line_ending_combo, 2, 3)
-        grid.addWidget(QLabel("Preset"), 3, 0)
+        grid.addWidget(QLabel("预设"), 3, 0)
         grid.addWidget(self.preset_combo, 3, 1)
         grid.addWidget(self.preset_name_input, 3, 2)
         grid.addWidget(self.save_preset_button, 3, 3)
@@ -129,7 +130,7 @@ class UdpPanel(QWidget):
 
         frame_layout.addLayout(header_layout)
         frame_layout.addLayout(grid)
-        frame_layout.addWidget(QLabel("Payload"))
+        frame_layout.addWidget(QLabel("帧负载"))
         frame_layout.addWidget(self.send_text)
         frame_layout.addWidget(self.error_label)
         layout.addWidget(frame)
@@ -149,11 +150,13 @@ class UdpPanel(QWidget):
         finally:
             self._syncing_controls = False
 
-        state_label = snapshot.connection_state.value.upper()
+        state_label = connection_state_text(ConnectionState(snapshot.connection_state))
         session_label = snapshot.active_session_id[:8] if snapshot.active_session_id else "-"
-        preset_label = snapshot.selected_preset_name or "draft"
-        self.status_label.setText(f"State: {state_label}    Session: {session_label}    Preset: {preset_label}")
-        self.error_label.setText(snapshot.last_error or "Ready.")
+        preset_label = snapshot.selected_preset_name or CURRENT_DRAFT_TEXT
+        self.status_label.setText(
+            f"状态: {state_label}    会话: {session_label}    预设: {preset_label}"
+        )
+        self.error_label.setText(snapshot.last_error or READY_TEXT)
 
         is_connected = snapshot.connection_state == ConnectionState.CONNECTED
         is_busy = snapshot.connection_state == ConnectionState.CONNECTING
@@ -246,7 +249,7 @@ class UdpPanel(QWidget):
         if current_data != desired_data:
             self.preset_combo.blockSignals(True)
             self.preset_combo.clear()
-            self.preset_combo.addItem("Current Draft", None)
+            self.preset_combo.addItem(CURRENT_DRAFT_TEXT, None)
             for preset_name in snapshot.preset_names:
                 self.preset_combo.addItem(preset_name, preset_name)
             self.preset_combo.blockSignals(False)
