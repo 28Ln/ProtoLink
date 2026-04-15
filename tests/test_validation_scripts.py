@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import importlib
 import runpy
 import subprocess
 from pathlib import Path
@@ -328,3 +330,49 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
     assert Path(result['copied_artifacts']['portable_archive']).exists()
     assert result['verification']['installer']['checksum_matches'] is True
     assert result['install_smoke']['launch_script'] == 'Launch-ProtoLink.ps1'
+
+
+def test_parse_gui_audit_resolution_rejects_invalid_token() -> None:
+    ns = _load_script('audit_gui_layout.py')
+
+    with pytest.raises(ns['VerificationError'], match='WIDTHxHEIGHT'):
+        ns['_parse_resolution']('bad-resolution')
+
+
+def test_execute_gui_layout_audit_writes_json_and_artifacts(tmp_path: Path) -> None:
+    pytest.importorskip("PySide6.QtWidgets")
+    importlib.reload(subprocess)
+    ns = _load_script('audit_gui_layout.py')
+
+    execute = ns['execute_gui_layout_audit']
+    result = execute(
+        workspace=tmp_path / 'workspace',
+        output_dir=tmp_path / 'audit-output',
+        resolutions=[(1180, 760)],
+        module_keys=['dashboard', 'serial_studio'],
+        keep_artifacts=True,
+    )
+
+    json_file = Path(result['json_file'])
+    assert json_file.exists()
+    payload = json.loads(json_file.read_text(encoding='utf-8'))
+
+    assert payload['summary']['resolution_count'] == 1
+    assert payload['summary']['module_audit_count'] == 2
+    assert payload['summary']['screenshot_count'] >= 5
+    assert len(payload['resolution_results']) == 1
+    resolution_result = payload['resolution_results'][0]
+    assert resolution_result['resolution']['label'] == '1180x760'
+    assert 'window_metrics' in resolution_result
+    assert 'packet_console' in resolution_result
+    assert len(resolution_result['module_results']) == 2
+    assert Path(resolution_result['packet_console']['screenshot_file']).exists()
+
+    dashboard_result = next(item for item in resolution_result['module_results'] if item['module_key'] == 'dashboard')
+    serial_result = next(item for item in resolution_result['module_results'] if item['module_key'] == 'serial_studio')
+    assert Path(dashboard_result['screenshots']['window']).exists()
+    assert Path(dashboard_result['screenshots']['panel']).exists()
+    assert Path(serial_result['screenshots']['window']).exists()
+    assert Path(serial_result['screenshots']['panel']).exists()
+    assert 'overflow_summary' in serial_result
+    assert 'panel' in serial_result

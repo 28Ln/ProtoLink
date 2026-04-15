@@ -2,13 +2,15 @@
 
 ## 0.2.5 - 2026-04-15
 
-- raised full pytest baseline to `314 passed`
+- raised full pytest baseline to `315 passed`
 - reworked main window, packet console, complex protocol panels, and transport panels into tabbed/scrollable layouts
 - reduced default packet-console dock footprint and restored primary working-area height
 - added retry-tolerant authoritative full-suite execution for transient Windows UI test crashes
 - tightened hero, quick-navigation sidebar, and small-window context auto-collapse for better first-screen focus
 - made packet-console filters collapsed by default to reduce visual noise during normal operation
 - added `scripts/build_release_deliverables.py` to materialize deliverable archives into `dist/deliverables`
+- continued product-facing copy cleanup across dashboard, owner surfaces, Modbus pages, and transport drafts
+- added `scripts/audit_gui_layout.py` for formal offscreen GUI layout and screenshot auditing
 - added `scripts/run_full_test_suite.py` as the authoritative full-suite validation entry
 - moved CI full-suite truth to `run_full_test_suite.py`
 - added `scripts/verify_native_installer_lane.py` for end-to-end native installer lane validation

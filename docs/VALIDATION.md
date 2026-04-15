@@ -4,23 +4,25 @@ Last updated: 2026-04-15
 
 ## 当前验证基线
 
-- `uv run python scripts/run_full_test_suite.py` -> 314 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 314` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> 315 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 315` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
+- `uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
 - `python scripts/verify_dist_install.py --artifact-version 0.2.5` -> passed
 - `python scripts/run_soak_validation.py --cycles 2 --sleep-ms 0 --require-all-ready` -> passed
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
 - `uv run protolink --smoke-check` -> `smoke-check-ok`
-- 当前 full-suite 快照：`314 passed`
+- 当前 full-suite 快照：`315 passed`
 
 ## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 314
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 315
+uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest
 ```
 
 ## UI / owner-surface 相关验证
