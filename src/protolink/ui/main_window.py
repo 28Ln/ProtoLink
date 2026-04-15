@@ -64,8 +64,8 @@ from protolink.ui.udp_panel import UdpPanel
 
 
 WINDOW_EDGE_MARGIN = 6
-CONTENT_SPLITTER_DETAIL_WIDTH = 210
-PACKET_DOCK_TARGET_HEIGHT = 120
+CONTENT_SPLITTER_DETAIL_WIDTH = 200
+PACKET_DOCK_TARGET_HEIGHT = 110
 
 
 class WindowTitleBar(QFrame):
@@ -222,8 +222,8 @@ class ProtoLinkMainWindow(QMainWindow):
 
         body = QWidget()
         body_layout = QHBoxLayout(body)
-        body_layout.setContentsMargins(18, 18, 18, 18)
-        body_layout.setSpacing(16)
+        body_layout.setContentsMargins(14, 14, 14, 14)
+        body_layout.setSpacing(14)
 
         sidebar = self._build_sidebar()
         content = self._build_content_area()
@@ -241,8 +241,8 @@ class ProtoLinkMainWindow(QMainWindow):
     def _build_sidebar(self) -> QWidget:
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
-        sidebar.setMinimumWidth(260)
-        sidebar.setMaximumWidth(300)
+        sidebar.setMinimumWidth(240)
+        sidebar.setMaximumWidth(280)
 
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(16, 16, 16, 16)
@@ -344,8 +344,8 @@ class ProtoLinkMainWindow(QMainWindow):
 
         context_surface = QFrame()
         context_surface.setObjectName("Panel")
-        context_surface.setMinimumWidth(200)
-        context_surface.setMaximumWidth(300)
+        context_surface.setMinimumWidth(190)
+        context_surface.setMaximumWidth(280)
         context_layout = QVBoxLayout(context_surface)
         context_layout.setContentsMargins(14, 14, 14, 14)
         context_layout.setSpacing(8)
@@ -605,7 +605,7 @@ class ProtoLinkMainWindow(QMainWindow):
             QDockWidget.DockWidgetFeature.DockWidgetMovable
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
-        self.packet_console_dock.setMinimumHeight(120)
+        self.packet_console_dock.setMinimumHeight(100)
         self.packet_console_dock.setWidget(self.packet_console_scroll)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.packet_console_dock)
 
@@ -615,14 +615,14 @@ class ProtoLinkMainWindow(QMainWindow):
 
         self._initial_layout_applied = True
         splitter_width = max(self.content_splitter.width(), 960)
-        detail_width = min(CONTENT_SPLITTER_DETAIL_WIDTH, max(220, splitter_width // 6))
+        detail_width = min(CONTENT_SPLITTER_DETAIL_WIDTH, max(200, splitter_width // 7))
         self.content_splitter.setSizes([splitter_width - detail_width, detail_width])
         self.resizeDocks(
             [self.packet_console_dock],
-            [max(120, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.18)))],
+            [max(100, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.16)))],
             Qt.Orientation.Vertical,
         )
-        if self.width() <= 1280 and self._module_context_visible:
+        if self.width() <= 1366 and self._module_context_visible:
             self._set_module_context_visible(False, manual=False)
 
     def showEvent(self, event) -> None:  # noqa: N802
@@ -646,7 +646,7 @@ class ProtoLinkMainWindow(QMainWindow):
         super().resizeEvent(event)
         if not self._initial_layout_applied:
             return
-        if self.width() > 1280 and self._module_context_auto_collapsed and not self._module_context_visible:
+        if self.width() > 1366 and self._module_context_auto_collapsed and not self._module_context_visible:
             self._set_module_context_visible(True, manual=False)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
@@ -726,7 +726,7 @@ class ProtoLinkMainWindow(QMainWindow):
         restore_sizes = self._last_context_splitter_sizes
         if restore_sizes is None or len(restore_sizes) != 2:
             splitter_width = max(self.content_splitter.width(), 960)
-            detail_width = min(CONTENT_SPLITTER_DETAIL_WIDTH, max(220, splitter_width // 6))
+            detail_width = min(CONTENT_SPLITTER_DETAIL_WIDTH, max(200, splitter_width // 7))
             restore_sizes = [splitter_width - detail_width, detail_width]
         self.content_splitter.setSizes(restore_sizes)
         self.context_toggle_button.setText("收起")
