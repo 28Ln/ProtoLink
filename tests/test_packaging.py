@@ -14,8 +14,13 @@ from protolink.core.packaging import (
     INSTALLER_PACKAGE_FORMAT_VERSION,
     INSTALLER_STAGING_FORMAT_VERSION,
     NATIVE_INSTALLER_SCAFFOLD_FORMAT_VERSION,
+    NativeInstallerBuildResult,
+    NativeInstallerSignatureVerificationResult,
+    NativeInstallerToolStatus,
+    NativeInstallerToolchainVerificationResult,
     PORTABLE_MANIFEST_FILE,
     PORTABLE_PACKAGE_FORMAT_VERSION,
+    build_native_installer_msi,
     build_native_installer_scaffold_plan,
     build_installer_staging_plan,
     build_installer_package_plan,
@@ -32,6 +37,7 @@ from protolink.core.packaging import (
     materialize_portable_package,
     uninstall_portable_package,
     verify_distribution_package,
+    verify_native_installer_signature,
     verify_native_installer_scaffold,
     verify_native_installer_toolchain,
     verify_portable_package,
@@ -1114,3 +1120,154 @@ def test_verify_native_installer_toolchain_reports_detected_binaries(monkeypatch
     assert tool_map["wix"].resolved_path == r"C:\Tools\wix.exe"
     assert tool_map["signtool"].resolved_path == r"C:\SDK\signtool.exe"
     assert "wix build" in result.recommended_commands["build_msi"]
+
+
+def test_build_native_installer_msi_creates_output_with_wix(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / "src" / "protolink").mkdir(parents=True)
+    (repo_root / "pyproject.toml").write_text("[project]\nname='protolink'\nversion='1.2.3'\n", encoding="utf-8")
+
+    context = bootstrap_app_context(tmp_path / "workspace-root", persist_settings=False)
+    installer_archive = context.workspace.exports / "installer-package.zip"
+    _write_installer_package_archive(installer_archive)
+    plan = build_native_installer_scaffold_plan(context.workspace, "native installer demo", installer_archive)
+    materialize_native_installer_scaffold(plan, repo_root)
+
+    wix_executable = tmp_path / "tools" / "wix.exe"
+    wix_executable.parent.mkdir(parents=True)
+    wix_executable.write_text("stub", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "protolink.core.packaging.verify_native_installer_toolchain",
+        lambda: NativeInstallerToolchainVerificationResult(
+            target_platform="windows",
+            current_platform="win32",
+            ready=True,
+            available_tools=("wix",),
+            missing_tools=("signtool",),
+            tools=(
+                NativeInstallerToolStatus(
+                    tool_key="wix",
+                    display_name="WiX Toolset v4 CLI",
+                    executable_name="wix.exe",
+                    available=True,
+                    resolved_path=str(wix_executable),
+                    detection_source="PATH",
+                    probe_command=("--version",),
+                    probe_output="4.0.5",
+                    error=None,
+                    install_hint="Install WiX Toolset v4 and ensure `wix.exe` is on PATH or set PROTOLINK_WIX.",
+                    recommended_command="wix build ProtoLink.wxs -arch x64 -o ProtoLink.msi",
+                ),
+                NativeInstallerToolStatus(
+                    tool_key="signtool",
+                    display_name="Windows SignTool",
+                    executable_name="signtool.exe",
+                    available=False,
+                    resolved_path=None,
+                    detection_source="not-found",
+                    probe_command=("/?",),
+                    probe_output=None,
+                    error="executable not found",
+                    install_hint="Install the Windows SDK signing tools and ensure `signtool.exe` is on PATH or set PROTOLINK_SIGNTOOL.",
+                    recommended_command="signtool sign /fd SHA256 /tr <timestamp-url> /td SHA256 ProtoLink.msi",
+                ),
+            ),
+            recommended_commands={
+                "build_msi": "wix build ProtoLink.wxs -arch x64 -o ProtoLink.msi",
+                "sign_msi": "signtool sign /fd SHA256 /tr <timestamp-url> /td SHA256 ProtoLink.msi",
+                "verify_signature": "signtool verify /pa /v ProtoLink.msi",
+            },
+        ),
+    )
+
+    def _fake_run(command, cwd, text, capture_output, check):
+        output_file = Path(command[-1])
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_bytes(b"msi")
+        return subprocess.CompletedProcess(command, 0, stdout="wix build ok\n", stderr="")
+
+    monkeypatch.setattr("protolink.core.packaging.subprocess.run", _fake_run)
+
+    result = build_native_installer_msi(plan.package_dir)
+
+    assert isinstance(result, NativeInstallerBuildResult)
+    assert result.scaffold_dir == plan.package_dir.resolve()
+    assert result.output_file.exists()
+    assert result.output_file.name == "ProtoLink.msi"
+    assert result.wix_executable == str(wix_executable)
+    assert result.command[1:] == ("build", "ProtoLink.wxs", "-arch", "x64", "-o", str(result.output_file))
+    assert result.stdout == "wix build ok\n"
+    assert result.stderr == ""
+
+
+def test_verify_native_installer_signature_uses_signtool(monkeypatch, tmp_path: Path) -> None:
+    installer_file = tmp_path / "ProtoLink.msi"
+    installer_file.write_bytes(b"msi")
+    signtool_executable = tmp_path / "tools" / "signtool.exe"
+    signtool_executable.parent.mkdir(parents=True)
+    signtool_executable.write_text("stub", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "protolink.core.packaging.verify_native_installer_toolchain",
+        lambda: NativeInstallerToolchainVerificationResult(
+            target_platform="windows",
+            current_platform="win32",
+            ready=False,
+            available_tools=("signtool",),
+            missing_tools=("wix",),
+            tools=(
+                NativeInstallerToolStatus(
+                    tool_key="wix",
+                    display_name="WiX Toolset v4 CLI",
+                    executable_name="wix.exe",
+                    available=False,
+                    resolved_path=None,
+                    detection_source="not-found",
+                    probe_command=("--version",),
+                    probe_output=None,
+                    error="executable not found",
+                    install_hint="Install WiX Toolset v4 and ensure `wix.exe` is on PATH or set PROTOLINK_WIX.",
+                    recommended_command="wix build ProtoLink.wxs -arch x64 -o ProtoLink.msi",
+                ),
+                NativeInstallerToolStatus(
+                    tool_key="signtool",
+                    display_name="Windows SignTool",
+                    executable_name="signtool.exe",
+                    available=True,
+                    resolved_path=str(signtool_executable),
+                    detection_source="PATH",
+                    probe_command=("/?",),
+                    probe_output="Microsoft (R) SignTool",
+                    error=None,
+                    install_hint="Install the Windows SDK signing tools and ensure `signtool.exe` is on PATH or set PROTOLINK_SIGNTOOL.",
+                    recommended_command="signtool sign /fd SHA256 /tr <timestamp-url> /td SHA256 ProtoLink.msi",
+                ),
+            ),
+            recommended_commands={
+                "build_msi": "wix build ProtoLink.wxs -arch x64 -o ProtoLink.msi",
+                "sign_msi": "signtool sign /fd SHA256 /tr <timestamp-url> /td SHA256 ProtoLink.msi",
+                "verify_signature": "signtool verify /pa /v ProtoLink.msi",
+            },
+        ),
+    )
+
+    def _fake_run(command, cwd, text, capture_output, check):
+        return subprocess.CompletedProcess(command, 0, stdout="Successfully verified: ProtoLink.msi\n", stderr="")
+
+    monkeypatch.setattr("protolink.core.packaging.subprocess.run", _fake_run)
+
+    result = verify_native_installer_signature(installer_file)
+
+    assert isinstance(result, NativeInstallerSignatureVerificationResult)
+    assert result.installer_file == installer_file.resolve()
+    assert result.signtool_executable == str(signtool_executable)
+    assert result.command == (
+        str(signtool_executable),
+        "verify",
+        "/pa",
+        "/v",
+        str(installer_file.resolve()),
+    )
+    assert result.verified is True
+    assert "Successfully verified" in result.stdout

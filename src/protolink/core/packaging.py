@@ -181,6 +181,26 @@ class NativeInstallerToolchainVerificationResult:
 
 
 @dataclass(frozen=True, slots=True)
+class NativeInstallerBuildResult:
+    scaffold_dir: Path
+    output_file: Path
+    wix_executable: str
+    command: tuple[str, ...]
+    stdout: str
+    stderr: str
+
+
+@dataclass(frozen=True, slots=True)
+class NativeInstallerSignatureVerificationResult:
+    installer_file: Path
+    signtool_executable: str
+    command: tuple[str, ...]
+    verified: bool
+    stdout: str
+    stderr: str
+
+
+@dataclass(frozen=True, slots=True)
 class _NativeInstallerToolSpec:
     tool_key: str
     display_name: str
@@ -2192,6 +2212,128 @@ def verify_native_installer_toolchain() -> NativeInstallerToolchainVerificationR
         tools=tools,
         recommended_commands=recommended_commands,
     )
+
+
+def build_native_installer_msi(
+    scaffold_dir: Path,
+    *,
+    output_file: Path | None = None,
+) -> NativeInstallerBuildResult:
+    action = "build native installer msi"
+    recovery = "Install WiX Toolset v4, verify the native installer scaffold, and retry."
+    scaffold = verify_native_installer_scaffold(scaffold_dir)
+    toolchain = verify_native_installer_toolchain()
+    wix_tool = _require_available_native_installer_tool(toolchain, "wix", action=action)
+
+    scaffold_root = scaffold.scaffold_dir.resolve()
+    output_path = (output_file or (scaffold_root / "build" / "ProtoLink.msi")).resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    command = (
+        wix_tool.resolved_path,
+        "build",
+        scaffold.wix_source_file,
+        "-arch",
+        "x64",
+        "-o",
+        str(output_path),
+    )
+    completed = subprocess.run(
+        list(command),
+        cwd=scaffold_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise ProtoLinkUserError(
+            f"WiX build failed with exit code {completed.returncode}.",
+            action=action,
+            recovery=recovery,
+        )
+    if not output_path.exists():
+        raise ProtoLinkUserError(
+            f"WiX build completed without producing '{output_path.name}'.",
+            action=action,
+            recovery=recovery,
+        )
+    return NativeInstallerBuildResult(
+        scaffold_dir=scaffold_root,
+        output_file=output_path,
+        wix_executable=str(wix_tool.resolved_path),
+        command=command,
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+    )
+
+
+def verify_native_installer_signature(installer_file: Path) -> NativeInstallerSignatureVerificationResult:
+    action = "verify native installer signature"
+    recovery = "Ensure signtool.exe is available and the MSI has been signed, then retry."
+    installer_path = installer_file.resolve()
+    if not installer_path.exists() or not installer_path.is_file():
+        raise ProtoLinkUserError(
+            f"Native installer '{installer_path}' was not found.",
+            action=action,
+            recovery="Build the native installer MSI first and retry.",
+        )
+
+    toolchain = verify_native_installer_toolchain()
+    signtool = _require_available_native_installer_tool(toolchain, "signtool", action=action)
+    command = (
+        signtool.resolved_path,
+        "verify",
+        "/pa",
+        "/v",
+        str(installer_path),
+    )
+    completed = subprocess.run(
+        list(command),
+        cwd=installer_path.parent,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    verified = completed.returncode == 0
+    if not verified:
+        raise ProtoLinkUserError(
+            f"Native installer signature verification failed with exit code {completed.returncode}.",
+            action=action,
+            recovery=recovery,
+        )
+    return NativeInstallerSignatureVerificationResult(
+        installer_file=installer_path,
+        signtool_executable=str(signtool.resolved_path),
+        command=command,
+        verified=True,
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+    )
+
+
+def _require_available_native_installer_tool(
+    toolchain: NativeInstallerToolchainVerificationResult,
+    tool_key: str,
+    *,
+    action: str,
+) -> NativeInstallerToolStatus:
+    tool = next((item for item in toolchain.tools if item.tool_key == tool_key), None)
+    if tool is None or not tool.available or not tool.resolved_path:
+        display_name = tool.display_name if tool is not None else ("WiX Toolset v4 CLI" if tool_key == "wix" else "Windows SignTool")
+        install_hint = (
+            tool.install_hint
+            if tool is not None and tool.install_hint
+            else (
+                "Install WiX Toolset v4 and ensure `wix.exe` is resolvable."
+                if tool_key == "wix"
+                else "Install the Windows SDK signing tools and ensure `signtool.exe` is resolvable."
+            )
+        )
+        raise ProtoLinkUserError(
+            f"{display_name} is not available in the current environment.",
+            action=action,
+            recovery=f"{install_hint} Then retry.",
+        )
+    return tool
 
 
 def _read_protolink_version(repo_root: Path) -> str:

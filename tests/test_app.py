@@ -21,6 +21,8 @@ from protolink.core.packaging import (
     INSTALLER_PACKAGE_FORMAT_VERSION,
     INSTALLER_STAGING_FORMAT_VERSION,
     NATIVE_INSTALLER_SCAFFOLD_FORMAT_VERSION,
+    NativeInstallerBuildResult,
+    NativeInstallerSignatureVerificationResult,
     NativeInstallerToolStatus,
     NativeInstallerToolchainVerificationResult,
     PORTABLE_MANIFEST_FILE,
@@ -1146,6 +1148,102 @@ def test_main_verifies_native_installer_toolchain_without_bootstrap(monkeypatch,
     assert payload["tools"]["wix"]["resolved_path"] == r"C:\Tools\wix.exe"
     assert payload["tools"]["signtool"]["error"] == "executable not found"
     assert payload["recommended_commands"]["verify_signature"] == "signtool verify /pa /v ProtoLink.msi"
+
+
+def test_main_builds_native_installer_msi_without_bootstrap(monkeypatch, tmp_path, capsys) -> None:
+    scaffold_dir = tmp_path / "native-scaffold"
+    output_file = scaffold_dir / "build" / "ProtoLink.msi"
+    result = NativeInstallerBuildResult(
+        scaffold_dir=scaffold_dir,
+        output_file=output_file,
+        wix_executable=r"C:\Tools\wix.exe",
+        command=(
+            r"C:\Tools\wix.exe",
+            "build",
+            "ProtoLink.wxs",
+            "-arch",
+            "x64",
+            "-o",
+            str(output_file),
+        ),
+        stdout="wix build ok\n",
+        stderr="",
+    )
+    monkeypatch.setattr("protolink.app.build_native_installer_msi", lambda path: result)
+    monkeypatch.setattr(
+        "protolink.app.bootstrap_app_context",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("bootstrap should not run")),
+    )
+
+    exit_code = main(["--build-native-installer-msi", str(scaffold_dir)])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert payload["scaffold_dir"] == str(scaffold_dir)
+    assert payload["output_file"] == str(output_file)
+    assert payload["wix_executable"] == r"C:\Tools\wix.exe"
+    assert payload["command"][1:4] == ["build", "ProtoLink.wxs", "-arch"]
+    assert payload["stdout"] == "wix build ok\n"
+    assert payload["stderr"] == ""
+
+
+def test_main_verifies_native_installer_signature_without_bootstrap(monkeypatch, tmp_path, capsys) -> None:
+    installer_file = tmp_path / "ProtoLink.msi"
+    result = NativeInstallerSignatureVerificationResult(
+        installer_file=installer_file,
+        signtool_executable=r"C:\SDK\signtool.exe",
+        command=(
+            r"C:\SDK\signtool.exe",
+            "verify",
+            "/pa",
+            "/v",
+            str(installer_file),
+        ),
+        verified=True,
+        stdout="Successfully verified: ProtoLink.msi\n",
+        stderr="",
+    )
+    monkeypatch.setattr("protolink.app.verify_native_installer_signature", lambda path: result)
+    monkeypatch.setattr(
+        "protolink.app.bootstrap_app_context",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("bootstrap should not run")),
+    )
+
+    exit_code = main(["--verify-native-installer-signature", str(installer_file)])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert payload["installer_file"] == str(installer_file)
+    assert payload["signtool_executable"] == r"C:\SDK\signtool.exe"
+    assert payload["command"][0] == r"C:\SDK\signtool.exe"
+    assert payload["verified"] is True
+    assert "Successfully verified" in payload["stdout"]
+
+
+def test_main_reports_native_installer_msi_toolchain_error(monkeypatch, tmp_path, capsys) -> None:
+    scaffold_dir = tmp_path / "native-scaffold"
+    monkeypatch.setattr(
+        "protolink.app.build_native_installer_msi",
+        lambda path: (_ for _ in ()).throw(
+            ProtoLinkUserError(
+                "WiX Toolset v4 CLI is not available in the current environment.",
+                action="build native installer msi",
+                recovery="Install WiX Toolset v4 and ensure `wix.exe` is resolvable, then retry.",
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "protolink.app.bootstrap_app_context",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("bootstrap should not run")),
+    )
+
+    exit_code = main(["--build-native-installer-msi", str(scaffold_dir)])
+    captured = capsys.readouterr()
+
+    assert exit_code == int(CliExitCode.USER_ERROR)
+    assert "build native installer msi失败： WiX Toolset v4 CLI is not available in the current environment." in captured.out
 
 
 def test_main_installs_installer_package_through_clean_release_staging(monkeypatch, tmp_path, capsys) -> None:

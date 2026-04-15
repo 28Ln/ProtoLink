@@ -36,6 +36,7 @@ from protolink.core.logging import (
     load_runtime_failure_evidence,
 )
 from protolink.core.packaging import (
+    build_native_installer_msi,
     build_native_installer_scaffold_plan,
     build_installer_staging_plan,
     build_installer_package_plan,
@@ -53,6 +54,7 @@ from protolink.core.packaging import (
     uninstall_portable_package,
     verify_distribution_package,
     verify_native_installer_scaffold,
+    verify_native_installer_signature,
     verify_native_installer_toolchain,
     verify_portable_package,
     verify_installer_package,
@@ -238,6 +240,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--verify-native-installer-toolchain",
         action="store_true",
         help="检测当前环境中的 WiX / signtool 原生安装器工具链可用性。",
+    )
+    parser.add_argument(
+        "--build-native-installer-msi",
+        metavar="DIR",
+        help="基于已生成的 WiX/MSI 原生安装器脚手架构建 MSI 产物。",
+    )
+    parser.add_argument(
+        "--verify-native-installer-signature",
+        metavar="MSI",
+        help="校验原生安装器 MSI 的 Authenticode 签名。",
     )
     parser.add_argument(
         "--install-installer-package",
@@ -786,6 +798,42 @@ def main(argv: list[str] | None = None) -> int:
             )
             return int(CliExitCode.OK)
 
+        if args.build_native_installer_msi:
+            result = build_native_installer_msi(Path(args.build_native_installer_msi))
+            print(
+                json.dumps(
+                    {
+                        "scaffold_dir": str(result.scaffold_dir),
+                        "output_file": str(result.output_file),
+                        "wix_executable": result.wix_executable,
+                        "command": list(result.command),
+                        "stdout": result.stdout,
+                        "stderr": result.stderr,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return int(CliExitCode.OK)
+
+        if args.verify_native_installer_signature:
+            result = verify_native_installer_signature(Path(args.verify_native_installer_signature))
+            print(
+                json.dumps(
+                    {
+                        "installer_file": str(result.installer_file),
+                        "signtool_executable": result.signtool_executable,
+                        "command": list(result.command),
+                        "verified": result.verified,
+                        "stdout": result.stdout,
+                        "stderr": result.stderr,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return int(CliExitCode.OK)
+
         read_only_mode = any(
             (
                 args.print_workspace,
@@ -815,6 +863,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.build_native_installer_scaffold,
                 args.verify_native_installer_scaffold,
                 args.verify_native_installer_toolchain,
+                args.build_native_installer_msi,
+                args.verify_native_installer_signature,
                 bool(args.install_installer_package),
             )
         )
