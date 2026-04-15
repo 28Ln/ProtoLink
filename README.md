@@ -52,7 +52,7 @@ uv run protolink
 
 ```powershell
 uv run pytest -q
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 294
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 293
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local
