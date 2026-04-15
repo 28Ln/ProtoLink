@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import importlib
+import inspect
 import json
+import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Mapping
 
 from protolink.core.plugin_manifests import (
     PLUGIN_MANIFEST_FILE,
@@ -191,6 +196,74 @@ class ExtensionLoadingPlanReport:
             "enabled_requested_count": self.enabled_requested_count,
             "blocked_count": self.blocked_count,
             "review_required_count": self.review_required_count,
+            "entries": [entry.to_dict() for entry in self.entries],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExtensionLoadContext:
+    plugin_id: str
+    plugin_dir: Path
+    manifest_file: Path
+    workspace_root: Path
+    logs_dir: Path
+    exports_dir: Path
+    scripts_dir: Path
+    app_version: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "plugin_id": self.plugin_id,
+            "plugin_dir": str(self.plugin_dir),
+            "manifest_file": str(self.manifest_file),
+            "workspace_root": str(self.workspace_root),
+            "logs_dir": str(self.logs_dir),
+            "exports_dir": str(self.exports_dir),
+            "scripts_dir": str(self.scripts_dir),
+            "app_version": self.app_version,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExtensionRuntimeLoadEntry:
+    plugin_id: str
+    display_name: str
+    effective_state: str
+    loaded: bool
+    module_name: str | None
+    callable_name: str | None
+    reasons: tuple[str, ...]
+    returned_payload: dict[str, object] | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "plugin_id": self.plugin_id,
+            "display_name": self.display_name,
+            "effective_state": self.effective_state,
+            "loaded": self.loaded,
+            "module_name": self.module_name,
+            "callable_name": self.callable_name,
+            "reasons": list(self.reasons),
+            "returned_payload": self.returned_payload,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExtensionRuntimeLoadReport:
+    ready: bool
+    attempted_count: int
+    loaded_count: int
+    failed_count: int
+    skipped_count: int
+    entries: tuple[ExtensionRuntimeLoadEntry, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "ready": self.ready,
+            "attempted_count": self.attempted_count,
+            "loaded_count": self.loaded_count,
+            "failed_count": self.failed_count,
+            "skipped_count": self.skipped_count,
             "entries": [entry.to_dict() for entry in self.entries],
         }
 
@@ -394,6 +467,114 @@ def build_extension_loading_plan(
     )
 
 
+def load_enabled_extensions(
+    registry: ExtensionDescriptorRegistry,
+    config: ExtensionRegistryConfig,
+    loading_plan: ExtensionLoadingPlanReport,
+    *,
+    workspace_root: Path,
+    app_version: str,
+) -> ExtensionRuntimeLoadReport:
+    descriptor_by_id = {descriptor.plugin_id: descriptor for descriptor in registry.descriptors}
+    entries: list[ExtensionRuntimeLoadEntry] = []
+    attempted_count = 0
+    loaded_count = 0
+    failed_count = 0
+
+    for plan_entry in loading_plan.entries:
+        descriptor = descriptor_by_id.get(plan_entry.plugin_id)
+        if descriptor is None:
+            entries.append(
+                ExtensionRuntimeLoadEntry(
+                    plugin_id=plan_entry.plugin_id,
+                    display_name=plan_entry.display_name,
+                    effective_state=plan_entry.effective_state,
+                    loaded=False,
+                    module_name=None,
+                    callable_name=None,
+                    reasons=plan_entry.reasons,
+                    returned_payload=None,
+                )
+            )
+            continue
+
+        if plan_entry.effective_state != "eligible_for_loading":
+            entries.append(
+                ExtensionRuntimeLoadEntry(
+                    plugin_id=descriptor.plugin_id,
+                    display_name=descriptor.display_name,
+                    effective_state=plan_entry.effective_state,
+                    loaded=False,
+                    module_name=None,
+                    callable_name=None,
+                    reasons=plan_entry.reasons,
+                    returned_payload=None,
+                )
+            )
+            continue
+
+        attempted_count += 1
+        module_name = None
+        callable_name = None
+        try:
+            module_name, callable_name = _split_entrypoint(descriptor.entrypoint)
+            context = ExtensionLoadContext(
+                plugin_id=descriptor.plugin_id,
+                plugin_dir=descriptor.plugin_dir,
+                manifest_file=descriptor.manifest_file,
+                workspace_root=workspace_root,
+                logs_dir=workspace_root / "logs",
+                exports_dir=workspace_root / "exports",
+                scripts_dir=workspace_root / "scripts",
+                app_version=app_version,
+            )
+            returned_payload = _invoke_extension_entrypoint(descriptor, context)
+        except Exception as exc:  # noqa: BLE001
+            failed_count += 1
+            entries.append(
+                ExtensionRuntimeLoadEntry(
+                    plugin_id=descriptor.plugin_id,
+                    display_name=descriptor.display_name,
+                    effective_state="load_failed",
+                    loaded=False,
+                    module_name=module_name,
+                    callable_name=callable_name,
+                    reasons=(*plan_entry.reasons, f"{type(exc).__name__}: {exc}"),
+                    returned_payload=None,
+                )
+            )
+            continue
+
+        loaded_count += 1
+        entries.append(
+            ExtensionRuntimeLoadEntry(
+                plugin_id=descriptor.plugin_id,
+                display_name=descriptor.display_name,
+                effective_state="loaded",
+                loaded=True,
+                module_name=module_name,
+                callable_name=callable_name,
+                reasons=plan_entry.reasons,
+                returned_payload=returned_payload,
+            )
+        )
+
+    skipped_count = len(entries) - attempted_count
+    ready_states = {"loaded", "described_only", "disabled"}
+    return ExtensionRuntimeLoadReport(
+        ready=(
+            failed_count == 0
+            and config.valid
+            and all(entry.effective_state in ready_states for entry in entries)
+        ),
+        attempted_count=attempted_count,
+        loaded_count=loaded_count,
+        failed_count=failed_count,
+        skipped_count=skipped_count,
+        entries=tuple(entries),
+    )
+
+
 def serialize_extension_audit_report(report: WorkspaceExtensionAuditReport) -> dict[str, object]:
     return {
         "plugin_root": str(report.plugin_root),
@@ -435,6 +616,100 @@ def serialize_extension_audit_report(report: WorkspaceExtensionAuditReport) -> d
             for entry in report.entries
         ],
     }
+
+
+def _split_entrypoint(entrypoint: str) -> tuple[str, str]:
+    if ":" not in entrypoint:
+        raise ValueError(f"Entrypoint '{entrypoint}' must use 'module:function' format.")
+    module_name, callable_name = entrypoint.split(":", maxsplit=1)
+    module_name = module_name.strip()
+    callable_name = callable_name.strip()
+    if not module_name or not callable_name:
+        raise ValueError(f"Entrypoint '{entrypoint}' must use 'module:function' format.")
+    return module_name, callable_name
+
+
+def _invoke_extension_entrypoint(
+    descriptor: ExtensionDescriptor,
+    context: ExtensionLoadContext,
+) -> dict[str, object] | None:
+    module_name, callable_name = _split_entrypoint(descriptor.entrypoint)
+    with _plugin_runtime_scope(descriptor.plugin_dir, module_name):
+        module = importlib.import_module(module_name)
+        callback = getattr(module, callable_name)
+        if not callable(callback):
+            raise TypeError(f"Entrypoint '{descriptor.entrypoint}' is not callable.")
+        signature = inspect.signature(callback)
+        params = [
+            param
+            for param in signature.parameters.values()
+            if param.kind in {param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD}
+        ]
+        if len(params) == 0:
+            result = callback()
+        elif len(params) == 1:
+            result = callback(context)
+        else:
+            raise TypeError("Extension register() must accept zero or one positional argument.")
+    return _normalize_runtime_payload(result)
+
+
+def _normalize_runtime_payload(result: object) -> dict[str, object] | None:
+    if result is None:
+        return None
+    if isinstance(result, Mapping):
+        normalized: dict[str, object] = {}
+        for key, value in result.items():
+            normalized[str(key)] = value
+        return normalized
+    raise TypeError("Extension register() must return a mapping or None.")
+
+
+@contextmanager
+def _plugin_runtime_scope(plugin_dir: Path, module_name: str):
+    plugin_root = plugin_dir.resolve()
+    plugin_path = str(plugin_root)
+    removed_modules = _remove_conflicting_plugin_modules(module_name, plugin_root)
+    sys.path.insert(0, plugin_path)
+    importlib.invalidate_caches()
+    try:
+        yield
+    finally:
+        if sys.path and sys.path[0] == plugin_path:
+            sys.path.pop(0)
+        elif plugin_path in sys.path:
+            sys.path.remove(plugin_path)
+        for name, module in removed_modules.items():
+            sys.modules.setdefault(name, module)
+
+
+def _remove_conflicting_plugin_modules(module_name: str, plugin_root: Path) -> dict[str, object]:
+    module_root = module_name.split(".", maxsplit=1)[0]
+    module_prefix = f"{module_root}."
+    removed_modules: dict[str, object] = {}
+    for name, module in list(sys.modules.items()):
+        if name != module_root and not name.startswith(module_prefix):
+            continue
+        module_file = getattr(module, "__file__", None)
+        if module_file is None:
+            continue
+        try:
+            module_path = Path(module_file).resolve()
+        except OSError:
+            module_path = None
+        if module_path is not None and _path_is_within(module_path, plugin_root):
+            continue
+        removed_modules[name] = module
+        sys.modules.pop(name, None)
+    return removed_modules
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
 
 
 def _read_plugin_id_list(raw_value: object, field_name: str, errors: list[str]) -> tuple[str, ...]:

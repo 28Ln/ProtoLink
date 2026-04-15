@@ -1,6 +1,6 @@
 # ProtoLink Mainline Status
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## Single active mainline
 
@@ -27,7 +27,7 @@ Last updated: 2026-04-15
 
 当前已经具备：
 
-- `332 passed`
+- `350 passed`
 - `release-staging passed`
 - `dist fresh-install passed`
 - `soak ready gate passed`

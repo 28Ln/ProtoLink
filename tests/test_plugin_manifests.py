@@ -7,6 +7,7 @@ from protolink.core.extensions import (
     EXTENSION_REGISTRY_FORMAT_VERSION,
     build_extension_descriptor_registry,
     build_extension_loading_plan,
+    load_enabled_extensions,
     load_extension_registry_config,
 )
 from protolink.core.plugin_manifests import (
@@ -90,6 +91,19 @@ def test_audit_workspace_plugin_manifests_rejects_duplicate_plugin_ids(tmp_path:
     assert report.duplicate_plugin_ids == ("bench-plugin",)
     assert report.blocking_items == ("plugin_manifest_validation_failed",)
     assert all("Duplicate plugin_id 'bench-plugin'" in " ".join(entry.errors) for entry in report.entries)
+
+
+def test_audit_workspace_plugin_manifests_rejects_invalid_entrypoint_format(tmp_path: Path) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    plugin_dir = workspace.plugins / "bench-plugin"
+    plugin_dir.mkdir()
+    _write_plugin_manifest(plugin_dir, entrypoint="bench_plugin.plugin")
+
+    report = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
+
+    assert report.ready is False
+    assert report.invalid_manifest_count == 1
+    assert "entrypoint must use 'module:function' format." in report.entries[0].errors
 
 
 def test_audit_workspace_plugin_manifests_accepts_legacy_version_fields_with_warning(tmp_path: Path) -> None:
@@ -176,6 +190,279 @@ def test_build_extension_loading_plan_blocks_unknown_enabled_plugin(tmp_path: Pa
     assert loading_plan.ready is False
     assert loading_plan.blocked_count == 1
     assert loading_plan.entries[0].effective_state == "blocked_unknown_plugin"
+
+
+def test_load_enabled_extensions_executes_class_a_register(tmp_path: Path) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    plugin_dir = workspace.plugins / "bench-plugin"
+    package_dir = plugin_dir / "bench_plugin"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "plugin.py").write_text(
+        "def register(context):\n"
+        "    return {'plugin_id': context.plugin_id, 'workspace_root': str(context.workspace_root)}\n",
+        encoding="utf-8",
+    )
+    _write_plugin_manifest(plugin_dir)
+    (workspace.plugins / EXTENSION_REGISTRY_FILE).write_text(
+        json.dumps(
+            {
+                "format_version": EXTENSION_REGISTRY_FORMAT_VERSION,
+                "enabled_plugin_ids": ["bench-plugin"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
+    registry = build_extension_descriptor_registry(report)
+    config = load_extension_registry_config(workspace.plugins)
+    loading_plan = build_extension_loading_plan(registry, config)
+    runtime_report = load_enabled_extensions(
+        registry,
+        config,
+        loading_plan,
+        workspace_root=workspace.root,
+        app_version=__version__,
+    )
+
+    assert runtime_report.ready is True
+    assert runtime_report.attempted_count == 1
+    assert runtime_report.loaded_count == 1
+    assert runtime_report.failed_count == 0
+    assert runtime_report.skipped_count == 0
+    assert runtime_report.entries[0].loaded is True
+    assert runtime_report.entries[0].returned_payload["plugin_id"] == "bench-plugin"
+    assert runtime_report.entries[0].returned_payload["workspace_root"] == str(workspace.root)
+
+
+def test_load_enabled_extensions_supports_lazy_sibling_imports(tmp_path: Path) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    plugin_dir = workspace.plugins / "bench-plugin"
+    package_dir = plugin_dir / "bench_plugin"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "helper.py").write_text(
+        "def build_payload():\n"
+        "    return {'origin': 'helper', 'value': 7}\n",
+        encoding="utf-8",
+    )
+    (package_dir / "plugin.py").write_text(
+        "def register():\n"
+        "    from bench_plugin.helper import build_payload\n"
+        "    return build_payload()\n",
+        encoding="utf-8",
+    )
+    _write_plugin_manifest(plugin_dir)
+    (workspace.plugins / EXTENSION_REGISTRY_FILE).write_text(
+        json.dumps(
+            {
+                "format_version": EXTENSION_REGISTRY_FORMAT_VERSION,
+                "enabled_plugin_ids": ["bench-plugin"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
+    registry = build_extension_descriptor_registry(report)
+    config = load_extension_registry_config(workspace.plugins)
+    loading_plan = build_extension_loading_plan(registry, config)
+    runtime_report = load_enabled_extensions(
+        registry,
+        config,
+        loading_plan,
+        workspace_root=workspace.root,
+        app_version=__version__,
+    )
+
+    assert runtime_report.ready is True
+    assert runtime_report.loaded_count == 1
+    assert runtime_report.entries[0].returned_payload == {"origin": "helper", "value": 7}
+
+
+def test_load_enabled_extensions_isolates_duplicate_module_names_between_plugins(tmp_path: Path) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    plugin_specs = [
+        ("alpha-plugin", "alpha-plugin"),
+        ("beta-plugin", "beta-plugin"),
+    ]
+    for plugin_dir_name, plugin_id in plugin_specs:
+        plugin_dir = workspace.plugins / plugin_dir_name
+        package_dir = plugin_dir / "shared_plugin"
+        package_dir.mkdir(parents=True)
+        (package_dir / "__init__.py").write_text("", encoding="utf-8")
+        (package_dir / "plugin.py").write_text(
+            "def register():\n"
+            f"    return {{'plugin_id': '{plugin_id}'}}\n",
+            encoding="utf-8",
+        )
+        _write_plugin_manifest(
+            plugin_dir,
+            plugin_id=plugin_id,
+            display_name=plugin_id,
+            entrypoint="shared_plugin.plugin:register",
+            capabilities=["protocol_parser"],
+        )
+    (workspace.plugins / EXTENSION_REGISTRY_FILE).write_text(
+        json.dumps(
+            {
+                "format_version": EXTENSION_REGISTRY_FORMAT_VERSION,
+                "enabled_plugin_ids": [plugin_id for _, plugin_id in plugin_specs],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
+    registry = build_extension_descriptor_registry(report)
+    config = load_extension_registry_config(workspace.plugins)
+    loading_plan = build_extension_loading_plan(registry, config)
+    runtime_report = load_enabled_extensions(
+        registry,
+        config,
+        loading_plan,
+        workspace_root=workspace.root,
+        app_version=__version__,
+    )
+
+    assert runtime_report.ready is True
+    assert runtime_report.loaded_count == 2
+    assert [entry.returned_payload["plugin_id"] for entry in runtime_report.entries] == [
+        "alpha-plugin",
+        "beta-plugin",
+    ]
+
+
+def test_load_enabled_extensions_rejects_review_required_plugins(tmp_path: Path) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    plugin_dir = workspace.plugins / "review-plugin"
+    package_dir = plugin_dir / "review_plugin"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "plugin.py").write_text("def register():\n    return None\n", encoding="utf-8")
+    _write_plugin_manifest(plugin_dir, capabilities=["read_only_diagnostic"], plugin_id="review-plugin")
+    (workspace.plugins / EXTENSION_REGISTRY_FILE).write_text(
+        json.dumps(
+            {
+                "format_version": EXTENSION_REGISTRY_FORMAT_VERSION,
+                "enabled_plugin_ids": ["review-plugin"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
+    registry = build_extension_descriptor_registry(report)
+    config = load_extension_registry_config(workspace.plugins)
+    loading_plan = build_extension_loading_plan(registry, config)
+    runtime_report = load_enabled_extensions(
+        registry,
+        config,
+        loading_plan,
+        workspace_root=workspace.root,
+        app_version=__version__,
+    )
+
+    assert loading_plan.review_required_count == 1
+    assert runtime_report.ready is False
+    assert runtime_report.attempted_count == 0
+    assert runtime_report.loaded_count == 0
+    assert runtime_report.failed_count == 0
+    assert runtime_report.entries[0].loaded is False
+    assert runtime_report.entries[0].effective_state == "review_required"
+
+
+def test_load_enabled_extensions_does_not_auto_load_high_risk_plugins_with_opt_in(tmp_path: Path) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    plugin_dir = workspace.plugins / "bench-plugin"
+    package_dir = plugin_dir / "bench_plugin"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "plugin.py").write_text("def register():\n    return None\n", encoding="utf-8")
+    _write_plugin_manifest(plugin_dir, capabilities=["ui_surface"])
+    (workspace.plugins / EXTENSION_REGISTRY_FILE).write_text(
+        json.dumps(
+            {
+                "format_version": EXTENSION_REGISTRY_FORMAT_VERSION,
+                "enabled_plugin_ids": ["bench-plugin"],
+                "allow_high_risk_plugins": True,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
+    registry = build_extension_descriptor_registry(report)
+    config = load_extension_registry_config(workspace.plugins)
+    loading_plan = build_extension_loading_plan(registry, config)
+    runtime_report = load_enabled_extensions(
+        registry,
+        config,
+        loading_plan,
+        workspace_root=workspace.root,
+        app_version=__version__,
+    )
+
+    assert loading_plan.ready is True
+    assert loading_plan.blocked_count == 0
+    assert loading_plan.entries[0].effective_state == "high_risk_enabled"
+    assert runtime_report.ready is False
+    assert runtime_report.attempted_count == 0
+    assert runtime_report.loaded_count == 0
+    assert runtime_report.failed_count == 0
+    assert runtime_report.entries[0].effective_state == "high_risk_enabled"
+
+
+def test_load_enabled_extensions_rejects_high_risk_plugins_without_opt_in(tmp_path: Path) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    plugin_dir = workspace.plugins / "bench-plugin"
+    package_dir = plugin_dir / "bench_plugin"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "plugin.py").write_text("def register():\n    return None\n", encoding="utf-8")
+    _write_plugin_manifest(plugin_dir, capabilities=["ui_surface"])
+    (workspace.plugins / EXTENSION_REGISTRY_FILE).write_text(
+        json.dumps(
+            {
+                "format_version": EXTENSION_REGISTRY_FORMAT_VERSION,
+                "enabled_plugin_ids": ["bench-plugin"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
+    registry = build_extension_descriptor_registry(report)
+    config = load_extension_registry_config(workspace.plugins)
+    loading_plan = build_extension_loading_plan(registry, config)
+    runtime_report = load_enabled_extensions(
+        registry,
+        config,
+        loading_plan,
+        workspace_root=workspace.root,
+        app_version=__version__,
+    )
+
+    assert loading_plan.blocked_count == 1
+    assert runtime_report.ready is False
+    assert runtime_report.attempted_count == 0
+    assert runtime_report.loaded_count == 0
+    assert runtime_report.failed_count == 0
+    assert runtime_report.entries[0].loaded is False
+    assert runtime_report.entries[0].effective_state == "blocked_high_risk"
 
 
 def test_build_extension_loading_plan_marks_class_b_plugins_for_review(tmp_path: Path) -> None:

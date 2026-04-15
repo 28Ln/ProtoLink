@@ -68,6 +68,7 @@ from protolink.core.packet_replay import (
     load_packet_replay_plan,
     save_packet_replay_plan,
 )
+from protolink.core.extensions import load_enabled_extensions
 from protolink.core.plugin_manifests import PluginManifestAuditReport
 from protolink.core.settings import resolve_application_base_dir
 from protolink.core.workspace import migrate_workspace, workspace_manifest_path
@@ -158,6 +159,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--plan-extension-loading",
         action="store_true",
         help="基于 registry.json 与 extension descriptors 输出受控装载计划，不执行动态加载。",
+    )
+    parser.add_argument(
+        "--load-enabled-extensions",
+        action="store_true",
+        help="在受控边界内执行已启用的 Class A extension register()，不自动开放动态加载。",
     )
     parser.add_argument(
         "--export-release-bundle",
@@ -882,6 +888,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.audit_plugin_manifests,
                 args.list_extension_descriptors,
                 args.plan_extension_loading,
+                args.load_enabled_extensions,
                 args.export_release_bundle,
                 args.generate_smoke_artifacts,
                 args.prepare_release,
@@ -953,6 +960,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"{context.extension_loading_plan.enabled_requested_count} requested / "
                 f"{context.extension_loading_plan.blocked_count} blocked"
             )
+            print(f"装载评审：{context.extension_loading_plan.review_required_count} review")
             return int(CliExitCode.OK)
 
         if args.audit_plugin_manifests:
@@ -967,6 +975,8 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 json.dumps(
                     {
+                        "workspace": str(context.workspace.root),
+                        "app_version": __version__,
                         "registry_config": context.extension_registry_config.to_dict(),
                         "descriptor_registry": context.extension_registry.to_dict(),
                         "loading_plan": context.extension_loading_plan.to_dict(),
@@ -975,6 +985,32 @@ def main(argv: list[str] | None = None) -> int:
                     indent=2,
                 )
             )
+            return int(CliExitCode.OK)
+
+        if args.load_enabled_extensions:
+            report = load_enabled_extensions(
+                context.extension_registry,
+                context.extension_registry_config,
+                context.extension_loading_plan,
+                workspace_root=context.workspace.root,
+                app_version=__version__,
+            )
+            print(
+                json.dumps(
+                    {
+                        "workspace": str(context.workspace.root),
+                        "app_version": __version__,
+                        "registry_config": context.extension_registry_config.to_dict(),
+                        "descriptor_registry": context.extension_registry.to_dict(),
+                        "loading_plan": context.extension_loading_plan.to_dict(),
+                        "runtime_load_report": report.to_dict(),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            if not report.ready:
+                return int(CliExitCode.USER_ERROR)
             return int(CliExitCode.OK)
 
         if args.create_export_scaffold:

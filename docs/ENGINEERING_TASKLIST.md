@@ -1,6 +1,6 @@
 # ProtoLink Engineering Tasklist
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## Canonical rules
 
@@ -35,7 +35,10 @@ Last updated: 2026-04-15
 
 - Classification: `Next`
 - Objective:
-  - 在现有 manifest discovery / validation / descriptor listing / loading plan / preflight gate 基线之上，为协议扩展、模块扩展、插件接入建立 registry、descriptor 与运行时装载边界。
+  - 在现有 manifest discovery / validation / descriptor listing / loading plan / explicit Class A runtime loading 基线之上，为协议扩展、模块扩展、插件接入建立治理、review、生命周期与正式 SDK 边界。
+- Current progress:
+  - 已落地 manifest audit、descriptor registry、loading plan 与显式 Class A `register()` 装载入口。
+  - 下一步聚焦日志证据、Class B review workflow、Class C 执行策略与 lifecycle model。
 
 ### PL-016 — Hardware-in-the-Loop and Long-Run Validation
 

@@ -238,6 +238,8 @@ def _audit_plugin_directory(plugin_dir: Path, *, app_version: str) -> PluginMani
 
         capabilities = _read_required_string_list(payload, "capabilities", errors)
         entrypoint = _read_required_string(payload, "entrypoint", errors)
+        if entrypoint is not None and not _is_valid_entrypoint(entrypoint):
+            errors.append("entrypoint must use 'module:function' format.")
 
         min_app_version = _read_alias_string(
             payload,
@@ -394,6 +396,13 @@ def _read_required_string_list(
             return ()
         normalized.append(item.strip())
     return tuple(dict.fromkeys(normalized))
+
+
+def _is_valid_entrypoint(value: str) -> bool:
+    if ":" not in value:
+        return False
+    module_name, callable_name = value.split(":", maxsplit=1)
+    return bool(module_name.strip() and callable_name.strip())
 
 
 def _parse_version(value: str | None) -> tuple[int, ...] | None:
