@@ -2,7 +2,9 @@
 
 ## 0.2.5 - 2026-04-15
 
-- raised full pytest baseline to `298 passed`
+- raised full pytest baseline to `301 passed`
+- added `scripts/run_full_test_suite.py` as the authoritative full-suite validation entry
+- moved CI full-suite truth to `run_full_test_suite.py`
 - added `scripts/verify_native_installer_lane.py` for end-to-end native installer lane validation
 - kept native installer lane in probe mode by default, with `--require-toolchain` / `--require-signed` for hard gates
 - added `scripts/run_soak_validation.py` for repeated headless/smoke/preflight soak cycles

@@ -24,17 +24,23 @@ jobs:
       - name: Install dependencies
         run: uv sync --python 3.11 --extra dev --extra ui
 
+      - name: Capture ProtoLink version
+        shell: pwsh
+        run: |
+          $version = uv run python -c "import protolink; print(protolink.__version__)"
+          "PROTO_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Compile sources
         run: uv run python -m compileall -q src tests scripts
 
-      - name: Run tests
+      - name: Run authoritative full test suite
         shell: pwsh
         run: |
-          $pytestLog = Join-Path $env:RUNNER_TEMP "pytest-output.txt"
-          uv run pytest -q *>&1 | Tee-Object -FilePath $pytestLog
-          $pytestOutput = Get-Content -LiteralPath $pytestLog -Raw
-          if ($pytestOutput -notmatch '([0-9]+)\s+passed') { throw "Could not parse pytest passed count." }
-          "PROTO_PYTEST_PASSED=$($Matches[1])" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $suiteJson = uv run python scripts/run_full_test_suite.py --json-only
+          $suite = $suiteJson | ConvertFrom-Json
+          if (-not $suite.passed_count) { throw "Could not parse authoritative full-suite passed count." }
+          "PROTO_PYTEST_PASSED=$($suite.passed_count)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $suiteJson
 
       - name: Verify canonical truth
         run: uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count ${{ env.PROTO_PYTEST_PASSED }}
@@ -62,11 +68,18 @@ jobs:
         shell: pwsh
         run: uv run protolink --workspace $env:PROTO_WORKSPACE --release-preflight
 
+      - name: Soak validation gate
+        run: python scripts/run_soak_validation.py --cycles 2 --sleep-ms 0 --require-all-ready
+
       - name: Verify clean release-staging flow
         run: uv run python scripts/verify_release_staging.py --name ci
+
+      - name: Verify native installer lane probe
+        run: python scripts/verify_native_installer_lane.py
 
       - name: Build package
         run: uv build
 
       - name: Verify dist fresh-install artifacts
-        run: python scripts/verify_dist_install.py
+        shell: pwsh
+        run: python scripts/verify_dist_install.py --artifact-version $env:PROTO_VERSION

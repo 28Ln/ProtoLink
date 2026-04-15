@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+FULL_SUITE_COMMAND = "uv run python scripts/run_full_test_suite.py"
 TARGET_FILES = {
     "INDEX": ROOT / "docs" / "INDEX.md",
     "README": ROOT / "README.md",
@@ -90,9 +91,10 @@ def main() -> int:
     _require_contains("README", readme, "`docs/ROADMAP.md`")
     _require_contains("README", readme, "Native installer scaffold")
     _require_contains("TASKS", tasks, "`docs/ENGINEERING_TASKLIST.md`")
-    _require_contains("CURRENT_STATE", current_state, f"`uv run pytest -q` -> `{expected_count} passed`")
-    _require_contains("PROJECT_STATUS", project_status, f"`uv run pytest -q` -> `{expected_count} passed`")
-    _require_contains("VALIDATION", validation, f"`uv run pytest -q` -> {expected_count} passed")
+    _require_contains("README", readme, FULL_SUITE_COMMAND)
+    _require_contains("CURRENT_STATE", current_state, f"`{FULL_SUITE_COMMAND}` -> `{expected_count} passed`")
+    _require_contains("PROJECT_STATUS", project_status, f"`{FULL_SUITE_COMMAND}` -> `{expected_count} passed`")
+    _require_contains("VALIDATION", validation, f"`{FULL_SUITE_COMMAND}` -> {expected_count} passed")
     _require_contains("VALIDATION", validation, f"`{expected_count} passed`")
     _require_contains("VALIDATION", validation, "Native installer scaffold")
     _require_contains("MAINLINE_STATUS", mainline_status, f"- ID: `{expected_mainline}`")

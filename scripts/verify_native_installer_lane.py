@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -69,6 +70,51 @@ def _uv(*args: str) -> list[str]:
     return ["uv", "run", *args]
 
 
+def _tool_available(toolchain: dict[str, object], tool_key: str) -> bool:
+    tools = toolchain.get("tools", {})
+    if not isinstance(tools, dict):
+        return False
+    payload = tools.get(tool_key, {})
+    return isinstance(payload, dict) and bool(payload.get("available", False))
+
+
+def _summarize_scaffold_build(scaffold_build: dict[str, object]) -> dict[str, object]:
+    preflight = scaffold_build.get("preflight", {})
+    generated_artifacts = scaffold_build.get("generated_artifacts", {})
+    native_manifest = scaffold_build.get("native_installer_manifest", {})
+    migration = scaffold_build.get("migration", {})
+    blocking_items = preflight.get("blocking_items", []) if isinstance(preflight, dict) else []
+    verification_expectations = (
+        native_manifest.get("verification_expectations", [])
+        if isinstance(native_manifest, dict)
+        else []
+    )
+    return {
+        "workspace": scaffold_build.get("workspace"),
+        "migration_changed": bool(migration.get("changed", False)) if isinstance(migration, dict) else False,
+        "generated_artifacts": {
+            "log_file": generated_artifacts.get("log_file") if isinstance(generated_artifacts, dict) else None,
+            "capture_file": generated_artifacts.get("capture_file") if isinstance(generated_artifacts, dict) else None,
+            "replay_step_count": generated_artifacts.get("replay_step_count") if isinstance(generated_artifacts, dict) else None,
+        },
+        "preflight_ready": bool(preflight.get("ready", False)) if isinstance(preflight, dict) else False,
+        "blocking_items": list(blocking_items) if isinstance(blocking_items, list) else [],
+        "release_archive_file": scaffold_build.get("release_archive_file"),
+        "portable_archive_file": scaffold_build.get("portable_archive_file"),
+        "distribution_archive_file": scaffold_build.get("distribution_archive_file"),
+        "installer_staging_archive_file": scaffold_build.get("installer_staging_archive_file"),
+        "installer_archive_file": scaffold_build.get("installer_archive_file"),
+        "native_installer_scaffold_dir": scaffold_build.get("native_installer_scaffold_dir"),
+        "native_installer_manifest_file": scaffold_build.get("native_installer_manifest_file"),
+        "native_installer_wix_source_file": scaffold_build.get("native_installer_wix_source_file"),
+        "native_installer_wix_include_file": scaffold_build.get("native_installer_wix_include_file"),
+        "native_installer_payload_file": scaffold_build.get("native_installer_payload_file"),
+        "application_version": native_manifest.get("application_version") if isinstance(native_manifest, dict) else None,
+        "wix_product_version": native_manifest.get("wix_product_version") if isinstance(native_manifest, dict) else None,
+        "verification_expectations": list(verification_expectations) if isinstance(verification_expectations, list) else [],
+    }
+
+
 def execute_native_installer_lane(
     *,
     workspace: Path | None = None,
@@ -81,9 +127,11 @@ def execute_native_installer_lane(
         temp_root = Path(tempfile.mkdtemp(prefix="protolink-native-installer-lane-"))
         workspace = temp_root / "workspace"
     workspace = workspace.resolve()
+    started_at = time.perf_counter()
 
     toolchain = _run_json(_uv("protolink", "--verify-native-installer-toolchain"))
-    scaffold_build = _run_json(_uv("protolink", "--workspace", str(workspace), "--build-native-installer-scaffold", name))
+    scaffold_build_raw = _run_json(_uv("protolink", "--workspace", str(workspace), "--build-native-installer-scaffold", name))
+    scaffold_build = _summarize_scaffold_build(scaffold_build_raw)
     scaffold_dir = Path(str(scaffold_build["native_installer_scaffold_dir"])).resolve()
     scaffold_verify = _run_json(_uv("protolink", "--verify-native-installer-scaffold", str(scaffold_dir)))
 
@@ -91,22 +139,29 @@ def execute_native_installer_lane(
     signature_verify = None
     msi_file: Path | None = None
 
-    if bool(toolchain.get("tools", {}).get("wix", {}).get("available", False)):
+    if _tool_available(toolchain, "wix"):
         msi_build = _run_optional_json(_uv("protolink", "--build-native-installer-msi", str(scaffold_dir)))
         payload = msi_build.get("payload") if isinstance(msi_build, dict) else None
         if isinstance(payload, dict) and payload.get("output_file"):
             msi_file = Path(str(payload["output_file"])).resolve()
 
-    if msi_file is not None and bool(toolchain.get("tools", {}).get("signtool", {}).get("available", False)):
+    if msi_file is not None and _tool_available(toolchain, "signtool"):
         signature_verify = _run_optional_json(_uv("protolink", "--verify-native-installer-signature", str(msi_file)))
 
-    ready_for_release = bool(toolchain.get("ready", False)) and bool(msi_build and msi_build.get("ok")) and bool(
-        signature_verify and signature_verify.get("ok")
-    )
+    stage_status = {
+        "toolchain_ready": bool(toolchain.get("ready", False)),
+        "scaffold_built": bool(scaffold_build.get("native_installer_scaffold_dir")),
+        "scaffold_verified": bool(scaffold_verify.get("checksum_matches", False)),
+        "msi_built": bool(msi_build and msi_build.get("ok")),
+        "signature_verified": bool(signature_verify and signature_verify.get("ok")),
+    }
+    ready_for_release = all(stage_status.values())
 
     result = {
         "workspace": str(workspace),
         "temporary_root": str(temp_root) if temp_root is not None else None,
+        "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
+        "stage_status": stage_status,
         "toolchain": toolchain,
         "scaffold_build": scaffold_build,
         "scaffold_verify": scaffold_verify,

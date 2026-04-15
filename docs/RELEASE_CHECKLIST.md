@@ -17,8 +17,8 @@ Last updated: 2026-04-15
 
 ```powershell
 uv sync --python 3.11 --extra dev --extra ui
-uv run pytest -q
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 298
+uv run python scripts/run_full_test_suite.py
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 301
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local

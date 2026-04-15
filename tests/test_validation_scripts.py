@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import runpy
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,59 @@ import pytest
 def _load_script(script_name: str) -> dict[str, object]:
     script_file = Path(__file__).resolve().parents[1] / 'scripts' / script_name
     return runpy.run_path(str(script_file), run_name=f'{script_name}_test_module')
+
+
+def test_execute_full_test_suite_aggregates_file_results(tmp_path: Path) -> None:
+    ns = _load_script('run_full_test_suite.py')
+
+    file_a = tmp_path / 'tests' / 'test_a.py'
+    file_b = tmp_path / 'tests' / 'test_b.py'
+    file_a.parent.mkdir(parents=True)
+    file_a.write_text('pass', encoding='utf-8')
+    file_b.write_text('pass', encoding='utf-8')
+
+    outputs = {
+        str(file_a): '...                                                                      [100%]\n3 passed in 0.10s\n',
+        str(file_b): '..                                                                       [100%]\n2 passed in 0.08s\n',
+    }
+
+    def fake_discover_test_files():
+        return (file_a, file_b)
+
+    def fake_run(command, cwd=None, text=None, capture_output=None, check=None):
+        test_file = command[-1]
+        return subprocess.CompletedProcess(command, 0, stdout=outputs[test_file], stderr='')
+
+    execute = ns['execute_full_test_suite']
+    execute.__globals__['discover_test_files'] = fake_discover_test_files
+    execute.__globals__['subprocess'].run = fake_run
+
+    result = execute()
+
+    assert result['test_file_count'] == 2
+    assert result['passed_count'] == 5
+    assert [item['passed_count'] for item in result['file_results']] == [3, 2]
+
+
+def test_execute_full_test_suite_fails_on_nonzero_file_run(tmp_path: Path) -> None:
+    ns = _load_script('run_full_test_suite.py')
+
+    file_a = tmp_path / 'tests' / 'test_a.py'
+    file_a.parent.mkdir(parents=True)
+    file_a.write_text('pass', encoding='utf-8')
+
+    def fake_discover_test_files():
+        return (file_a,)
+
+    def fake_run(command, cwd=None, text=None, capture_output=None, check=None):
+        return subprocess.CompletedProcess(command, 1, stdout='F                                                                        [100%]\n1 failed in 0.10s\n', stderr='')
+
+    execute = ns['execute_full_test_suite']
+    execute.__globals__['discover_test_files'] = fake_discover_test_files
+    execute.__globals__['subprocess'].run = fake_run
+
+    with pytest.raises(ns['VerificationError'], match='Full test suite file run failed'):
+        execute()
 
 
 def test_execute_native_installer_lane_handles_missing_toolchain_with_structured_result(tmp_path: Path) -> None:
@@ -37,6 +91,10 @@ def test_execute_native_installer_lane_handles_missing_toolchain_with_structured
 
     assert result['toolchain']['ready'] is False
     assert result['scaffold_build']['native_installer_scaffold_dir'].endswith('scaffold')
+    assert result['stage_status']['scaffold_built'] is True
+    assert result['stage_status']['scaffold_verified'] is True
+    assert result['stage_status']['toolchain_ready'] is False
+    assert 'native_installer_manifest' not in result['scaffold_build']
     assert result['ready_for_release'] is False
 
 
