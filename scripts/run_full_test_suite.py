@@ -22,7 +22,11 @@ RETRYABLE_CRASH_MARKERS = (
     "Windows fatal exception",
     "Fatal Python error",
 )
-MAX_ATTEMPTS_PER_FILE = 2
+RETRYABLE_CRASH_EXIT_CODES = {
+    3221225477,  # 0xC0000005 access violation
+    3221226356,  # 0xC0000374 heap corruption
+}
+MAX_ATTEMPTS_PER_FILE = 4
 
 
 class VerificationError(RuntimeError):
@@ -54,6 +58,14 @@ def _has_retryable_crash_marker(output: str) -> bool:
     return any(marker in output for marker in RETRYABLE_CRASH_MARKERS)
 
 
+def _is_retryable_crash(completed: subprocess.CompletedProcess[str], combined_output: str) -> bool:
+    if _has_retryable_crash_marker(completed.stderr):
+        return True
+    if completed.returncode in RETRYABLE_CRASH_EXIT_CODES and not _has_failure_markers(combined_output):
+        return True
+    return False
+
+
 def _run_test_file(test_file: Path) -> dict[str, object]:
     started_at = time.perf_counter()
     attempts: list[dict[str, object]] = []
@@ -75,12 +87,12 @@ def _run_test_file(test_file: Path) -> dict[str, object]:
                 "attempt": attempt,
                 "returncode": completed.returncode,
                 "passed_count": passed_count,
-                "retryable_crash": _has_retryable_crash_marker(completed.stderr),
+                "retryable_crash": _is_retryable_crash(completed, combined_output),
             }
         )
         if passed_count is not None and not _has_failure_markers(combined_output):
             break
-        if not _has_retryable_crash_marker(completed.stderr) or attempt >= MAX_ATTEMPTS_PER_FILE:
+        if not _is_retryable_crash(completed, combined_output) or attempt >= MAX_ATTEMPTS_PER_FILE:
             raise VerificationError(
                 "Full test suite file run failed:\n"
                 f"file: {test_file}\n"

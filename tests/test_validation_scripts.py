@@ -127,6 +127,33 @@ def test_execute_full_test_suite_retries_retryable_crash(tmp_path: Path) -> None
     assert result['file_results'][0]['attempt_count'] == 2
 
 
+def test_execute_full_test_suite_retries_retryable_exit_code_without_stderr_marker(tmp_path: Path) -> None:
+    ns = _load_script('run_full_test_suite.py')
+
+    file_a = tmp_path / 'tests' / 'test_a.py'
+    file_a.parent.mkdir(parents=True)
+    file_a.write_text('pass', encoding='utf-8')
+    calls = {'count': 0}
+
+    def fake_discover_test_files():
+        return (file_a,)
+
+    def fake_run(command, cwd=None, text=None, capture_output=None, check=None):
+        calls['count'] += 1
+        if calls['count'] == 1:
+            return subprocess.CompletedProcess(command, 3221226356, stdout='....                                                                     [100%]\n', stderr='')
+        return subprocess.CompletedProcess(command, 0, stdout='..                                                                       [100%]\n2 passed in 0.08s\n', stderr='')
+
+    execute = ns['execute_full_test_suite']
+    execute.__globals__['discover_test_files'] = fake_discover_test_files
+    execute.__globals__['subprocess'].run = fake_run
+
+    result = execute()
+
+    assert calls['count'] == 2
+    assert result['passed_count'] == 2
+
+
 def test_execute_native_installer_lane_handles_missing_toolchain_with_structured_result(tmp_path: Path) -> None:
     ns = _load_script('verify_native_installer_lane.py')
 

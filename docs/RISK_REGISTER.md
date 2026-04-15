@@ -1,6 +1,6 @@
 # ProtoLink Risk Register
 
-Last updated: 2026-04-14
+Last updated: 2026-04-15
 
 ## 风险清单
 
@@ -44,12 +44,12 @@ Last updated: 2026-04-14
 - Next action: 在后续主线中继续扩展交付链与清理路径 evidence
 - Residual risk: Medium
 
-### R-005 插件 / 扩展接入契约尚未正式化
+### R-005 插件 / 扩展接入边界仍未进入运行时装载阶段
 - Level: Medium
 - Category: Extensibility
 - Trigger: 新增协议、插件或外部扩展需求进入主线
 - Impact: 扩展实现分叉，维护成本上升
-- Current control: 当前代码分层清晰，可沿现有 service / transport 模式扩展
-- Evidence: 尚无正式 SDK / contract 文档
-- Next action: 规划 `PL-015`
+- Current control: 已具备正式 `EXTENSION_CONTRACT` 文档、workspace/plugins manifest discovery、静态校验与 release-preflight 阻断
+- Evidence: 当前仅做到 manifest discovery / validation / audit；尚未进入受控运行时装载、descriptor contract 与 SDK 化阶段
+- Next action: 在 `PL-015` 中推进 registry / descriptor / loading boundary / enforcement
 - Residual risk: Medium

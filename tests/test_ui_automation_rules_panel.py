@@ -31,6 +31,32 @@ def qapp() -> QApplication:
     return app
 
 
+@pytest.fixture(autouse=True)
+def cleanup_widgets(qapp: QApplication):
+    yield
+    for widget in QApplication.topLevelWidgets():
+        try:
+            if hasattr(widget, "close"):
+                widget.close()
+            if hasattr(widget, "deleteLater"):
+                widget.deleteLater()
+        except (AttributeError, RuntimeError):
+            continue
+    qapp.processEvents()
+
+
+def _shutdown_context(context) -> None:
+    context.serial_session_service.shutdown()
+    context.mqtt_client_service.shutdown()
+    context.mqtt_server_service.shutdown()
+    context.tcp_client_service.shutdown()
+    context.tcp_server_service.shutdown()
+    context.udp_service.shutdown()
+    context.packet_replay_service.shutdown()
+    context.timed_task_service.shutdown()
+    context.channel_bridge_runtime_service.shutdown()
+
+
 def test_automation_rules_panel_can_save_and_run_replay_rule(qapp: QApplication, tmp_path: Path) -> None:
     context = bootstrap_app_context(tmp_path, persist_settings=False)
     panel = AutomationRulesPanel(context.rule_engine_service)
@@ -69,6 +95,7 @@ def test_automation_rules_panel_can_save_and_run_replay_rule(qapp: QApplication,
 
     assert context.rule_engine_service.snapshot.last_run_rule_name == "Replay Rule"
     panel.close()
+    _shutdown_context(context)
 
 
 def test_automation_rules_panel_switches_action_tabs_and_persists_auto_response_choice(
@@ -99,6 +126,7 @@ def test_automation_rules_panel_switches_action_tabs_and_persists_auto_response_
     qapp.processEvents()
     assert panel.action_combo.currentText() == "禁用自动响应"
     panel.close()
+    _shutdown_context(context)
 
 
 def test_automation_rules_panel_can_save_scan_rule_and_clear_jobs(qapp: QApplication, tmp_path: Path) -> None:
@@ -127,6 +155,7 @@ def test_automation_rules_panel_can_save_scan_rule_and_clear_jobs(qapp: QApplica
     assert context.rule_engine_service.snapshot.prepared_device_scan_job_count == 0
     assert panel.clear_jobs_button.isEnabled() is False
     panel.close()
+    _shutdown_context(context)
 
 
 def test_automation_rules_panel_exposes_runtime_safety_controls(qapp: QApplication, tmp_path: Path) -> None:
@@ -186,5 +215,4 @@ def test_automation_rules_panel_exposes_runtime_safety_controls(qapp: QApplicati
     assert context.channel_bridge_runtime_service.snapshot.bridge_names == ()
 
     panel.close()
-    context.timed_task_service.shutdown()
-    context.channel_bridge_runtime_service.shutdown()
+    _shutdown_context(context)

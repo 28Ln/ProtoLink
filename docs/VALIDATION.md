@@ -4,8 +4,8 @@ Last updated: 2026-04-15
 
 ## 当前验证基线
 
-- `uv run python scripts/run_full_test_suite.py` -> 324 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 324` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> 325 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 325` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest` -> passed
 - `uv run protolink --audit-plugin-manifests` -> passed
@@ -15,14 +15,14 @@ Last updated: 2026-04-15
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
 - `uv run protolink --smoke-check` -> `smoke-check-ok`
-- 当前 full-suite 快照：`324 passed`
+- 当前 full-suite 快照：`325 passed`
 
 ## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 324
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 325
 uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest
 uv run protolink --audit-plugin-manifests
 ```
