@@ -2,7 +2,7 @@
 
 ## 0.2.5 - 2026-04-15
 
-- raised full pytest baseline to `312 passed`
+- raised full pytest baseline to `314 passed`
 - reworked main window, packet console, complex protocol panels, and transport panels into tabbed/scrollable layouts
 - reduced default packet-console dock footprint and restored primary working-area height
 - added retry-tolerant authoritative full-suite execution for transient Windows UI test crashes
