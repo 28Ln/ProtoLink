@@ -35,6 +35,10 @@ def test_automation_rules_panel_can_save_and_run_replay_rule(qapp: QApplication,
     context = bootstrap_app_context(tmp_path, persist_settings=False)
     panel = AutomationRulesPanel(context.rule_engine_service)
     assert panel.notice_label.wordWrap() is True
+    assert panel.status_label.wordWrap() is True
+    assert panel.profile_path_label.wordWrap() is True
+    assert panel.content_tabs.count() == 1
+    assert panel.action_tabs.count() == 3
     assert panel.run_button.isEnabled() is False
     assert panel.clear_jobs_button.isEnabled() is False
     replay_path = tmp_path / "plan.json"
@@ -64,6 +68,36 @@ def test_automation_rules_panel_can_save_and_run_replay_rule(qapp: QApplication,
     qapp.processEvents()
 
     assert context.rule_engine_service.snapshot.last_run_rule_name == "Replay Rule"
+    panel.close()
+
+
+def test_automation_rules_panel_switches_action_tabs_and_persists_auto_response_choice(
+    qapp: QApplication,
+    tmp_path: Path,
+) -> None:
+    context = bootstrap_app_context(tmp_path, persist_settings=False)
+    panel = AutomationRulesPanel(context.rule_engine_service)
+
+    panel.action_combo.setCurrentIndex(panel.action_combo.findText("准备设备扫描"))
+    qapp.processEvents()
+    assert panel.action_tabs.tabText(panel.action_tabs.currentIndex()) == "设备扫描"
+
+    panel.action_combo.setCurrentIndex(panel.action_combo.findText("禁用自动响应"))
+    qapp.processEvents()
+    assert panel.action_tabs.tabText(panel.action_tabs.currentIndex()) == "自动响应"
+    assert "禁用自动响应" in panel.auto_response_action_label.text()
+
+    panel.name_input.setText("Disable Auto Response")
+    panel.save_button.click()
+    qapp.processEvents()
+
+    saved_rule = context.rule_engine_service.get_rule("Disable Auto Response")
+    assert saved_rule is not None
+    assert saved_rule.actions[0].auto_response_enabled is False
+
+    panel.rule_combo.setCurrentIndex(panel.rule_combo.findData("Disable Auto Response"))
+    qapp.processEvents()
+    assert panel.action_combo.currentText() == "禁用自动响应"
     panel.close()
 
 
@@ -132,6 +166,8 @@ def test_automation_rules_panel_exposes_runtime_safety_controls(qapp: QApplicati
     assert "定时任务：" in panel.timed_task_status_label.text()
     assert "通道桥：" in panel.channel_bridge_status_label.text()
     assert "受控自动化" in panel.notice_label.text()
+    assert panel.content_tabs.count() == 2
+    assert panel.content_tabs.tabText(1) == "运行安全"
 
     panel.disable_auto_response_button.click()
     qapp.processEvents()

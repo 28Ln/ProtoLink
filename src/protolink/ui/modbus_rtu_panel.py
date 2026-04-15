@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -11,7 +12,9 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSplitter,
     QSpinBox,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -40,6 +43,8 @@ from protolink.ui.text import READY_TEXT, connection_state_text, register_byte_o
 
 
 class ModbusRtuLabPanel(QWidget):
+    _LABEL_COLUMN_MIN_WIDTH = 88
+
     def __init__(
         self,
         serial_service: SerialSessionService,
@@ -86,13 +91,11 @@ class ModbusRtuLabPanel(QWidget):
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
+        self.status_label.setWordWrap(True)
         header_layout.addWidget(title)
         header_layout.addStretch(1)
-        header_layout.addWidget(self.status_label)
-
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(8)
+        frame_layout.addLayout(header_layout)
+        frame_layout.addWidget(self.status_label)
 
         self.unit_id_spin = QSpinBox()
         self.unit_id_spin.setRange(0, 247)
@@ -136,9 +139,11 @@ class ModbusRtuLabPanel(QWidget):
 
         self.request_preview = QTextEdit()
         self.request_preview.setReadOnly(True)
+        self.request_preview.setMinimumHeight(220)
 
         self.decode_preview = QTextEdit()
         self.decode_preview.setReadOnly(True)
+        self.decode_preview.setMinimumHeight(220)
 
         self.replay_plan_name_input = QLineEdit("modbus-rtu-request")
         self.replay_file_input = QLineEdit()
@@ -168,48 +173,141 @@ class ModbusRtuLabPanel(QWidget):
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
-        grid.addWidget(QLabel("从站地址"), 0, 0)
-        grid.addWidget(self.unit_id_spin, 0, 1)
-        grid.addWidget(QLabel("功能码"), 0, 2)
-        grid.addWidget(self.function_combo, 0, 3)
-        grid.addWidget(QLabel("起始地址"), 1, 0)
-        grid.addWidget(self.start_address_spin, 1, 1)
-        grid.addWidget(QLabel("数量"), 1, 2)
-        grid.addWidget(self.quantity_spin, 1, 3)
-        grid.addWidget(self.send_request_button, 1, 4)
-        grid.addWidget(QLabel("点位名称"), 2, 0)
-        grid.addWidget(self.point_name_input, 2, 1)
-        grid.addWidget(QLabel("数据类型"), 2, 2)
-        grid.addWidget(self.data_type_combo, 2, 3)
-        grid.addWidget(QLabel("字节序"), 3, 0)
-        grid.addWidget(self.byte_order_combo, 3, 1)
-        grid.addWidget(QLabel("缩放"), 3, 2)
-        grid.addWidget(self.scale_input, 3, 3)
-        grid.addWidget(QLabel("偏移"), 4, 0)
-        grid.addWidget(self.offset_input, 4, 1)
-        grid.addWidget(QLabel("单位"), 4, 2)
-        grid.addWidget(self.unit_input, 4, 3)
-        grid.addWidget(self.apply_point_button, 4, 4)
+        self.content_tabs = QTabWidget()
+        self.content_tabs.setObjectName("ModbusRtuTabs")
+        self.content_tabs.addTab(self._build_request_tab(), "请求配置")
+        self.content_tabs.addTab(self._build_preview_tab(), "预览与解析")
+        self.content_tabs.addTab(self._build_replay_tab(), "回放与导出")
 
-        frame_layout.addLayout(header_layout)
-        frame_layout.addLayout(grid)
-        frame_layout.addWidget(QLabel("请求预览"))
-        frame_layout.addWidget(self.request_preview)
-        frame_layout.addWidget(QLabel("回放计划名"))
-        frame_layout.addWidget(self.replay_plan_name_input)
+        frame_layout.addWidget(self.content_tabs)
+        frame_layout.addWidget(self.error_label)
+        layout.addWidget(frame)
+
+    def _build_request_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        request_frame, request_layout = self._create_section(
+            "请求参数",
+            "串口从站、功能码与地址数量单独分组，避免和点位字段混排后形成超长页面。",
+        )
+        request_grid = self._create_form_grid()
+        request_grid.addWidget(QLabel("从站地址"), 0, 0)
+        request_grid.addWidget(self.unit_id_spin, 0, 1)
+        request_grid.addWidget(QLabel("功能码"), 0, 2)
+        request_grid.addWidget(self.function_combo, 0, 3)
+        request_grid.addWidget(QLabel("起始地址"), 1, 0)
+        request_grid.addWidget(self.start_address_spin, 1, 1)
+        request_grid.addWidget(QLabel("数量"), 1, 2)
+        request_grid.addWidget(self.quantity_spin, 1, 3)
+        request_grid.addWidget(self.send_request_button, 2, 2, 1, 2)
+        request_layout.addLayout(request_grid)
+
+        point_frame, point_layout = self._create_section(
+            "监控点位",
+            "只保留当前 RTU 请求相关的寄存器点位设置，降低中文字段互挤。",
+        )
+        point_grid = self._create_form_grid()
+        point_grid.addWidget(QLabel("点位名称"), 0, 0)
+        point_grid.addWidget(self.point_name_input, 0, 1)
+        point_grid.addWidget(QLabel("数据类型"), 0, 2)
+        point_grid.addWidget(self.data_type_combo, 0, 3)
+        point_grid.addWidget(QLabel("字节序"), 1, 0)
+        point_grid.addWidget(self.byte_order_combo, 1, 1)
+        point_grid.addWidget(QLabel("缩放"), 1, 2)
+        point_grid.addWidget(self.scale_input, 1, 3)
+        point_grid.addWidget(QLabel("偏移"), 2, 0)
+        point_grid.addWidget(self.offset_input, 2, 1)
+        point_grid.addWidget(QLabel("单位"), 2, 2)
+        point_grid.addWidget(self.unit_input, 2, 3)
+        point_grid.addWidget(self.apply_point_button, 3, 2, 1, 2)
+        point_layout.addLayout(point_grid)
+
+        tab_layout.addWidget(request_frame)
+        tab_layout.addWidget(point_frame)
+        tab_layout.addWidget(self.workflow_hint)
+        tab_layout.addStretch(1)
+        return tab
+
+    def _build_preview_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        tab_layout.addWidget(self.monitor_summary_label)
+
+        self.preview_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.preview_splitter.setObjectName("ModbusRtuPreviewSplitter")
+        self.preview_splitter.setChildrenCollapsible(False)
+        self.preview_splitter.addWidget(self._create_text_section("请求预览", self.request_preview))
+        self.preview_splitter.addWidget(self._create_text_section("选中报文解析", self.decode_preview))
+        self.preview_splitter.setStretchFactor(0, 1)
+        self.preview_splitter.setStretchFactor(1, 1)
+        tab_layout.addWidget(self.preview_splitter, 1)
+        return tab
+
+    def _build_replay_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        replay_frame, replay_layout = self._create_section(
+            "回放与导出",
+            "把回放计划、抓包导出与执行状态拆到独立页签，释放主操作区垂直空间。",
+        )
+        replay_grid = self._create_form_grid()
+        replay_grid.addWidget(QLabel("计划名称"), 0, 0)
+        replay_grid.addWidget(self.replay_plan_name_input, 0, 1, 1, 3)
+        replay_layout.addLayout(replay_grid)
+
         replay_controls = QHBoxLayout()
+        replay_controls.setSpacing(8)
         replay_controls.addWidget(self.export_replay_button)
         replay_controls.addWidget(self.run_replay_button)
         replay_controls.addWidget(self.export_capture_bundle_button)
-        frame_layout.addLayout(replay_controls)
-        frame_layout.addWidget(self.replay_file_input)
-        frame_layout.addWidget(self.replay_status_label)
-        frame_layout.addWidget(QLabel("选中报文解析"))
-        frame_layout.addWidget(self.decode_preview)
-        frame_layout.addWidget(self.workflow_hint)
-        frame_layout.addWidget(self.monitor_summary_label)
-        frame_layout.addWidget(self.error_label)
-        layout.addWidget(frame)
+        replay_layout.addLayout(replay_controls)
+        replay_layout.addWidget(self.replay_file_input)
+        replay_layout.addWidget(self.replay_status_label)
+
+        tab_layout.addWidget(replay_frame)
+        tab_layout.addStretch(1)
+        return tab
+
+    def _create_text_section(self, title_text: str, editor: QTextEdit) -> QFrame:
+        frame, layout = self._create_section(title_text)
+        layout.addWidget(editor)
+        return frame
+
+    def _create_form_grid(self) -> QGridLayout:
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
+        grid.setColumnMinimumWidth(0, self._LABEL_COLUMN_MIN_WIDTH)
+        grid.setColumnMinimumWidth(2, self._LABEL_COLUMN_MIN_WIDTH)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+        return grid
+
+    def _create_section(self, title_text: str, description: str | None = None) -> tuple[QFrame, QVBoxLayout]:
+        frame = QFrame()
+        frame.setObjectName("Panel")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(8)
+
+        title = QLabel(title_text)
+        title.setObjectName("SectionTitle")
+        layout.addWidget(title)
+        if description:
+            description_label = QLabel(description)
+            description_label.setObjectName("MetaLabel")
+            description_label.setWordWrap(True)
+            layout.addWidget(description_label)
+        return frame, layout
 
     def _refresh_request_preview(self) -> None:
         payload = self._build_request_payload()

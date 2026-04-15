@@ -81,3 +81,20 @@ def test_register_monitor_panel_reflects_live_modbus_source(qapp: QApplication, 
     assert "来源：Modbus RTU 响应" in panel.status_label.text()
     assert "42 rpm" in panel.decoded_value_label.text()
     panel.close()
+
+
+def test_register_monitor_panel_splits_point_and_decode_flows_into_tabs(qapp: QApplication, tmp_path) -> None:
+    context = bootstrap_app_context(tmp_path, persist_settings=False)
+    panel = RegisterMonitorPanel(context.register_monitor_service)
+
+    assert panel.status_label.wordWrap() is True
+    assert panel.content_tabs.count() == 2
+    assert [panel.content_tabs.tabText(index) for index in range(panel.content_tabs.count())] == [
+        "点位配置",
+        "解码预览",
+    ]
+
+    panel.content_tabs.setCurrentIndex(1)
+    qapp.processEvents()
+    assert panel.content_tabs.currentIndex() == 1
+    panel.close()

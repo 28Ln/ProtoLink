@@ -99,6 +99,14 @@ def test_modbus_tcp_panel_can_preview_and_send_request(qapp: QApplication) -> No
     register_monitor = RegisterMonitorService()
     inspector = PacketInspectorState()
     panel = ModbusTcpLabPanel(tcp_service, register_monitor, inspector)  # type: ignore[arg-type]
+    assert panel.content_tabs.count() == 3
+    assert [panel.content_tabs.tabText(index) for index in range(panel.content_tabs.count())] == [
+        "请求配置",
+        "预览与解析",
+        "回放与导出",
+    ]
+    assert panel.preview_splitter.count() == 2
+    assert panel.status_label.wordWrap() is True
 
     panel.transaction_id_spin.setValue(3)
     panel.unit_id_spin.setValue(17)

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -26,6 +27,8 @@ from protolink.core.transport import TransportKind
 
 
 class AutomationRulesPanel(QWidget):
+    _LABEL_COLUMN_MIN_WIDTH = 88
+
     def __init__(
         self,
         service: RuleEngineService,
@@ -68,20 +71,17 @@ class AutomationRulesPanel(QWidget):
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
+        self.status_label.setWordWrap(True)
         self.profile_path_label = QLabel()
         self.profile_path_label.setObjectName("MetaLabel")
+        self.profile_path_label.setWordWrap(True)
         header.addWidget(title)
         header.addStretch(1)
-        header.addWidget(self.status_label)
         self.notice_label = QLabel(
             "受控自动化，仅在明确的停止/禁用边界内开放，避免未授权扩展。"
         )
         self.notice_label.setObjectName("MetaLabel")
         self.notice_label.setWordWrap(True)
-
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(8)
 
         self.rule_combo = QComboBox()
         self.rule_combo.addItem("选择规则", None)
@@ -130,6 +130,44 @@ class AutomationRulesPanel(QWidget):
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
+        frame_layout.addLayout(header)
+        frame_layout.addWidget(self.status_label)
+        frame_layout.addWidget(self.profile_path_label)
+        frame_layout.addWidget(self.notice_label)
+        self.content_tabs = QTabWidget()
+        self.content_tabs.setObjectName("AutomationRulesTabs")
+        self.content_tabs.addTab(self._build_rule_editor_tab(), "规则编辑")
+        if any(
+            service is not None
+            for service in (
+                self.auto_response_service,
+                self.timed_task_service,
+                self.channel_bridge_service,
+            )
+        ):
+            self.content_tabs.addTab(self._build_runtime_safety_frame(), "运行安全")
+        frame_layout.addWidget(self.content_tabs)
+        layout.addWidget(frame)
+        self._refresh_action_specific_controls()
+
+    def _build_rule_editor_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        tab_layout.addWidget(self._build_rule_identity_section())
+        tab_layout.addWidget(self._build_action_configuration_section())
+        tab_layout.addWidget(self._build_execution_section())
+        tab_layout.addStretch(1)
+        return tab
+
+    def _build_rule_identity_section(self) -> QFrame:
+        frame, layout = self._create_section(
+            "规则入口",
+            "先选规则，再编辑名称和动作类型，避免所有字段同时堆在一张长表单里。",
+        )
+        grid = self._create_form_grid()
         grid.addWidget(QLabel("规则"), 0, 0)
         grid.addWidget(self.rule_combo, 0, 1, 1, 2)
         grid.addWidget(self.delete_button, 0, 3)
@@ -137,48 +175,84 @@ class AutomationRulesPanel(QWidget):
         grid.addWidget(self.name_input, 1, 1)
         grid.addWidget(QLabel("操作"), 1, 2)
         grid.addWidget(self.action_combo, 1, 3)
-        grid.addWidget(QLabel("回放计划"), 2, 0)
-        grid.addWidget(self.replay_path_input, 2, 1, 1, 3)
-        grid.addWidget(QLabel("回放目标"), 3, 0)
-        grid.addWidget(self.replay_target_combo, 3, 1)
-        grid.addWidget(QLabel("扫描通道"), 4, 0)
-        grid.addWidget(self.scan_transport_combo, 4, 1)
-        grid.addWidget(QLabel("扫描目标"), 4, 2)
-        grid.addWidget(self.scan_target_input, 4, 3)
-        grid.addWidget(QLabel("起始寄存器"), 5, 0)
-        grid.addWidget(self.scan_unit_start, 5, 1)
-        grid.addWidget(QLabel("结束寄存器"), 5, 2)
-        grid.addWidget(self.scan_unit_end, 5, 3)
-        grid.addWidget(self.save_button, 6, 1)
-        grid.addWidget(self.run_button, 6, 2)
-        grid.addWidget(self.clear_jobs_button, 6, 3)
-        grid.addWidget(self.reload_button, 7, 3)
+        layout.addLayout(grid)
+        return frame
 
-        frame_layout.addLayout(header)
-        frame_layout.addWidget(self.profile_path_label)
-        frame_layout.addWidget(self.notice_label)
-        frame_layout.addLayout(grid)
-        frame_layout.addWidget(self.error_label)
-        layout.addWidget(frame)
-        if any(service is not None for service in (self.auto_response_service, self.timed_task_service, self.channel_bridge_service)):
-            layout.addWidget(self._build_runtime_safety_frame())
-        self._refresh_action_specific_controls()
-
-    def refresh(self, snapshot: RuleEngineSnapshot) -> None:
-        self._syncing_controls = True
-        try:
-            self._rebuild_rules(snapshot)
-        finally:
-            self._syncing_controls = False
-        self.status_label.setText(
-            f"规则数: {len(snapshot.rule_names)}    "
-            f"运行次数: {snapshot.execution_count}    "
-            f"扫描任务: {snapshot.prepared_device_scan_job_count}"
+    def _build_action_configuration_section(self) -> QFrame:
+        frame, layout = self._create_section(
+            "动作配置",
+            "将回放、扫描和自动响应拆成独立页签，降低中文标签挤压与纵向堆叠。",
         )
-        profile_path = self.service.profile_path
-        self.profile_path_label.setText(f"配置文件: {profile_path}" if profile_path is not None else "配置文件: 内存中")
-        self.error_label.setText(snapshot.last_error or "准备就绪")
-        self._refresh_primary_actions(snapshot)
+        self.action_tabs = QTabWidget()
+        self.action_tabs.setObjectName("AutomationActionTabs")
+        self.replay_action_tab = self._build_replay_action_tab()
+        self.scan_action_tab = self._build_scan_action_tab()
+        self.auto_response_action_tab = self._build_auto_response_action_tab()
+        self.action_tabs.addTab(self.replay_action_tab, "回放计划")
+        self.action_tabs.addTab(self.scan_action_tab, "设备扫描")
+        self.action_tabs.addTab(self.auto_response_action_tab, "自动响应")
+        layout.addWidget(self.action_tabs)
+        return frame
+
+    def _build_replay_action_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        grid = self._create_form_grid()
+        grid.addWidget(QLabel("回放计划"), 0, 0)
+        grid.addWidget(self.replay_path_input, 0, 1, 1, 3)
+        grid.addWidget(QLabel("回放目标"), 1, 0)
+        grid.addWidget(self.replay_target_combo, 1, 1, 1, 3)
+        layout.addLayout(grid)
+        layout.addStretch(1)
+        return tab
+
+    def _build_scan_action_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        grid = self._create_form_grid()
+        grid.addWidget(QLabel("扫描通道"), 0, 0)
+        grid.addWidget(self.scan_transport_combo, 0, 1)
+        grid.addWidget(QLabel("扫描目标"), 0, 2)
+        grid.addWidget(self.scan_target_input, 0, 3)
+        grid.addWidget(QLabel("起始寄存器"), 1, 0)
+        grid.addWidget(self.scan_unit_start, 1, 1)
+        grid.addWidget(QLabel("结束寄存器"), 1, 2)
+        grid.addWidget(self.scan_unit_end, 1, 3)
+        layout.addLayout(grid)
+        layout.addStretch(1)
+        return tab
+
+    def _build_auto_response_action_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        self.auto_response_action_label = QLabel()
+        self.auto_response_action_label.setObjectName("MetaLabel")
+        self.auto_response_action_label.setWordWrap(True)
+        layout.addWidget(self.auto_response_action_label)
+        layout.addStretch(1)
+        return tab
+
+    def _build_execution_section(self) -> QFrame:
+        frame, layout = self._create_section("执行控制")
+        controls = QHBoxLayout()
+        controls.setSpacing(8)
+        controls.addWidget(self.save_button)
+        controls.addWidget(self.run_button)
+        controls.addWidget(self.clear_jobs_button)
+        controls.addStretch(1)
+        controls.addWidget(self.reload_button)
+        layout.addLayout(controls)
+        layout.addWidget(self.error_label)
+        return frame
 
     def _build_runtime_safety_frame(self) -> QFrame:
         frame = QFrame()
@@ -195,6 +269,7 @@ class AutomationRulesPanel(QWidget):
         row += 1
 
         self.auto_response_status_label = QLabel("自动响应：不可用")
+        self.auto_response_status_label.setWordWrap(True)
         self.enable_auto_response_button = QPushButton("启用自动响应")
         self.disable_auto_response_button = QPushButton("禁用自动响应")
         if self.auto_response_service is not None:
@@ -209,6 +284,7 @@ class AutomationRulesPanel(QWidget):
         row += 1
 
         self.timed_task_status_label = QLabel("定时任务：不可用")
+        self.timed_task_status_label.setWordWrap(True)
         self.start_timed_tasks_button = QPushButton("启动定时任务")
         self.stop_timed_tasks_button = QPushButton("停止定时任务")
         if self.timed_task_service is not None:
@@ -223,6 +299,7 @@ class AutomationRulesPanel(QWidget):
         row += 1
 
         self.channel_bridge_status_label = QLabel("通道桥：不可用")
+        self.channel_bridge_status_label.setWordWrap(True)
         self.clear_bridges_button = QPushButton("清除桥接")
         if self.channel_bridge_service is not None:
             self.clear_bridges_button.clicked.connect(self.channel_bridge_service.clear_bridges)
@@ -231,6 +308,22 @@ class AutomationRulesPanel(QWidget):
         layout.addWidget(self.channel_bridge_status_label, row, 0, 1, 3)
         layout.addWidget(self.clear_bridges_button, row, 3)
         return frame
+
+    def refresh(self, snapshot: RuleEngineSnapshot) -> None:
+        self._syncing_controls = True
+        try:
+            self._rebuild_rules(snapshot)
+        finally:
+            self._syncing_controls = False
+        self.status_label.setText(
+            f"规则数: {len(snapshot.rule_names)}    "
+            f"运行次数: {snapshot.execution_count}    "
+            f"扫描任务: {snapshot.prepared_device_scan_job_count}"
+        )
+        profile_path = self.service.profile_path
+        self.profile_path_label.setText(f"配置文件: {profile_path}" if profile_path is not None else "配置文件: 内存中")
+        self.error_label.setText(snapshot.last_error or "准备就绪")
+        self._refresh_primary_actions(snapshot)
 
     def _refresh_auto_response_status(self, snapshot: AutoResponseRuntimeSnapshot) -> None:
         self.auto_response_status_label.setText(
@@ -264,7 +357,10 @@ class AutomationRulesPanel(QWidget):
         if not rule.actions:
             return
         action = rule.actions[0]
-        self._set_combo_to_data(self.action_combo, action.kind)
+        if action.kind == AutomationActionKind.SET_AUTO_RESPONSE_ENABLED:
+            self._set_auto_response_action(action.auto_response_enabled is not False)
+        else:
+            self._set_combo_to_data(self.action_combo, action.kind)
         if action.kind == AutomationActionKind.RUN_REPLAY_PLAN:
             self.replay_path_input.setText(action.replay_plan_path or "")
             self._set_combo_to_data(self.replay_target_combo, action.replay_target_kind)
@@ -318,7 +414,7 @@ class AutomationRulesPanel(QWidget):
                 ),
             )
         else:
-            enable = self.action_combo.currentText().startswith("Enable")
+            enable = self._current_auto_response_enabled()
             rule = AutomationRule(
                 name=name,
                 actions=(AutomationAction(kind=action_kind, auto_response_enabled=enable),),
@@ -341,7 +437,7 @@ class AutomationRulesPanel(QWidget):
         if current_data != desired_data:
             self.rule_combo.blockSignals(True)
             self.rule_combo.clear()
-            self.rule_combo.addItem("Select Rule", None)
+            self.rule_combo.addItem("选择规则", None)
             for name in snapshot.rule_names:
                 self.rule_combo.addItem(name, name)
             self.rule_combo.blockSignals(False)
@@ -358,6 +454,15 @@ class AutomationRulesPanel(QWidget):
         self.scan_target_input.setEnabled(is_scan)
         self.scan_unit_start.setEnabled(is_scan)
         self.scan_unit_end.setEnabled(is_scan)
+        if action_kind == AutomationActionKind.RUN_REPLAY_PLAN:
+            self.action_tabs.setCurrentWidget(self.replay_action_tab)
+        elif action_kind == AutomationActionKind.PREPARE_DEVICE_SCAN:
+            self.action_tabs.setCurrentWidget(self.scan_action_tab)
+        else:
+            self.action_tabs.setCurrentWidget(self.auto_response_action_tab)
+        self.auto_response_action_label.setText(
+            f"当前操作：{'启用' if self._current_auto_response_enabled() else '禁用'}自动响应。"
+        )
 
     def _refresh_primary_actions(self, snapshot: RuleEngineSnapshot | None = None) -> None:
         snapshot = snapshot or self.service.snapshot
@@ -370,3 +475,40 @@ class AutomationRulesPanel(QWidget):
         index = combo.findData(value)
         if index >= 0:
             combo.setCurrentIndex(index)
+
+    def _set_auto_response_action(self, enabled: bool) -> None:
+        target_text = "启用自动响应" if enabled else "禁用自动响应"
+        for index in range(self.action_combo.count()):
+            if self.action_combo.itemText(index) == target_text:
+                self.action_combo.setCurrentIndex(index)
+                return
+
+    def _current_auto_response_enabled(self) -> bool:
+        return self.action_combo.currentText().startswith("启用")
+
+    def _create_form_grid(self) -> QGridLayout:
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
+        grid.setColumnMinimumWidth(0, self._LABEL_COLUMN_MIN_WIDTH)
+        grid.setColumnMinimumWidth(2, self._LABEL_COLUMN_MIN_WIDTH)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+        return grid
+
+    def _create_section(self, title_text: str, description: str | None = None) -> tuple[QFrame, QVBoxLayout]:
+        frame = QFrame()
+        frame.setObjectName("Panel")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(8)
+
+        title = QLabel(title_text)
+        title.setObjectName("SectionTitle")
+        layout.addWidget(title)
+        if description:
+            description_label = QLabel(description)
+            description_label.setObjectName("MetaLabel")
+            description_label.setWordWrap(True)
+            layout.addWidget(description_label)
+        return frame, layout

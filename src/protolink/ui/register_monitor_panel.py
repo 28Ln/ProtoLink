@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -19,6 +20,8 @@ from protolink.ui.text import READY_TEXT, register_byte_order_text, register_dat
 
 
 class RegisterMonitorPanel(QWidget):
+    _LABEL_COLUMN_MIN_WIDTH = 76
+
     def __init__(self, service: RegisterMonitorService) -> None:
         super().__init__()
         self.service = service
@@ -43,13 +46,11 @@ class RegisterMonitorPanel(QWidget):
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
+        self.status_label.setWordWrap(True)
         header_layout.addWidget(title)
         header_layout.addStretch(1)
-        header_layout.addWidget(self.status_label)
-
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(8)
+        frame_layout.addLayout(header_layout)
+        frame_layout.addWidget(self.status_label)
 
         self.point_combo = QComboBox()
         self.point_combo.addItem("选择点位", None)
@@ -90,33 +91,108 @@ class RegisterMonitorPanel(QWidget):
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
-        grid.addWidget(QLabel("点位"), 0, 0)
-        grid.addWidget(self.point_combo, 0, 1, 1, 2)
-        grid.addWidget(self.delete_button, 0, 3)
-        grid.addWidget(QLabel("名称"), 1, 0)
-        grid.addWidget(self.name_input, 1, 1)
-        grid.addWidget(QLabel("地址"), 1, 2)
-        grid.addWidget(self.address_input, 1, 3)
-        grid.addWidget(QLabel("类型"), 2, 0)
-        grid.addWidget(self.data_type_combo, 2, 1)
-        grid.addWidget(QLabel("字节序"), 2, 2)
-        grid.addWidget(self.byte_order_combo, 2, 3)
-        grid.addWidget(QLabel("缩放"), 3, 0)
-        grid.addWidget(self.scale_input, 3, 1)
-        grid.addWidget(QLabel("偏移"), 3, 2)
-        grid.addWidget(self.offset_input, 3, 3)
-        grid.addWidget(QLabel("单位"), 4, 0)
-        grid.addWidget(self.unit_input, 4, 1)
-        grid.addWidget(self.upsert_button, 4, 3)
-        grid.addWidget(QLabel("寄存器"), 5, 0)
-        grid.addWidget(self.register_words_input, 5, 1, 1, 2)
-        grid.addWidget(self.decode_button, 5, 3)
+        self.content_tabs = QTabWidget()
+        self.content_tabs.setObjectName("RegisterMonitorTabs")
+        self.content_tabs.addTab(self._build_point_tab(), "点位配置")
+        self.content_tabs.addTab(self._build_decode_tab(), "解码预览")
 
-        frame_layout.addLayout(header_layout)
-        frame_layout.addLayout(grid)
-        frame_layout.addWidget(self.decoded_value_label)
-        frame_layout.addWidget(self.error_label)
+        frame_layout.addWidget(self.content_tabs)
         layout.addWidget(frame)
+
+    def _build_point_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        selection_frame, selection_layout = self._create_section(
+            "当前点位",
+            "先选择已有点位，或直接在下方填写新的点位定义。",
+        )
+        selection_grid = self._create_form_grid()
+        selection_grid.addWidget(QLabel("点位"), 0, 0)
+        selection_grid.addWidget(self.point_combo, 0, 1, 1, 2)
+        selection_grid.addWidget(self.delete_button, 0, 3)
+        selection_layout.addLayout(selection_grid)
+
+        definition_frame, definition_layout = self._create_section(
+            "点位定义",
+            "将寄存器地址、数据类型和换算参数拆开配置，避免中文标签在窄窗下互相挤压。",
+        )
+        definition_grid = self._create_form_grid()
+        definition_grid.addWidget(QLabel("名称"), 0, 0)
+        definition_grid.addWidget(self.name_input, 0, 1)
+        definition_grid.addWidget(QLabel("地址"), 0, 2)
+        definition_grid.addWidget(self.address_input, 0, 3)
+        definition_grid.addWidget(QLabel("类型"), 1, 0)
+        definition_grid.addWidget(self.data_type_combo, 1, 1)
+        definition_grid.addWidget(QLabel("字节序"), 1, 2)
+        definition_grid.addWidget(self.byte_order_combo, 1, 3)
+        definition_grid.addWidget(QLabel("缩放"), 2, 0)
+        definition_grid.addWidget(self.scale_input, 2, 1)
+        definition_grid.addWidget(QLabel("偏移"), 2, 2)
+        definition_grid.addWidget(self.offset_input, 2, 3)
+        definition_grid.addWidget(QLabel("单位"), 3, 0)
+        definition_grid.addWidget(self.unit_input, 3, 1, 1, 2)
+        definition_grid.addWidget(self.upsert_button, 3, 3)
+        definition_layout.addLayout(definition_grid)
+
+        tab_layout.addWidget(selection_frame)
+        tab_layout.addWidget(definition_frame)
+        tab_layout.addStretch(1)
+        return tab
+
+    def _build_decode_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        input_frame, input_layout = self._create_section(
+            "寄存器输入",
+            "将原始寄存器字按空格输入后再解码，适合快速比对现场返回值。",
+        )
+        input_grid = self._create_form_grid()
+        input_grid.addWidget(QLabel("寄存器"), 0, 0)
+        input_grid.addWidget(self.register_words_input, 0, 1, 1, 2)
+        input_grid.addWidget(self.decode_button, 0, 3)
+        input_layout.addLayout(input_grid)
+
+        result_frame, result_layout = self._create_section("解码结果")
+        result_layout.addWidget(self.decoded_value_label)
+        result_layout.addWidget(self.error_label)
+
+        tab_layout.addWidget(input_frame)
+        tab_layout.addWidget(result_frame)
+        tab_layout.addStretch(1)
+        return tab
+
+    def _create_form_grid(self) -> QGridLayout:
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
+        grid.setColumnMinimumWidth(0, self._LABEL_COLUMN_MIN_WIDTH)
+        grid.setColumnMinimumWidth(2, self._LABEL_COLUMN_MIN_WIDTH)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+        return grid
+
+    def _create_section(self, title_text: str, description: str | None = None) -> tuple[QFrame, QVBoxLayout]:
+        frame = QFrame()
+        frame.setObjectName("Panel")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(8)
+
+        title = QLabel(title_text)
+        title.setObjectName("SectionTitle")
+        layout.addWidget(title)
+        if description:
+            description_label = QLabel(description)
+            description_label.setObjectName("MetaLabel")
+            description_label.setWordWrap(True)
+            layout.addWidget(description_label)
+        return frame, layout
 
     def refresh(self, snapshot: RegisterMonitorSnapshot) -> None:
         self._syncing_controls = True
