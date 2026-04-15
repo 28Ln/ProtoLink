@@ -17,7 +17,7 @@ QFrame#WindowSurface {
 }
 
 QFrame#TitleBar {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #152333, stop:1 #101922);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #13202d, stop:1 #0f1822);
     border-bottom: 1px solid #2b3b4d;
     border-top-left-radius: 18px;
     border-top-right-radius: 18px;
@@ -34,12 +34,13 @@ QLabel#TitleBarSubtitle {
 }
 
 QLabel#TitleBarContext {
-    background: #152433;
-    color: #c9d7e5;
-    border: 1px solid #27435d;
-    border-radius: 11px;
-    padding: 4px 10px;
+    background: #111923;
+    color: #9fb0c1;
+    border: 1px solid #243544;
+    border-radius: 10px;
+    padding: 2px 8px;
     font-weight: 600;
+    font-size: 12px;
 }
 
 QToolButton#WindowButton,
@@ -50,6 +51,23 @@ QToolButton#WindowCloseButton {
     border-radius: 10px;
     font-size: 14px;
     font-weight: 700;
+}
+
+QToolButton#SubtleButton {
+    background: #111922;
+    color: #9fb0c1;
+    border: 1px solid #263544;
+    border-radius: 9px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QToolButton#SubtleButton:hover,
+QToolButton#SubtleButton:checked {
+    background: #172533;
+    border-color: #31506a;
+    color: #dfe8f1;
 }
 
 QToolButton#WindowButton:hover {
@@ -71,6 +89,11 @@ QDockWidget {
     border-radius: 14px;
 }
 
+QFrame#Hero {
+    background: #141d26;
+    border-color: #243240;
+}
+
 QScrollArea#PanelScrollArea {
     background: transparent;
     border: none;
@@ -88,45 +111,48 @@ QListWidget {
 }
 
 QListWidget::item {
-    padding: 8px 10px;
+    padding: 8px 10px 8px 12px;
     margin: 3px 0;
     border-radius: 10px;
+    border: 1px solid transparent;
 }
 
 QListWidget::item:hover {
-    background: #1b2c3e;
+    background: #152330;
+    border-color: #213444;
 }
 
 QListWidget::item:selected {
-    background: #245176;
+    background: #1b3142;
+    border-color: #33536e;
     color: #ffffff;
 }
 
 QLabel#HeroTitle {
-    font-size: 19px;
+    font-size: 17px;
     font-weight: 700;
-    color: #f5f9fd;
+    color: #edf4fb;
 }
 
 QLabel#HeroSubtitle {
-    color: #b7c6d6;
+    color: #93a7ba;
     font-size: 11px;
 }
 
 QLabel#ModuleTitle {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
     color: #f7fbff;
 }
 
 QLabel#SectionTitle {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
-    color: #dbe7f3;
+    color: #cfdae6;
 }
 
 QLabel#MetaLabel {
-    color: #9fb0c1;
+    color: #93a4b5;
 }
 
 QFrame#WorkspaceCard {
@@ -156,32 +182,33 @@ QLabel#PathLabel {
     color: #dfe8f1;
 }
 
-QLabel#Badge {
+QLabel#HeroBadge {
     background: #1b3246;
-    color: #dbeaf7;
-    padding: 4px 10px;
-    border-radius: 11px;
-    border: 1px solid #2d536f;
+    color: #b9cadb;
+    padding: 3px 9px;
+    border-radius: 10px;
+    border: 1px solid #294559;
     font-weight: 600;
-    font-size: 12px;
+    font-size: 11px;
 }
 
 QLabel#SidebarPill {
-    background: #1b3246;
-    color: #dbeaf7;
-    padding: 3px 10px;
+    background: #121b24;
+    color: #97aabd;
+    padding: 2px 8px;
     border-radius: 10px;
-    border: 1px solid #2d536f;
+    border: 1px solid #28384a;
     font-weight: 600;
-    font-size: 12px;
+    font-size: 11px;
 }
 
 QDockWidget::title {
-    background: #16212c;
+    background: #141d26;
     text-align: left;
-    padding: 8px 10px;
-    color: #dbe7f3;
-    font-weight: 700;
+    padding: 6px 10px;
+    color: #c6d3df;
+    font-weight: 600;
+    font-size: 12px;
 }
 
 QTextEdit {
@@ -195,7 +222,7 @@ QTabWidget::pane {
     background: #101821;
     border: 1px solid #2a3949;
     border-radius: 12px;
-    margin-top: 6px;
+    margin-top: 4px;
 }
 
 QTabBar::tab {
@@ -205,19 +232,19 @@ QTabBar::tab {
     border-bottom: none;
     border-top-left-radius: 10px;
     border-top-right-radius: 10px;
-    padding: 7px 14px;
+    padding: 6px 12px;
     margin-right: 6px;
     font-weight: 600;
 }
 
 QTabBar::tab:selected {
-    background: #1d3142;
+    background: #182937;
     color: #f7fbff;
-    border-color: #32587b;
+    border-color: #2e516d;
 }
 
 QTabBar::tab:hover:!selected {
-    background: #182734;
+    background: #162431;
     color: #dbe5ef;
 }
 

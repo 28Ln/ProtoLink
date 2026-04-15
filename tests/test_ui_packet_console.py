@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6.QtWidgets")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 
 from protolink.application.packet_replay_service import PacketReplayExecutionSnapshot
 from protolink.core.logging import LogLevel, create_log_entry
@@ -276,10 +276,31 @@ def test_packet_console_uses_tabbed_dock_friendly_layout(qapp: QApplication) -> 
         "协议解析",
     ]
     assert widget.filter_panel.isVisible() is False
+    assert "报文分析台" not in [label.text() for label in widget.findChildren(QLabel)]
     widget.filter_toggle_button.click()
     qapp.processEvents()
     assert widget.filter_panel.isVisible() is True
+    assert widget.filter_toggle_button.text() == "隐藏筛选"
     assert widget.inspector_splitter.count() == 2
     assert widget.composer_splitter.count() == 2
     assert widget.minimumSizeHint().height() < 500
+    widget.close()
+
+
+def test_packet_console_summary_is_quiet_and_compact(qapp: QApplication) -> None:
+    inspector = PacketInspectorState()
+    inspector.extend(
+        [
+            create_log_entry(level=LogLevel.INFO, category="transport.state", message="Connected", session_id="a"),
+            create_log_entry(level=LogLevel.WARNING, category="transport.warn", message="Retrying", session_id="b"),
+            create_log_entry(level=LogLevel.ERROR, category="transport.error", message="Timeout", session_id="b"),
+        ]
+    )
+    widget = PacketConsoleWidget(inspector)
+    qapp.processEvents()
+
+    assert "可见 3/3" in widget.entry_summary.text()
+    assert "会话 2" in widget.entry_summary.text()
+    assert "信息" not in widget.entry_summary.text()
+    assert widget.composer_error.isVisible() is False
     widget.close()

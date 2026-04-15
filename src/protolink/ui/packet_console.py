@@ -63,7 +63,7 @@ class PacketConsoleWidget(QWidget):
 
     def _build_ui(self) -> None:
         self.setObjectName("PacketConsoleWidget")
-        self.setMinimumHeight(220)
+        self.setMinimumHeight(190)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         layout = QVBoxLayout(self)
@@ -74,16 +74,8 @@ class PacketConsoleWidget(QWidget):
         frame.setObjectName("Panel")
         frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         frame_layout = QVBoxLayout(frame)
-        frame_layout.setContentsMargins(14, 14, 14, 14)
-        frame_layout.setSpacing(10)
-
-        header_layout = QHBoxLayout()
-        title = QLabel("报文分析台")
-        title.setObjectName("SectionTitle")
-
-        header_layout.addWidget(title)
-        header_layout.addStretch(1)
-        frame_layout.addLayout(header_layout)
+        frame_layout.setContentsMargins(10, 10, 10, 10)
+        frame_layout.setSpacing(8)
         self.console_tabs = QTabWidget()
         self.console_tabs.setObjectName("PacketConsoleTabs")
         self.console_tabs.setDocumentMode(True)
@@ -135,8 +127,9 @@ class PacketConsoleWidget(QWidget):
         self.clear_filters_button = QPushButton("清空")
         self.clear_filters_button.clicked.connect(self._on_clear_filters)
         self.filter_toggle_button = QToolButton()
-        self.filter_toggle_button.setObjectName("WindowButton")
+        self.filter_toggle_button.setObjectName("SubtleButton")
         self.filter_toggle_button.setText("筛选")
+        self.filter_toggle_button.setToolTip("显示或隐藏筛选条件")
         self.filter_toggle_button.setCheckable(True)
         self.filter_toggle_button.toggled.connect(self._set_filters_visible)
 
@@ -363,12 +356,10 @@ class PacketConsoleWidget(QWidget):
         self.entry_summary.setText(
             " · ".join(
                 (
-                    f"{len(self.inspector)} 条",
-                    f"{len(rows)} 可见",
-                    f"{len(sessions)} 会话",
-                    f"{counts.get(LogLevel.INFO, 0)} 信息",
-                    f"{counts.get(LogLevel.WARNING, 0)} 警告",
-                    f"{counts.get(LogLevel.ERROR, 0)} 错误",
+                    f"可见 {len(rows)}/{len(self.inspector)}",
+                    f"会话 {len(sessions)}",
+                    f"警告 {counts.get(LogLevel.WARNING, 0)}",
+                    f"错误 {counts.get(LogLevel.ERROR, 0)}",
                 )
             )
         )
@@ -599,11 +590,12 @@ class PacketConsoleWidget(QWidget):
 
         self.load_selected_payload_button.setEnabled(self.inspector.selected_entry() is not None)
         self.composer_summary.setText(
-            f"字节数: {len(snapshot.payload)}    "
-            f"模式: {raw_input_mode_text(snapshot.input_mode)}    "
-            f"换行: {line_ending_text(snapshot.line_ending)}"
+            f"{len(snapshot.payload)} 字节 · "
+            f"{raw_input_mode_text(snapshot.input_mode)} · "
+            f"{line_ending_text(snapshot.line_ending)}"
         )
-        self.composer_error.setText(f"错误: {snapshot.last_error}" if snapshot.last_error else "错误: 无")
+        self.composer_error.setText(f"输入错误：{snapshot.last_error}" if snapshot.last_error else "")
+        self.composer_error.setVisible(bool(snapshot.last_error))
         self.composer_preview.setPlainText(
             "\n".join(
                 (
@@ -658,4 +650,4 @@ class PacketConsoleWidget(QWidget):
 
     def _set_filters_visible(self, visible: bool) -> None:
         self.filter_panel.setVisible(visible)
-        self.filter_toggle_button.setText("收起" if visible else "筛选")
+        self.filter_toggle_button.setText("隐藏筛选" if visible else "筛选")

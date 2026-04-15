@@ -56,16 +56,20 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     assert dock.widget() is window.packet_console_scroll
     assert window.packet_console_scroll.widget() is window.packet_console
     labels = [label.text() for label in window.findChildren(QLabel)]
-    assert "Windows 桌面" in labels
+    hero_badges = [label.text() for label in window.findChildren(QLabel) if label.objectName() == "HeroBadge"]
+    assert len(hero_badges) == 3
+    assert hero_badges[0].startswith("连接链路 ")
+    assert hero_badges[1].startswith("协议与分析 ")
+    assert hero_badges[2].startswith("自动化与诊断 ")
     assert "当前项目" in labels
     assert "快速导航" in labels
-    assert window.workspace_meta_label.text() == "日志与导出目录见悬停提示。"
+    assert window.workspace_meta_label.text() == "悬停可查看日志、抓包与导出目录。"
     assert "抓包：" in window.workspace_meta_label.toolTip()
-    assert window.module_context_tabs.tabText(0) == "功能概览"
-    assert window.module_context_tabs.tabText(1) == "使用清单"
+    assert window.module_context_tabs.tabText(0) == "概览"
+    assert window.module_context_tabs.tabText(1) == "清单"
     assert window.windowTitle() == APPLICATION_TITLE
     assert window.windowFlags() & Qt.WindowType.FramelessWindowHint
-    assert window.title_bar.context_label.text() == "工作台总览"
+    assert window.title_bar.context_label.isVisible() is False
     assert window.title_bar.maximize_button.text() == "□"
     assert window.panel_stack.height() >= 180
     assert dock.height() < window.height() // 2
@@ -80,6 +84,7 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     window.module_list.setCurrentRow(modbus_rtu_index)
     qapp.processEvents()
     assert window.name_label.text() == "Modbus RTU 调试台"
+    assert window.title_bar.context_label.isVisible() is True
     assert window.title_bar.context_label.text() == "Modbus RTU 调试台"
     assert window.modbus_rtu_panel.isVisible() is True
     assert window.serial_panel.isVisible() is False
@@ -168,7 +173,7 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     compact_window.show()
     qapp.processEvents()
     assert compact_window.module_context_surface.isVisible() is False
-    assert compact_window.context_toggle_button.text() == "展开"
+    assert compact_window.context_toggle_button.text() == "显示"
     context.serial_session_service.shutdown()
     context.mqtt_client_service.shutdown()
     context.mqtt_server_service.shutdown()

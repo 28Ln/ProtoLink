@@ -65,7 +65,7 @@ from protolink.ui.udp_panel import UdpPanel
 
 WINDOW_EDGE_MARGIN = 6
 CONTENT_SPLITTER_DETAIL_WIDTH = 200
-PACKET_DOCK_TARGET_HEIGHT = 110
+PACKET_DOCK_TARGET_HEIGHT = 100
 
 
 class WindowTitleBar(QFrame):
@@ -86,8 +86,9 @@ class WindowTitleBar(QFrame):
         self.title_label.setObjectName("TitleBarTitle")
         self.subtitle_label = QLabel(APPLICATION_SUBTITLE)
         self.subtitle_label.setObjectName("TitleBarSubtitle")
-        self.context_label = QLabel("开始使用")
+        self.context_label = QLabel()
         self.context_label.setObjectName("TitleBarContext")
+        self.context_label.setVisible(False)
 
         brand_layout.addWidget(self.title_label)
         brand_layout.addWidget(self.subtitle_label)
@@ -120,8 +121,14 @@ class WindowTitleBar(QFrame):
         button.clicked.connect(callback)
         return button
 
-    def set_context_text(self, text: str) -> None:
-        self.context_label.setText(text)
+    def set_context_text(self, text: str | None) -> None:
+        normalized = (text or "").strip()
+        if normalized:
+            self.context_label.setText(normalized)
+            self.context_label.show()
+            return
+        self.context_label.clear()
+        self.context_label.hide()
 
     def sync_window_state(self, maximized: bool) -> None:
         self.maximize_button.setText("❐" if maximized else "□")
@@ -270,7 +277,7 @@ class ProtoLinkMainWindow(QMainWindow):
         self.workspace_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.workspace_label.setToolTip(str(self.workspace.root))
 
-        self.workspace_meta_label = QLabel("日志与导出目录见悬停提示。")
+        self.workspace_meta_label = QLabel("悬停可查看日志、抓包与导出目录。")
         self.workspace_meta_label.setObjectName("MetaLabel")
         self.workspace_meta_label.setWordWrap(True)
         self.workspace_meta_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -319,9 +326,9 @@ class ProtoLinkMainWindow(QMainWindow):
         hero_copy.setContentsMargins(0, 0, 0, 0)
         hero_copy.setSpacing(2)
 
-        hero_title = QLabel(APPLICATION_TITLE)
+        hero_title = QLabel("连接、调试与分析")
         hero_title.setObjectName("HeroTitle")
-        hero_subtitle = QLabel("把连接、调试、报文分析与自动化操作集中在一个统一工作面中。")
+        hero_subtitle = QLabel("在同一桌面工作区内完成连接配置、协议验证、数据记录与自动化处理。")
         hero_subtitle.setObjectName("HeroSubtitle")
         hero_subtitle.setWordWrap(True)
 
@@ -352,21 +359,18 @@ class ProtoLinkMainWindow(QMainWindow):
 
         section_header = QHBoxLayout()
         section_header.setContentsMargins(0, 0, 0, 0)
-        section_title = QLabel("模块概览")
-        section_title.setObjectName("SectionTitle")
-        self.context_toggle_button = QToolButton()
-        self.context_toggle_button.setObjectName("WindowButton")
-        self.context_toggle_button.setText("收起")
-        self.context_toggle_button.setToolTip("收起或展开右侧模块概览")
-        self.context_toggle_button.setAutoRaise(False)
-        self.context_toggle_button.clicked.connect(self.toggle_module_context)
-        section_header.addWidget(section_title)
-        section_header.addStretch(1)
-        section_header.addWidget(self.context_toggle_button)
-
+        section_header.setSpacing(8)
         self.name_label = QLabel()
         self.name_label.setObjectName("ModuleTitle")
         self.name_label.setWordWrap(True)
+        self.context_toggle_button = QToolButton()
+        self.context_toggle_button.setObjectName("SubtleButton")
+        self.context_toggle_button.setText("隐藏")
+        self.context_toggle_button.setToolTip("隐藏或显示右侧概览")
+        self.context_toggle_button.setAutoRaise(False)
+        self.context_toggle_button.clicked.connect(self.toggle_module_context)
+        section_header.addWidget(self.name_label, 1)
+        section_header.addWidget(self.context_toggle_button)
         self.meta_label = QLabel()
         self.meta_label.setObjectName("MetaLabel")
         self.meta_label.setWordWrap(True)
@@ -393,11 +397,10 @@ class ProtoLinkMainWindow(QMainWindow):
         acceptance_layout.setContentsMargins(0, 0, 0, 0)
         acceptance_layout.addWidget(self.acceptance_text, 1)
 
-        self.module_context_tabs.addTab(summary_page, "功能概览")
-        self.module_context_tabs.addTab(acceptance_page, "使用清单")
+        self.module_context_tabs.addTab(summary_page, "概览")
+        self.module_context_tabs.addTab(acceptance_page, "清单")
 
         context_layout.addLayout(section_header)
-        context_layout.addWidget(self.name_label)
         context_layout.addWidget(self.meta_label)
         context_layout.addWidget(self.module_context_tabs, 1)
 
@@ -423,10 +426,10 @@ class ProtoLinkMainWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        title = QLabel("开始使用")
+        title = QLabel("选择模块开始")
         title.setObjectName("SectionTitle")
 
-        overview = QLabel("从左侧选择模块即可开始连接、调试或分析；底部报文台会持续承接当前会话的原始数据。")
+        overview = QLabel("从左侧切换模块即可进入连接、调试和分析流程；底部分析台会承接当前会话的原始数据。")
         overview.setObjectName("MetaLabel")
         overview.setWordWrap(True)
 
@@ -434,8 +437,8 @@ class ProtoLinkMainWindow(QMainWindow):
             "\n".join(
                 (
                     f"当前项目：{self._format_workspace_name(self.workspace.root)}",
-                    f"工作区位置：{self._format_sidebar_path(self.workspace.root, keep_segments=3)}",
-                    "日志、抓包与导出目录会随操作自动归档，可通过提示查看完整路径。",
+                    f"项目位置：{self._format_sidebar_path(self.workspace.root, keep_segments=3)}",
+                    "日志、抓包与导出目录会随操作自动归档；悬停可查看完整路径。",
                 )
             )
         )
@@ -451,8 +454,8 @@ class ProtoLinkMainWindow(QMainWindow):
                 (
                     "1. 先在左侧选择需要的模块，再进入对应的连接或调试流程。",
                     "2. 设备通信产生的数据会自动汇入底部报文台，便于筛选、解析和回放。",
-                    "3. 右侧概览区提供当前模块的主要能力与使用清单，可按需收起以释放空间。",
-                    "4. 打包、预检与交付验证命令仍然独立保留，不影响日常操作体验。",
+                    "3. 右侧概览区提供当前模块的能力说明与关键步骤，可按需隐藏以释放空间。",
+                    "4. 需要更专注的工作区时，可先隐藏右侧概览，再按需展开底部分析台。",
                 )
             )
         )
@@ -545,20 +548,17 @@ class ProtoLinkMainWindow(QMainWindow):
 
         area_counts = Counter(display_module_area(module.area) for module in self.modules if module.key != "dashboard")
         badges = [
-            f"连接与采集 {area_counts.get('传输链路', 0)}",
+            f"连接链路 {area_counts.get('传输链路', 0)}",
             f"协议与分析 {area_counts.get('协议调试', 0) + area_counts.get('共享能力', 0)}",
             f"自动化与诊断 {area_counts.get('自动化', 0) + area_counts.get('运维诊断', 0)}",
-            "Windows 桌面",
         ]
 
         for index, text in enumerate(badges):
             badge = QLabel(text)
-            badge.setObjectName("Badge")
+            badge.setObjectName("HeroBadge")
             badge.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            stats_layout.addWidget(badge, index // 2, index % 2)
-
-        stats_layout.setColumnStretch(0, 1)
-        stats_layout.setColumnStretch(1, 1)
+            stats_layout.addWidget(badge, 0, index)
+            stats_layout.setColumnStretch(index, 1)
         return stats_panel
 
     def _populate_modules(self) -> None:
@@ -580,7 +580,7 @@ class ProtoLinkMainWindow(QMainWindow):
         self.summary_text.setPlainText(module.summary)
         self.acceptance_text.setPlainText("\n".join(f"• {item}" for item in module.acceptance))
         self.panel_stack.setCurrentWidget(self._panel_pages.get(module.key, self.dashboard_panel))
-        self.title_bar.set_context_text(module_title)
+        self.title_bar.set_context_text(None if module.key == "dashboard" else module_title)
 
     def _build_packet_console_dock(self) -> None:
         self.packet_console = PacketConsoleWidget(
@@ -605,7 +605,7 @@ class ProtoLinkMainWindow(QMainWindow):
             QDockWidget.DockWidgetFeature.DockWidgetMovable
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
-        self.packet_console_dock.setMinimumHeight(100)
+        self.packet_console_dock.setMinimumHeight(92)
         self.packet_console_dock.setWidget(self.packet_console_scroll)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.packet_console_dock)
 
@@ -619,7 +619,7 @@ class ProtoLinkMainWindow(QMainWindow):
         self.content_splitter.setSizes([splitter_width - detail_width, detail_width])
         self.resizeDocks(
             [self.packet_console_dock],
-            [max(100, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.16)))],
+            [max(92, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.14)))],
             Qt.Orientation.Vertical,
         )
         if self.width() <= 1366 and self._module_context_visible:
@@ -717,7 +717,7 @@ class ProtoLinkMainWindow(QMainWindow):
             self._last_context_splitter_sizes = self.content_splitter.sizes()
             self.module_context_surface.hide()
             self.content_splitter.setSizes([max(1, self.content_splitter.width()), 0])
-            self.context_toggle_button.setText("展开")
+            self.context_toggle_button.setText("显示")
             self._module_context_visible = False
             self._module_context_auto_collapsed = not manual
             return
@@ -729,7 +729,7 @@ class ProtoLinkMainWindow(QMainWindow):
             detail_width = min(CONTENT_SPLITTER_DETAIL_WIDTH, max(200, splitter_width // 7))
             restore_sizes = [splitter_width - detail_width, detail_width]
         self.content_splitter.setSizes(restore_sizes)
-        self.context_toggle_button.setText("收起")
+        self.context_toggle_button.setText("隐藏")
         self._module_context_visible = True
         self._module_context_auto_collapsed = False
 
