@@ -54,13 +54,16 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
 
     assert dock is not None
     assert dock.windowTitle() == "报文分析台"
-    assert dock.widget() is window.packet_console
+    assert dock.widget() is window.packet_console_scroll
+    assert window.packet_console_scroll.widget() is window.packet_console
     labels = [label.text() for label in window.findChildren(QLabel)]
     assert any("docs/MAINLINE_STATUS.md" in text for text in labels)
     assert window.windowTitle() == APPLICATION_TITLE
     assert window.windowFlags() & Qt.WindowType.FramelessWindowHint
     assert window.title_bar.context_label.text() == "工作台总览"
     assert window.title_bar.maximize_button.text() == "□"
+    assert window.panel_stack.height() >= 260
+    assert dock.height() < window.height() // 2
     modbus_rtu_index = next(index for index, module in enumerate(window.modules) if module.key == "modbus_rtu_lab")
     window.module_list.setCurrentRow(modbus_rtu_index)
     qapp.processEvents()

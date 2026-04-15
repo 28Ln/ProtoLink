@@ -2,7 +2,7 @@ APP_STYLESHEET = """
 QWidget {
     background: #0e151d;
     color: #e6edf5;
-    font-family: "Microsoft YaHei UI", "Segoe UI";
+    font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", "PingFang SC", "Noto Sans CJK SC", "SimSun";
     font-size: 13px;
 }
 
@@ -103,18 +103,18 @@ QListWidget::item:selected {
 }
 
 QLabel#HeroTitle {
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 700;
     color: #f5f9fd;
 }
 
 QLabel#HeroSubtitle {
     color: #b7c6d6;
-    font-size: 14px;
+    font-size: 13px;
 }
 
 QLabel#ModuleTitle {
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 700;
     color: #f7fbff;
 }
@@ -159,6 +159,45 @@ QTextEdit {
     border: 1px solid #2a3949;
     border-radius: 10px;
     padding: 8px;
+}
+
+QTabWidget::pane {
+    background: #101821;
+    border: 1px solid #2a3949;
+    border-radius: 12px;
+    margin-top: 6px;
+}
+
+QTabBar::tab {
+    background: #13202c;
+    color: #9fb0c1;
+    border: 1px solid #2a3949;
+    border-bottom: none;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    padding: 7px 14px;
+    margin-right: 6px;
+    font-weight: 600;
+}
+
+QTabBar::tab:selected {
+    background: #1d3142;
+    color: #f7fbff;
+    border-color: #32587b;
+}
+
+QTabBar::tab:hover:!selected {
+    background: #182734;
+    color: #dbe5ef;
+}
+
+QSplitter::handle {
+    background: #0f1720;
+}
+
+QSplitter::handle:horizontal {
+    width: 8px;
+    margin: 0 2px;
 }
 
 QLineEdit,

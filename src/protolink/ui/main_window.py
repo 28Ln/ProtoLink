@@ -2,17 +2,20 @@ from __future__ import annotations
 
 from collections import Counter
 
-from PySide6.QtCore import QEvent, QPoint, Qt
+from PySide6.QtCore import QEvent, QPoint, QTimer, Qt
 from PySide6.QtWidgets import (
     QDockWidget,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QScrollArea,
+    QSplitter,
     QStackedWidget,
+    QTabWidget,
     QTextEdit,
     QToolButton,
     QVBoxLayout,
@@ -61,6 +64,8 @@ from protolink.ui.udp_panel import UdpPanel
 
 
 WINDOW_EDGE_MARGIN = 6
+CONTENT_SPLITTER_DETAIL_WIDTH = 360
+PACKET_DOCK_TARGET_HEIGHT = 320
 
 
 class WindowTitleBar(QFrame):
@@ -179,6 +184,7 @@ class ProtoLinkMainWindow(QMainWindow):
         self.channel_bridge_runtime_service = channel_bridge_runtime_service
         self.modules = build_module_catalog()
         self._panel_pages: dict[str, QWidget] = {}
+        self._initial_layout_applied = False
         self._setup_window()
         self._build_ui()
         self._populate_modules()
@@ -276,58 +282,33 @@ class ProtoLinkMainWindow(QMainWindow):
         content = QWidget()
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(16)
+        content_layout.setSpacing(12)
 
         hero = QFrame()
         hero.setObjectName("Hero")
         hero_layout = QVBoxLayout(hero)
-        hero_layout.setContentsMargins(18, 18, 18, 18)
-        hero_layout.setSpacing(8)
+        hero_layout.setContentsMargins(16, 14, 16, 14)
+        hero_layout.setSpacing(6)
 
         hero_title = QLabel(APPLICATION_TITLE)
         hero_title.setObjectName("HeroTitle")
-        hero_subtitle = QLabel("围绕留痕、主链路、自动化和交付验证构建，不以临时演示或 MVP 为目标。")
+        hero_subtitle = QLabel("围绕留痕、主链路、自动化和交付验证构建，默认优先保证工作面可用空间。")
         hero_subtitle.setObjectName("HeroSubtitle")
         hero_subtitle.setWordWrap(True)
 
         hero_layout.addWidget(hero_title)
         hero_layout.addWidget(hero_subtitle)
-        hero_layout.addLayout(self._build_stats_row())
-
-        details = QFrame()
-        details.setObjectName("Panel")
-        details_layout = QVBoxLayout(details)
-        details_layout.setContentsMargins(18, 18, 18, 18)
-        details_layout.setSpacing(10)
-
-        section_title = QLabel("当前模块")
-        section_title.setObjectName("SectionTitle")
-        self.name_label = QLabel()
-        self.name_label.setObjectName("ModuleTitle")
-        self.meta_label = QLabel()
-        self.meta_label.setObjectName("MetaLabel")
-        self.summary_text = QTextEdit()
-        self.summary_text.setReadOnly(True)
-        self.acceptance_text = QTextEdit()
-        self.acceptance_text.setReadOnly(True)
-
-        details_layout.addWidget(section_title)
-        details_layout.addWidget(self.name_label)
-        details_layout.addWidget(self.meta_label)
-        details_layout.addWidget(QLabel("能力说明"))
-        details_layout.addWidget(self.summary_text, 1)
-        details_layout.addWidget(QLabel("验收标准"))
-        details_layout.addWidget(self.acceptance_text, 1)
+        hero_layout.addWidget(self._build_stats_panel())
 
         panel_surface = QFrame()
         panel_surface.setObjectName("Panel")
         panel_layout = QVBoxLayout(panel_surface)
-        panel_layout.setContentsMargins(18, 18, 18, 18)
-        panel_layout.setSpacing(12)
+        panel_layout.setContentsMargins(16, 16, 16, 16)
+        panel_layout.setSpacing(10)
 
         panel_title = QLabel("功能工作面")
         panel_title.setObjectName("SectionTitle")
-        panel_hint = QLabel("这里展示当前模块的专属操作面板，保留工作流上下文，不再依赖系统原生窗口标题栏。")
+        panel_hint = QLabel("默认展示当前模块的主操作面板；说明和验收要求收敛到右侧标签页，避免占用垂直空间。")
         panel_hint.setObjectName("MetaLabel")
         panel_hint.setWordWrap(True)
 
@@ -338,9 +319,63 @@ class ProtoLinkMainWindow(QMainWindow):
         panel_layout.addWidget(panel_hint)
         panel_layout.addWidget(self.panel_stack, 1)
 
+        context_surface = QFrame()
+        context_surface.setObjectName("Panel")
+        context_surface.setMinimumWidth(320)
+        context_surface.setMaximumWidth(440)
+        context_layout = QVBoxLayout(context_surface)
+        context_layout.setContentsMargins(16, 16, 16, 16)
+        context_layout.setSpacing(10)
+
+        section_title = QLabel("当前模块")
+        section_title.setObjectName("SectionTitle")
+        self.name_label = QLabel()
+        self.name_label.setObjectName("ModuleTitle")
+        self.name_label.setWordWrap(True)
+        self.meta_label = QLabel()
+        self.meta_label.setObjectName("MetaLabel")
+        self.meta_label.setWordWrap(True)
+
+        self.module_context_tabs = QTabWidget()
+        self.module_context_tabs.setObjectName("MainContentTabs")
+        self.module_context_tabs.setDocumentMode(True)
+
+        self.summary_text = QTextEdit()
+        self.summary_text.setReadOnly(True)
+        self.summary_text.setPlaceholderText("当前模块的能力边界会显示在这里。")
+
+        self.acceptance_text = QTextEdit()
+        self.acceptance_text.setReadOnly(True)
+        self.acceptance_text.setPlaceholderText("当前模块的验收标准会显示在这里。")
+
+        summary_page = QWidget()
+        summary_layout = QVBoxLayout(summary_page)
+        summary_layout.setContentsMargins(0, 0, 0, 0)
+        summary_layout.addWidget(self.summary_text, 1)
+
+        acceptance_page = QWidget()
+        acceptance_layout = QVBoxLayout(acceptance_page)
+        acceptance_layout.setContentsMargins(0, 0, 0, 0)
+        acceptance_layout.addWidget(self.acceptance_text, 1)
+
+        self.module_context_tabs.addTab(summary_page, "能力说明")
+        self.module_context_tabs.addTab(acceptance_page, "验收标准")
+
+        context_layout.addWidget(section_title)
+        context_layout.addWidget(self.name_label)
+        context_layout.addWidget(self.meta_label)
+        context_layout.addWidget(self.module_context_tabs, 1)
+
+        self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.content_splitter.setObjectName("MainContentSplitter")
+        self.content_splitter.setChildrenCollapsible(False)
+        self.content_splitter.addWidget(panel_surface)
+        self.content_splitter.addWidget(context_surface)
+        self.content_splitter.setStretchFactor(0, 4)
+        self.content_splitter.setStretchFactor(1, 1)
+
         content_layout.addWidget(hero)
-        content_layout.addWidget(details, 1)
-        content_layout.addWidget(panel_surface, 2)
+        content_layout.addWidget(self.content_splitter, 1)
 
         self._build_module_panels()
         return content
@@ -467,9 +502,12 @@ class ProtoLinkMainWindow(QMainWindow):
         scroll.setWidget(panel)
         return scroll
 
-    def _build_stats_row(self) -> QHBoxLayout:
-        stats_layout = QHBoxLayout()
-        stats_layout.setSpacing(10)
+    def _build_stats_panel(self) -> QWidget:
+        stats_panel = QWidget()
+        stats_layout = QGridLayout(stats_panel)
+        stats_layout.setContentsMargins(0, 0, 0, 0)
+        stats_layout.setHorizontalSpacing(10)
+        stats_layout.setVerticalSpacing(8)
 
         counts = Counter(module.status for module in self.modules)
         badges = [
@@ -480,14 +518,16 @@ class ProtoLinkMainWindow(QMainWindow):
             f"主线基准：docs/MAINLINE_STATUS.md",
         ]
 
-        for text in badges:
+        for index, text in enumerate(badges):
             badge = QLabel(text)
             badge.setObjectName("Badge")
             badge.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            stats_layout.addWidget(badge)
+            stats_layout.addWidget(badge, index // 3, index % 3)
 
-        stats_layout.addStretch(1)
-        return stats_layout
+        stats_layout.setColumnStretch(0, 1)
+        stats_layout.setColumnStretch(1, 1)
+        stats_layout.setColumnStretch(2, 1)
+        return stats_panel
 
     def _populate_modules(self) -> None:
         for module in self.modules:
@@ -518,6 +558,12 @@ class ProtoLinkMainWindow(QMainWindow):
             replay_service=self.packet_replay_service,
             workspace=self.workspace,
         )
+        self.packet_console_scroll = QScrollArea()
+        self.packet_console_scroll.setObjectName("PanelScrollArea")
+        self.packet_console_scroll.setWidgetResizable(True)
+        self.packet_console_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.packet_console_scroll.setWidget(self.packet_console)
+
         self.packet_console_dock = QDockWidget("报文分析台", self)
         self.packet_console_dock.setObjectName("PacketInspectorDock")
         self.packet_console_dock.setAllowedAreas(
@@ -529,8 +575,27 @@ class ProtoLinkMainWindow(QMainWindow):
             QDockWidget.DockWidgetFeature.DockWidgetMovable
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
-        self.packet_console_dock.setWidget(self.packet_console)
+        self.packet_console_dock.setWidget(self.packet_console_scroll)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.packet_console_dock)
+
+    def _apply_initial_workspace_layout(self) -> None:
+        if self._initial_layout_applied:
+            return
+
+        self._initial_layout_applied = True
+        splitter_width = max(self.content_splitter.width(), 960)
+        detail_width = min(CONTENT_SPLITTER_DETAIL_WIDTH, max(320, splitter_width // 4))
+        self.content_splitter.setSizes([splitter_width - detail_width, detail_width])
+        self.resizeDocks(
+            [self.packet_console_dock],
+            [max(260, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.38)))],
+            Qt.Orientation.Vertical,
+        )
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        if not self._initial_layout_applied:
+            QTimer.singleShot(0, self._apply_initial_workspace_layout)
 
     def toggle_maximized(self) -> None:
         if self.isMaximized():
