@@ -1,6 +1,6 @@
 # ProtoLink Project Status
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## 当前阶段
 
@@ -9,7 +9,7 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 ## 当前真实进展
 
 - 工程代码入口、工作区、日志、配置、打包链路已统一
-- 325 个 pytest 用例通过
+- 327 个 pytest 用例通过
 - targeted regression 全绿
 - release-staging 验证全链通过
 - wheel / sdist fresh-install 验证通过
@@ -20,6 +20,8 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 - 已具备 `verify_native_installer_lane.py` 原生安装器 lane 脚本
 - 已具备 `run_soak_validation.py` 本地长稳/soak 验证脚本与 strict ready gate
 - 已具备 `workspace/plugins/*/manifest.json` 的发现、静态校验、审计报告与 release-preflight 阻断
+- 已具备 valid manifest 到 extension descriptor registry 的受控列举边界
+- 已明确当前 extension loading boundary 只到 descriptor registry，不到运行时动态加载
 
 ## 当前验证快照
 
@@ -39,7 +41,7 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 ### P1
 3. 定义签名与时间戳的受控发布流程
 4. 明确脚本与扩展边界，避免被误解为不受信执行环境
-5. 在 manifest audit 基线之上继续推进插件/扩展契约、动态加载边界与协议接入方式
+5. 在 manifest audit 与 descriptor registry 基线之上推进 controlled loading boundary、插件/扩展契约与协议接入方式
 6. 按 `docs/GUI_REFACTOR_TASKLIST.md` 完成 GUI 的最后一轮视觉收口、滚动层级收敛与产品化文案统一
 
 ### P2

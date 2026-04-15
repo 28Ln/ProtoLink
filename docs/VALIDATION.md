@@ -1,6 +1,6 @@
 # ProtoLink Validation
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## 当前验证基线
 
@@ -56,7 +56,22 @@ uv build
 - `run_soak_validation.py` 在使用 `--require-all-ready` 时会把非 ready 循环转为非零退出码，并输出 `cycle_ready`、`failing_cycles`、`total_duration_ms`。
 - `run_full_test_suite.py` 以逐文件方式聚合 full-suite 真值，是当前正式的 pytest 基线入口。
 - `audit-plugin-manifests` 会静态审计 `workspace/plugins/*/manifest.json`；任何 invalid manifest 都会进入 `--release-preflight` 阻断。
-- `list-extension-descriptors` 只列出通过静态校验的扩展描述清单，不代表动态加载已开放。
+- `list-extension-descriptors` 只列出通过静态校验的扩展描述清单，不代表 dynamic loading 或 runtime activation 已开放。
+
+## Extension boundary verification
+
+当前 extension loading boundary 的验证口径是：
+
+1. `uv run protolink --audit-plugin-manifests` 能发现并校验 `workspace/plugins/*/manifest.json`
+2. invalid manifest 会进入 `--release-preflight` 阻断
+3. `uv run protolink --list-extension-descriptors` 只列出 valid manifest 汇总出的 descriptor registry
+4. 文档、help 与 release checklist 都必须保持“descriptor registry 不等于运行时加载已开放”的一致口径
+
+当前验证通过并不代表：
+
+- 插件入口点已被导入
+- 插件生命周期已被启动
+- 插件已获准接入 UI、transport、automation 或 script host
 
 ## Native installer scaffold 真值门禁
 
