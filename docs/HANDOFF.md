@@ -13,15 +13,15 @@ Last updated: 2026-04-15
 
 ## 2. 项目一句话定义
 
-ProtoLink 是一个面向 Windows 的本地工业通信、协议调试与自动化工作台，当前重点是在 0.2.4 正式基线之上推进 native installer / signing 路线。
+ProtoLink 是一个面向 Windows 的本地工业通信、协议调试与自动化工作台，当前重点是在 0.2.5 正式基线之上推进 native installer / signing 路线与长稳验证准备。
 
 ## 3. 当前真实进展
 
-- full pytest: `293 passed`
+- full pytest: `298 passed`
 - targeted regressions: passed
 - release-staging: passed
 - dist fresh-install: passed
-- 当前阶段版本：`0.2.4`
+- 当前阶段版本：`0.2.5`
 - `PL-012` 已完成并冻结正式交付基线
 - `PL-013` 已完成并冻结交付瘦身与运行证据基线
 - 当前主线：`PL-014` Native Installer and Signing Path
@@ -68,7 +68,7 @@ uv run protolink
 ### 核心验证
 ```powershell
 uv run pytest -q
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 293
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 298
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --build-native-installer-scaffold proto-stage
 uv run protolink --verify-native-installer-scaffold <scaffold-dir>
@@ -76,9 +76,14 @@ uv run protolink --verify-native-installer-toolchain
 uv run protolink --build-native-installer-msi <scaffold-dir>
 uv run protolink --verify-native-installer-signature <msi-file>
 uv run python scripts/verify_release_staging.py --name local
-python scripts/verify_dist_install.py --artifact-version 0.2.4
+python scripts/verify_dist_install.py --artifact-version 0.2.5
+python scripts/verify_native_installer_lane.py
+python scripts/run_soak_validation.py --cycles 2 --sleep-ms 0 --require-all-ready
 uv build
 ```
+
+- `verify_native_installer_lane.py` 默认是 readiness probe；发布线需要显式加 `--require-toolchain` 或 `--require-signed`。
+- `run_soak_validation.py` 在加 `--require-all-ready` 后才作为长稳门禁，并沉淀 `cycle_ready` / `failing_cycles` / `total_duration_ms` 证据。
 
 ## 7. 当前主线与未完成事项
 

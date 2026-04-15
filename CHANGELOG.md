@@ -1,8 +1,13 @@
 # Changelog
 
-## 0.2.4 - 2026-04-15
+## 0.2.5 - 2026-04-15
 
-- raised full pytest baseline to `293 passed`
+- raised full pytest baseline to `298 passed`
+- added `scripts/verify_native_installer_lane.py` for end-to-end native installer lane validation
+- kept native installer lane in probe mode by default, with `--require-toolchain` / `--require-signed` for hard gates
+- added `scripts/run_soak_validation.py` for repeated headless/smoke/preflight soak cycles
+- added `--require-all-ready` strict gating plus per-cycle readiness/timing evidence to soak validation
+- extended regression coverage for validation scripts
 - added native installer MSI build CLI
 - added native installer signature verification CLI
 - advanced `PL-014` from scaffold/toolchain stage into MSI build/signature verification stage
@@ -34,3 +39,4 @@
 - formalized README, handoff, risk register, validation, and task documents
 - aligned UI/test contracts and hardened port-conflict regression cases
 - reduced packaged delivery noise by filtering selected test/dev payloads
+

@@ -17,7 +17,7 @@ Last updated: 2026-04-15
 
 ## 2. Current baseline
 
-截至 `0.2.4`，ProtoLink 当前稳定交付形态为：
+截至 `0.2.5`，ProtoLink 当前稳定交付形态为：
 
 - release bundle
 - portable package
@@ -97,7 +97,7 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
 
 ### Current status
 
-当前 `0.2.4` CLI 基线已经暴露：
+当前 `0.2.5` CLI 基线已经暴露：
 
 - `--build-native-installer-scaffold`
 - `--verify-native-installer-scaffold`
@@ -291,3 +291,4 @@ native installer 路线至少要具备以下验证：
 - UpgradeCode / ProductCode / versioning 策略
 - 签名命令链如何进入 CI / release lane
 - native installer 验证脚本如何接入现有验证体系
+

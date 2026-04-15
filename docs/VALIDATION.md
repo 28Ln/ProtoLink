@@ -4,22 +4,23 @@ Last updated: 2026-04-15
 
 ## 当前验证基线
 
-- `uv run pytest -q` -> 293 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 293` -> passed
+- `uv run pytest -q` -> 298 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 298` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
-- `python scripts/verify_dist_install.py --artifact-version 0.2.4` -> passed
+- `python scripts/verify_dist_install.py --artifact-version 0.2.5` -> passed
+- `python scripts/run_soak_validation.py --cycles 2 --sleep-ms 0 --require-all-ready` -> passed
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
 - `uv run protolink --smoke-check` -> `smoke-check-ok`
-- 当前 full-suite 快照：`293 passed`
+- 当前 full-suite 快照：`298 passed`
 
 ## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run pytest -q
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 293
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 298
 ```
 
 ## UI / owner-surface 相关验证
@@ -34,14 +35,19 @@ uv run protolink --smoke-check
 
 ```powershell
 uv run python scripts/verify_release_staging.py --name local
-python scripts/verify_dist_install.py --artifact-version 0.2.4
+python scripts/verify_dist_install.py --artifact-version 0.2.5
 uv run protolink --build-native-installer-scaffold proto-stage
 uv run protolink --verify-native-installer-scaffold <scaffold-dir>
 uv run protolink --verify-native-installer-toolchain
 uv run protolink --build-native-installer-msi <scaffold-dir>
 uv run protolink --verify-native-installer-signature <msi-file>
+python scripts/verify_native_installer_lane.py
+python scripts/run_soak_validation.py --cycles 2 --sleep-ms 0 --require-all-ready
 uv build
 ```
+
+- `verify_native_installer_lane.py` 默认输出 readiness probe；若要作为发布门禁，必须显式加 `--require-toolchain` 或 `--require-signed`。
+- `run_soak_validation.py` 在使用 `--require-all-ready` 时会把非 ready 循环转为非零退出码，并输出 `cycle_ready`、`failing_cycles`、`total_duration_ms`。
 
 ## Native installer scaffold 真值门禁
 

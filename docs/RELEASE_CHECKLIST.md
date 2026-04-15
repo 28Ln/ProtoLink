@@ -18,16 +18,18 @@ Last updated: 2026-04-15
 ```powershell
 uv sync --python 3.11 --extra dev --extra ui
 uv run pytest -q
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 293
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 298
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local
-python scripts/verify_dist_install.py --artifact-version 0.2.4
+python scripts/verify_dist_install.py --artifact-version 0.2.5
 uv run protolink --build-native-installer-scaffold proto-stage
 uv run protolink --verify-native-installer-scaffold <scaffold-dir>
 uv run protolink --verify-native-installer-toolchain
 uv run protolink --build-native-installer-msi <scaffold-dir>
 uv run protolink --verify-native-installer-signature <msi-file>
+python scripts/verify_native_installer_lane.py --require-toolchain
+python scripts/run_soak_validation.py --cycles 2 --sleep-ms 0 --require-all-ready
 uv build
 ```
 
