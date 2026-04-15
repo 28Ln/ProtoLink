@@ -9,17 +9,26 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from protolink.application.udp_service import UdpLineEnding, UdpSendEncoding, UdpSessionService, UdpSessionSnapshot
+from protolink.application.udp_service import (
+    UdpLineEnding,
+    UdpSendEncoding,
+    UdpSessionService,
+    UdpSessionSnapshot,
+)
 from protolink.core.transport import ConnectionState
 from protolink.ui.text import CURRENT_DRAFT_TEXT, READY_TEXT, connection_state_text
 
 
 class UdpPanel(QWidget):
+    _LABEL_COLUMN_MIN_WIDTH = 88
+    _EDITOR_MIN_HEIGHT = 170
+
     def __init__(self, service: UdpSessionService) -> None:
         super().__init__()
         self.service = service
@@ -44,13 +53,11 @@ class UdpPanel(QWidget):
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
+        self.status_label.setWordWrap(True)
         header_layout.addWidget(title)
         header_layout.addStretch(1)
-        header_layout.addWidget(self.status_label)
-
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(8)
+        frame_layout.addLayout(header_layout)
+        frame_layout.addWidget(self.status_label)
 
         self.local_host_input = QLineEdit()
         self.local_host_input.setPlaceholderText("127.0.0.1")
@@ -100,6 +107,7 @@ class UdpPanel(QWidget):
         self.delete_preset_button.clicked.connect(self._on_delete_preset)
 
         self.send_text = QTextEdit()
+        self.send_text.setMinimumHeight(self._EDITOR_MIN_HEIGHT)
         self.send_text.setPlaceholderText("十六进制：01 03 00 01\nASCII：READY\nUTF-8：hello 世界")
         self.send_text.textChanged.connect(self._on_send_text_changed)
 
@@ -107,33 +115,120 @@ class UdpPanel(QWidget):
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
-        grid.addWidget(QLabel("本地主机"), 0, 0)
-        grid.addWidget(self.local_host_input, 0, 1)
-        grid.addWidget(QLabel("本地端口"), 0, 2)
-        grid.addWidget(self.local_port_input, 0, 3)
-        grid.addWidget(QLabel("远程主机"), 1, 0)
-        grid.addWidget(self.remote_host_input, 1, 1)
-        grid.addWidget(QLabel("远程端口"), 1, 2)
-        grid.addWidget(self.remote_port_input, 1, 3)
-        grid.addWidget(QLabel("发送模式"), 2, 0)
-        grid.addWidget(self.mode_combo, 2, 1)
-        grid.addWidget(QLabel("行结束符"), 2, 2)
-        grid.addWidget(self.line_ending_combo, 2, 3)
-        grid.addWidget(QLabel("预设"), 3, 0)
-        grid.addWidget(self.preset_combo, 3, 1)
-        grid.addWidget(self.preset_name_input, 3, 2)
-        grid.addWidget(self.save_preset_button, 3, 3)
-        grid.addWidget(self.delete_preset_button, 3, 4)
-        grid.addWidget(self.open_button, 4, 1)
-        grid.addWidget(self.close_button, 4, 2)
-        grid.addWidget(self.send_button, 4, 3)
+        self.content_tabs = QTabWidget()
+        self.content_tabs.setObjectName("UdpTabs")
+        self.content_tabs.addTab(self._build_address_tab(), "地址配置")
+        self.content_tabs.addTab(self._build_payload_tab(), "发送与预设")
 
-        frame_layout.addLayout(header_layout)
-        frame_layout.addLayout(grid)
-        frame_layout.addWidget(QLabel("帧负载"))
-        frame_layout.addWidget(self.send_text)
+        frame_layout.addWidget(self.content_tabs, 1)
         frame_layout.addWidget(self.error_label)
         layout.addWidget(frame)
+
+    def _build_address_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        address_frame, address_layout = self._create_section(
+            "地址参数",
+            "本地监听和远程目标拆成两行，避免在窄窗里把四个地址字段同时压在一屏。",
+        )
+        address_grid = self._create_form_grid()
+        address_grid.addWidget(QLabel("本地主机"), 0, 0)
+        address_grid.addWidget(self.local_host_input, 0, 1)
+        address_grid.addWidget(QLabel("本地端口"), 0, 2)
+        address_grid.addWidget(self.local_port_input, 0, 3)
+        address_grid.addWidget(QLabel("远程主机"), 1, 0)
+        address_grid.addWidget(self.remote_host_input, 1, 1)
+        address_grid.addWidget(QLabel("远程端口"), 1, 2)
+        address_grid.addWidget(self.remote_port_input, 1, 3)
+        address_layout.addLayout(address_grid)
+
+        session_frame, session_layout = self._create_section(
+            "会话控制",
+            "会话建立后再进入发送页，缩小时仍能保留远程目标的完整显示。",
+        )
+        session_buttons = QHBoxLayout()
+        session_buttons.setSpacing(8)
+        session_buttons.addWidget(self.open_button)
+        session_buttons.addWidget(self.close_button)
+        session_buttons.addStretch(1)
+        session_layout.addLayout(session_buttons)
+
+        tab_layout.addWidget(address_frame)
+        tab_layout.addWidget(session_frame)
+        tab_layout.addStretch(1)
+        return tab
+
+    def _build_payload_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        format_frame, format_layout = self._create_section(
+            "发送格式",
+            "发送模式、行结束符和预设集中处理，减少地址配置对负载编辑区的挤占。",
+        )
+        format_grid = self._create_form_grid()
+        format_grid.addWidget(QLabel("发送模式"), 0, 0)
+        format_grid.addWidget(self.mode_combo, 0, 1)
+        format_grid.addWidget(QLabel("行结束符"), 0, 2)
+        format_grid.addWidget(self.line_ending_combo, 0, 3)
+        format_grid.addWidget(QLabel("预设"), 1, 0)
+        format_grid.addWidget(self.preset_combo, 1, 1)
+        format_grid.addWidget(QLabel("名称"), 1, 2)
+        format_grid.addWidget(self.preset_name_input, 1, 3)
+        format_layout.addLayout(format_grid)
+        preset_actions = QHBoxLayout()
+        preset_actions.setSpacing(8)
+        preset_actions.addWidget(self.save_preset_button)
+        preset_actions.addWidget(self.delete_preset_button)
+        preset_actions.addStretch(1)
+        format_layout.addLayout(preset_actions)
+
+        payload_frame, payload_layout = self._create_section(
+            "发送负载",
+            "实际报文编辑区与发送动作固定在同一页签，避免窗口缩小时只剩几行可见。",
+        )
+        payload_layout.addWidget(self.send_text, 1)
+        payload_actions = QHBoxLayout()
+        payload_actions.setSpacing(8)
+        payload_actions.addWidget(self.send_button)
+        payload_actions.addStretch(1)
+        payload_layout.addLayout(payload_actions)
+
+        tab_layout.addWidget(format_frame)
+        tab_layout.addWidget(payload_frame, 1)
+        return tab
+
+    def _create_form_grid(self) -> QGridLayout:
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
+        grid.setColumnMinimumWidth(0, self._LABEL_COLUMN_MIN_WIDTH)
+        grid.setColumnMinimumWidth(2, self._LABEL_COLUMN_MIN_WIDTH)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+        return grid
+
+    def _create_section(self, title_text: str, description: str | None = None) -> tuple[QFrame, QVBoxLayout]:
+        frame = QFrame()
+        frame.setObjectName("Panel")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(8)
+
+        title = QLabel(title_text)
+        title.setObjectName("SectionTitle")
+        layout.addWidget(title)
+        if description:
+            description_label = QLabel(description)
+            description_label.setObjectName("MetaLabel")
+            description_label.setWordWrap(True)
+            layout.addWidget(description_label)
+        return frame, layout
 
     def refresh(self, snapshot: UdpSessionSnapshot) -> None:
         self._syncing_controls = True
@@ -150,18 +245,23 @@ class UdpPanel(QWidget):
         finally:
             self._syncing_controls = False
 
-        state_label = connection_state_text(ConnectionState(snapshot.connection_state))
+        state_label = connection_state_text(snapshot.connection_state)
         session_label = snapshot.active_session_id[:8] if snapshot.active_session_id else "-"
         preset_label = snapshot.selected_preset_name or CURRENT_DRAFT_TEXT
         self.status_label.setText(
-            f"状态: {state_label}    会话: {session_label}    预设: {preset_label}"
+            f"状态：{state_label}    会话：{session_label}\n"
+            f"本地：{snapshot.local_host}:{snapshot.local_port}\n"
+            f"远程：{snapshot.remote_host or '-'}:{snapshot.remote_port}    预设：{preset_label}"
         )
         self.error_label.setText(snapshot.last_error or READY_TEXT)
 
         is_connected = snapshot.connection_state == ConnectionState.CONNECTED
         is_busy = snapshot.connection_state == ConnectionState.CONNECTING
         self.open_button.setEnabled(bool(snapshot.local_host) and not is_connected and not is_busy)
-        self.close_button.setEnabled(snapshot.connection_state in {ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.ERROR})
+        self.close_button.setEnabled(
+            snapshot.connection_state
+            in {ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.ERROR}
+        )
         self.send_button.setEnabled(is_connected and bool(snapshot.remote_host))
         self.delete_preset_button.setEnabled(bool(snapshot.selected_preset_name))
 
@@ -229,7 +329,7 @@ class UdpPanel(QWidget):
         widget.setValue(value)
         widget.blockSignals(False)
 
-    def _set_combo_to_data(self, widget: QComboBox, value: str) -> None:
+    def _set_combo_to_data(self, widget: QComboBox, value: str | None) -> None:
         index = widget.findData(value)
         if index >= 0 and widget.currentIndex() != index:
             widget.blockSignals(True)

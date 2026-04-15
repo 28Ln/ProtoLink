@@ -98,3 +98,22 @@ def test_udp_panel_can_save_and_load_preset(qapp: QApplication, tmp_path) -> Non
     _wait_until(qapp, lambda: "Bench UDP" not in context.udp_service.snapshot.preset_names)
     context.udp_service.shutdown()
     panel.close()
+
+
+def test_udp_panel_uses_tabbed_layout_for_compact_workspace(qapp: QApplication, tmp_path) -> None:
+    context = bootstrap_app_context(tmp_path, persist_settings=False)
+    panel = UdpPanel(context.udp_service)
+    panel.resize(1366, 768)
+    panel.show()
+    qapp.processEvents()
+
+    assert panel.status_label.wordWrap() is True
+    assert [panel.content_tabs.tabText(index) for index in range(panel.content_tabs.count())] == [
+        "地址配置",
+        "发送与预设",
+    ]
+    assert panel.minimumSizeHint().height() < 620
+    assert panel.content_tabs.height() > 420
+
+    context.udp_service.shutdown()
+    panel.close()

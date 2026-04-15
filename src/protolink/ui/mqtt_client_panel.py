@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -24,6 +25,9 @@ from protolink.ui.text import CURRENT_DRAFT_TEXT, READY_TEXT, connection_state_t
 
 
 class MqttClientPanel(QWidget):
+    _LABEL_COLUMN_MIN_WIDTH = 88
+    _EDITOR_MIN_HEIGHT = 170
+
     def __init__(self, service: MqttClientSessionService) -> None:
         super().__init__()
         self.service = service
@@ -48,13 +52,11 @@ class MqttClientPanel(QWidget):
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
+        self.status_label.setWordWrap(True)
         header_layout.addWidget(title)
         header_layout.addStretch(1)
-        header_layout.addWidget(self.status_label)
-
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(8)
+        frame_layout.addLayout(header_layout)
+        frame_layout.addWidget(self.status_label)
 
         self.host_input = QLineEdit()
         self.host_input.setPlaceholderText("127.0.0.1")
@@ -107,6 +109,7 @@ class MqttClientPanel(QWidget):
         self.subscribed_topics_label.setWordWrap(True)
 
         self.send_text = QTextEdit()
+        self.send_text.setMinimumHeight(self._EDITOR_MIN_HEIGHT)
         self.send_text.setPlaceholderText("十六进制：01 03 00 01\nASCII：READY\nUTF-8：hello 世界")
         self.send_text.textChanged.connect(self._on_send_text_changed)
 
@@ -114,36 +117,144 @@ class MqttClientPanel(QWidget):
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
-        grid.addWidget(QLabel("主机"), 0, 0)
-        grid.addWidget(self.host_input, 0, 1)
-        grid.addWidget(QLabel("端口"), 0, 2)
-        grid.addWidget(self.port_input, 0, 3)
-        grid.addWidget(QLabel("客户端 ID"), 1, 0)
-        grid.addWidget(self.client_id_input, 1, 1, 1, 3)
-        grid.addWidget(QLabel("发布主题"), 2, 0)
-        grid.addWidget(self.publish_topic_input, 2, 1, 1, 3)
-        grid.addWidget(QLabel("订阅主题"), 3, 0)
-        grid.addWidget(self.subscribe_topic_input, 3, 1, 1, 3)
-        grid.addWidget(QLabel("发送模式"), 4, 0)
-        grid.addWidget(self.mode_combo, 4, 1)
-        grid.addWidget(QLabel("预设"), 4, 2)
-        grid.addWidget(self.preset_combo, 4, 3)
-        grid.addWidget(self.preset_name_input, 5, 0, 1, 2)
-        grid.addWidget(self.save_preset_button, 5, 2)
-        grid.addWidget(self.delete_preset_button, 5, 3)
-        grid.addWidget(self.open_button, 6, 1)
-        grid.addWidget(self.close_button, 6, 2)
-        grid.addWidget(self.subscribe_button, 6, 3)
-        grid.addWidget(self.send_button, 6, 4)
+        self.content_tabs = QTabWidget()
+        self.content_tabs.setObjectName("MqttClientTabs")
+        self.content_tabs.addTab(self._build_connection_tab(), "连接配置")
+        self.content_tabs.addTab(self._build_topics_tab(), "主题订阅")
+        self.content_tabs.addTab(self._build_payload_tab(), "负载与预设")
 
-        frame_layout.addLayout(header_layout)
-        frame_layout.addLayout(grid)
-        frame_layout.addWidget(QLabel("已订阅主题"))
-        frame_layout.addWidget(self.subscribed_topics_label)
-        frame_layout.addWidget(QLabel("帧负载"))
-        frame_layout.addWidget(self.send_text)
+        frame_layout.addWidget(self.content_tabs, 1)
         frame_layout.addWidget(self.error_label)
         layout.addWidget(frame)
+
+    def _build_connection_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        connection_frame, connection_layout = self._create_section(
+            "连接参数",
+            "主机、端口和客户端 ID 单独收口，避免和主题、负载字段堆在同一行里。",
+        )
+        connection_grid = self._create_form_grid()
+        connection_grid.addWidget(QLabel("主机"), 0, 0)
+        connection_grid.addWidget(self.host_input, 0, 1)
+        connection_grid.addWidget(QLabel("端口"), 0, 2)
+        connection_grid.addWidget(self.port_input, 0, 3)
+        connection_grid.addWidget(QLabel("客户端 ID"), 1, 0)
+        connection_grid.addWidget(self.client_id_input, 1, 1, 1, 3)
+        connection_layout.addLayout(connection_grid)
+
+        session_frame, session_layout = self._create_section(
+            "会话控制",
+            "先建立连接，再切换到主题页执行订阅或到负载页执行发布。",
+        )
+        session_buttons = QHBoxLayout()
+        session_buttons.setSpacing(8)
+        session_buttons.addWidget(self.open_button)
+        session_buttons.addWidget(self.close_button)
+        session_buttons.addStretch(1)
+        session_layout.addLayout(session_buttons)
+
+        tab_layout.addWidget(connection_frame)
+        tab_layout.addWidget(session_frame)
+        tab_layout.addStretch(1)
+        return tab
+
+    def _build_topics_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        routing_frame, routing_layout = self._create_section(
+            "主题路由",
+            "把发布主题和订阅主题拆成独立输入区，减少长主题名在窄窗里被截断。",
+        )
+        routing_grid = self._create_form_grid()
+        routing_grid.addWidget(QLabel("发布主题"), 0, 0)
+        routing_grid.addWidget(self.publish_topic_input, 0, 1, 1, 3)
+        routing_grid.addWidget(QLabel("订阅主题"), 1, 0)
+        routing_grid.addWidget(self.subscribe_topic_input, 1, 1, 1, 2)
+        routing_grid.addWidget(self.subscribe_button, 1, 3)
+        routing_layout.addLayout(routing_grid)
+
+        subscribed_frame, subscribed_layout = self._create_section(
+            "已订阅主题",
+            "订阅结果集中显示，避免在状态栏里塞入过长主题列表。",
+        )
+        subscribed_layout.addWidget(self.subscribed_topics_label)
+
+        tab_layout.addWidget(routing_frame)
+        tab_layout.addWidget(subscribed_frame)
+        tab_layout.addStretch(1)
+        return tab
+
+    def _build_payload_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        preset_frame, preset_layout = self._create_section(
+            "预设管理",
+            "把连接、主题和负载组合保存为预设，恢复时不需要在多块表单间来回滚动。",
+        )
+        preset_grid = self._create_form_grid()
+        preset_grid.addWidget(QLabel("预设"), 0, 0)
+        preset_grid.addWidget(self.preset_combo, 0, 1)
+        preset_grid.addWidget(QLabel("名称"), 0, 2)
+        preset_grid.addWidget(self.preset_name_input, 0, 3)
+        preset_actions = QHBoxLayout()
+        preset_actions.setSpacing(8)
+        preset_actions.addWidget(self.save_preset_button)
+        preset_actions.addWidget(self.delete_preset_button)
+        preset_actions.addStretch(1)
+        preset_layout.addLayout(preset_grid)
+        preset_layout.addLayout(preset_actions)
+
+        payload_frame, payload_layout = self._create_section(
+            "发布负载",
+            "发送模式、负载编辑和发布动作放到同一页签，避免连接信息挤占文本编辑区。",
+        )
+        payload_grid = self._create_form_grid()
+        payload_grid.addWidget(QLabel("发送模式"), 0, 0)
+        payload_grid.addWidget(self.mode_combo, 0, 1)
+        payload_grid.addWidget(self.send_button, 0, 3)
+        payload_layout.addLayout(payload_grid)
+        payload_layout.addWidget(self.send_text, 1)
+
+        tab_layout.addWidget(preset_frame)
+        tab_layout.addWidget(payload_frame, 1)
+        return tab
+
+    def _create_form_grid(self) -> QGridLayout:
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
+        grid.setColumnMinimumWidth(0, self._LABEL_COLUMN_MIN_WIDTH)
+        grid.setColumnMinimumWidth(2, self._LABEL_COLUMN_MIN_WIDTH)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+        return grid
+
+    def _create_section(self, title_text: str, description: str | None = None) -> tuple[QFrame, QVBoxLayout]:
+        frame = QFrame()
+        frame.setObjectName("Panel")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(8)
+
+        title = QLabel(title_text)
+        title.setObjectName("SectionTitle")
+        layout.addWidget(title)
+        if description:
+            description_label = QLabel(description)
+            description_label.setObjectName("MetaLabel")
+            description_label.setWordWrap(True)
+            layout.addWidget(description_label)
+        return frame, layout
 
     def refresh(self, snapshot: MqttClientSessionSnapshot) -> None:
         self._syncing_controls = True
@@ -163,8 +274,11 @@ class MqttClientPanel(QWidget):
         state_label = connection_state_text(snapshot.connection_state)
         session_label = snapshot.active_session_id[:8] if snapshot.active_session_id else "-"
         preset_label = snapshot.selected_preset_name or CURRENT_DRAFT_TEXT
+        client_label = snapshot.client_id or "自动生成"
         self.status_label.setText(
-            f"状态: {state_label}    会话: {session_label}    预设: {preset_label}"
+            f"状态：{state_label}    会话：{session_label}\n"
+            f"客户端：{client_label}    预设：{preset_label}\n"
+            f"发布：{snapshot.publish_topic or '-'}    订阅：{snapshot.subscribe_topic or '-'}"
         )
         topics_text = "、".join(snapshot.subscribed_topics) if snapshot.subscribed_topics else "（无）"
         self.subscribed_topics_label.setText(topics_text)
@@ -173,7 +287,10 @@ class MqttClientPanel(QWidget):
         is_connected = snapshot.connection_state == ConnectionState.CONNECTED
         is_busy = snapshot.connection_state == ConnectionState.CONNECTING
         self.open_button.setEnabled(bool(snapshot.host) and not is_connected and not is_busy)
-        self.close_button.setEnabled(snapshot.connection_state in {ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.ERROR})
+        self.close_button.setEnabled(
+            snapshot.connection_state
+            in {ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.ERROR}
+        )
         self.subscribe_button.setEnabled(is_connected and bool(snapshot.subscribe_topic))
         self.send_button.setEnabled(is_connected and bool(snapshot.publish_topic))
         self.delete_preset_button.setEnabled(bool(snapshot.selected_preset_name))
@@ -234,7 +351,7 @@ class MqttClientPanel(QWidget):
         widget.setValue(value)
         widget.blockSignals(False)
 
-    def _set_combo_to_data(self, widget: QComboBox, value: str) -> None:
+    def _set_combo_to_data(self, widget: QComboBox, value: str | None) -> None:
         index = widget.findData(value)
         if index >= 0 and widget.currentIndex() != index:
             widget.blockSignals(True)

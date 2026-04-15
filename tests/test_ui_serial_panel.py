@@ -91,3 +91,22 @@ def test_serial_panel_can_save_and_load_preset(qapp: QApplication, tmp_path) -> 
     _wait_until(qapp, lambda: "Bench ASCII" not in context.serial_session_service.snapshot.preset_names)
     context.serial_session_service.shutdown()
     panel.close()
+
+
+def test_serial_panel_uses_tabbed_layout_for_compact_workspace(qapp: QApplication, tmp_path) -> None:
+    context = bootstrap_app_context(tmp_path, persist_settings=False)
+    panel = SerialStudioPanel(context.serial_session_service)
+    panel.resize(1366, 768)
+    panel.show()
+    qapp.processEvents()
+
+    assert panel.status_label.wordWrap() is True
+    assert [panel.content_tabs.tabText(index) for index in range(panel.content_tabs.count())] == [
+        "连接配置",
+        "负载与预设",
+    ]
+    assert panel.minimumSizeHint().height() < 560
+    assert panel.content_tabs.height() > 420
+
+    context.serial_session_service.shutdown()
+    panel.close()

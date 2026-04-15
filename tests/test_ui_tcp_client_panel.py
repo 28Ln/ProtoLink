@@ -94,3 +94,22 @@ def test_tcp_client_panel_can_save_and_load_preset(qapp: QApplication, tmp_path)
     _wait_until(qapp, lambda: "Bench TCP" not in context.tcp_client_service.snapshot.preset_names)
     context.tcp_client_service.shutdown()
     panel.close()
+
+
+def test_tcp_client_panel_uses_tabbed_layout_for_compact_workspace(qapp: QApplication, tmp_path) -> None:
+    context = bootstrap_app_context(tmp_path, persist_settings=False)
+    panel = TcpClientPanel(context.tcp_client_service)
+    panel.resize(1366, 768)
+    panel.show()
+    qapp.processEvents()
+
+    assert panel.status_label.wordWrap() is True
+    assert [panel.content_tabs.tabText(index) for index in range(panel.content_tabs.count())] == [
+        "连接配置",
+        "发送与预设",
+    ]
+    assert panel.minimumSizeHint().height() < 600
+    assert panel.content_tabs.height() > 420
+
+    context.tcp_client_service.shutdown()
+    panel.close()

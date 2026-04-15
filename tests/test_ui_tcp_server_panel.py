@@ -144,3 +144,22 @@ def test_tcp_server_panel_can_save_and_load_presets(qapp: QApplication, tmp_path
     assert context.tcp_server_service.snapshot.preset_names == ()
     context.tcp_server_service.shutdown()
     panel.close()
+
+
+def test_tcp_server_panel_uses_tabbed_layout_for_compact_workspace(qapp: QApplication, tmp_path) -> None:
+    context = bootstrap_app_context(tmp_path, persist_settings=False)
+    panel = TcpServerPanel(context.tcp_server_service)
+    panel.resize(1366, 768)
+    panel.show()
+    qapp.processEvents()
+
+    assert panel.status_label.wordWrap() is True
+    assert [panel.content_tabs.tabText(index) for index in range(panel.content_tabs.count())] == [
+        "监听配置",
+        "发送与目标",
+    ]
+    assert panel.minimumSizeHint().height() < 620
+    assert panel.content_tabs.height() > 420
+
+    context.tcp_server_service.shutdown()
+    panel.close()

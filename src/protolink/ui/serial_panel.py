@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -27,6 +28,9 @@ COMMON_BAUDRATES = ("9600", "19200", "38400", "57600", "115200")
 
 
 class SerialStudioPanel(QWidget):
+    _LABEL_COLUMN_MIN_WIDTH = 88
+    _EDITOR_MIN_HEIGHT = 170
+
     def __init__(self, service: SerialSessionService) -> None:
         super().__init__()
         self.service = service
@@ -51,13 +55,11 @@ class SerialStudioPanel(QWidget):
         title.setObjectName("SectionTitle")
         self.status_label = QLabel()
         self.status_label.setObjectName("MetaLabel")
+        self.status_label.setWordWrap(True)
         header_layout.addWidget(title)
         header_layout.addStretch(1)
-        header_layout.addWidget(self.status_label)
-
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(8)
+        frame_layout.addLayout(header_layout)
+        frame_layout.addWidget(self.status_label)
 
         self.target_combo = QComboBox()
         self.target_combo.setEditable(True)
@@ -102,6 +104,7 @@ class SerialStudioPanel(QWidget):
         self.delete_preset_button.clicked.connect(self._on_delete_preset)
 
         self.send_text = QTextEdit()
+        self.send_text.setMinimumHeight(self._EDITOR_MIN_HEIGHT)
         self.send_text.setPlaceholderText("十六进制：01 03 00 01\nASCII：HELLO\nUTF-8：你好")
         self.send_text.textChanged.connect(self._on_send_text_changed)
 
@@ -109,30 +112,117 @@ class SerialStudioPanel(QWidget):
         self.error_label.setObjectName("MetaLabel")
         self.error_label.setWordWrap(True)
 
-        grid.addWidget(QLabel("目标"), 0, 0)
-        grid.addWidget(self.target_combo, 0, 1, 1, 2)
-        grid.addWidget(QLabel("波特率"), 0, 3)
-        grid.addWidget(self.baudrate_combo, 0, 4)
-        grid.addWidget(QLabel("发送模式"), 1, 0)
-        grid.addWidget(self.mode_combo, 1, 1)
-        grid.addWidget(QLabel("行结束符"), 1, 2)
-        grid.addWidget(self.line_ending_combo, 1, 3)
-        grid.addWidget(self.refresh_button, 1, 4)
-        grid.addWidget(QLabel("预设"), 2, 0)
-        grid.addWidget(self.preset_combo, 2, 1)
-        grid.addWidget(self.preset_name_input, 2, 2)
-        grid.addWidget(self.save_preset_button, 2, 3)
-        grid.addWidget(self.delete_preset_button, 2, 4)
-        grid.addWidget(self.open_button, 3, 3)
-        grid.addWidget(self.close_button, 3, 4)
+        self.content_tabs = QTabWidget()
+        self.content_tabs.setObjectName("SerialStudioTabs")
+        self.content_tabs.addTab(self._build_connection_tab(), "连接配置")
+        self.content_tabs.addTab(self._build_payload_tab(), "负载与预设")
 
-        frame_layout.addLayout(header_layout)
-        frame_layout.addLayout(grid)
-        frame_layout.addWidget(QLabel("帧负载"))
-        frame_layout.addWidget(self.send_text)
-        frame_layout.addWidget(self.send_button)
+        frame_layout.addWidget(self.content_tabs, 1)
         frame_layout.addWidget(self.error_label)
         layout.addWidget(frame)
+
+    def _build_connection_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        connection_frame, connection_layout = self._create_section(
+            "串口参数",
+            "把目标串口、波特率和编码参数拆到单独页签，避免中文标签在主工作区内横向互挤。",
+        )
+        connection_grid = self._create_form_grid()
+        connection_grid.addWidget(QLabel("目标"), 0, 0)
+        connection_grid.addWidget(self.target_combo, 0, 1, 1, 2)
+        connection_grid.addWidget(self.refresh_button, 0, 3)
+        connection_grid.addWidget(QLabel("波特率"), 1, 0)
+        connection_grid.addWidget(self.baudrate_combo, 1, 1)
+        connection_grid.addWidget(QLabel("发送模式"), 1, 2)
+        connection_grid.addWidget(self.mode_combo, 1, 3)
+        connection_grid.addWidget(QLabel("行结束符"), 2, 0)
+        connection_grid.addWidget(self.line_ending_combo, 2, 1)
+        connection_layout.addLayout(connection_grid)
+
+        session_frame, session_layout = self._create_section(
+            "会话控制",
+            "打开前确认目标串口，连接成功后再切到发送页处理帧负载。",
+        )
+        session_buttons = QHBoxLayout()
+        session_buttons.setSpacing(8)
+        session_buttons.addWidget(self.open_button)
+        session_buttons.addWidget(self.close_button)
+        session_buttons.addStretch(1)
+        session_layout.addLayout(session_buttons)
+
+        tab_layout.addWidget(connection_frame)
+        tab_layout.addWidget(session_frame)
+        tab_layout.addStretch(1)
+        return tab
+
+    def _build_payload_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(12)
+
+        preset_frame, preset_layout = self._create_section(
+            "预设管理",
+            "预设与当前草稿分开显示，减少长表单里多组按钮同时挤压。",
+        )
+        preset_grid = self._create_form_grid()
+        preset_grid.addWidget(QLabel("预设"), 0, 0)
+        preset_grid.addWidget(self.preset_combo, 0, 1)
+        preset_grid.addWidget(QLabel("名称"), 0, 2)
+        preset_grid.addWidget(self.preset_name_input, 0, 3)
+        preset_actions = QHBoxLayout()
+        preset_actions.setSpacing(8)
+        preset_actions.addWidget(self.save_preset_button)
+        preset_actions.addWidget(self.delete_preset_button)
+        preset_actions.addStretch(1)
+        preset_layout.addLayout(preset_grid)
+        preset_layout.addLayout(preset_actions)
+
+        payload_frame, payload_layout = self._create_section(
+            "帧负载",
+            "保持单页只处理一件事：输入负载、确认编码，然后发送到当前串口会话。",
+        )
+        payload_layout.addWidget(self.send_text, 1)
+        payload_actions = QHBoxLayout()
+        payload_actions.setSpacing(8)
+        payload_actions.addWidget(self.send_button)
+        payload_actions.addStretch(1)
+        payload_layout.addLayout(payload_actions)
+
+        tab_layout.addWidget(preset_frame)
+        tab_layout.addWidget(payload_frame, 1)
+        return tab
+
+    def _create_form_grid(self) -> QGridLayout:
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
+        grid.setColumnMinimumWidth(0, self._LABEL_COLUMN_MIN_WIDTH)
+        grid.setColumnMinimumWidth(2, self._LABEL_COLUMN_MIN_WIDTH)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+        return grid
+
+    def _create_section(self, title_text: str, description: str | None = None) -> tuple[QFrame, QVBoxLayout]:
+        frame = QFrame()
+        frame.setObjectName("Panel")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(8)
+
+        title = QLabel(title_text)
+        title.setObjectName("SectionTitle")
+        layout.addWidget(title)
+        if description:
+            description_label = QLabel(description)
+            description_label.setObjectName("MetaLabel")
+            description_label.setWordWrap(True)
+            layout.addWidget(description_label)
+        return frame, layout
 
     def refresh(self, snapshot: SerialSessionSnapshot) -> None:
         self._syncing_controls = True
@@ -150,15 +240,20 @@ class SerialStudioPanel(QWidget):
         state_label = connection_state_text(snapshot.connection_state)
         session_label = snapshot.active_session_id[:8] if snapshot.active_session_id else "-"
         preset_label = snapshot.selected_preset_name or CURRENT_DRAFT_TEXT
+        target_label = snapshot.target or "-"
         self.status_label.setText(
-            f"状态: {state_label}    会话: {session_label}    预设: {preset_label}"
+            f"状态：{state_label}    会话：{session_label}\n"
+            f"目标：{target_label}    预设：{preset_label}"
         )
         self.error_label.setText(snapshot.last_error or READY_TEXT)
 
         is_connected = snapshot.connection_state == ConnectionState.CONNECTED
         is_busy = snapshot.connection_state == ConnectionState.CONNECTING
         self.open_button.setEnabled(bool(snapshot.target) and not is_connected and not is_busy)
-        self.close_button.setEnabled(snapshot.connection_state in {ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.ERROR})
+        self.close_button.setEnabled(
+            snapshot.connection_state
+            in {ConnectionState.CONNECTED, ConnectionState.CONNECTING, ConnectionState.ERROR}
+        )
         self.send_button.setEnabled(is_connected)
         self.delete_preset_button.setEnabled(bool(snapshot.selected_preset_name))
 
