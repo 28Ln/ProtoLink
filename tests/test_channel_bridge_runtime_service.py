@@ -180,6 +180,86 @@ def test_channel_bridge_runtime_service_applies_script_transform_and_rejects_inv
         service.shutdown()
 
 
+def test_channel_bridge_runtime_service_keeps_newer_error_when_older_script_task_finishes_late(
+    monkeypatch,
+) -> None:
+    run_started = threading.Event()
+    allow_first_run_to_finish = threading.Event()
+    run_count = 0
+
+    def fake_run(*args, **kwargs):
+        nonlocal run_count
+        run_count += 1
+        if run_count == 1:
+            run_started.set()
+            allow_first_run_to_finish.wait(timeout=1.0)
+            return _completed_script_run(success=True, result=b"DCBA")
+        raise AssertionError("unexpected extra script execution")
+
+    monkeypatch.setattr(script_host_service_module.subprocess, "run", fake_run)
+
+    event_bus = EventBus()
+    script_host = ScriptHostService()
+    script_host.register_host(PythonInlineScriptHost())
+    target = _FakeBridgeTarget()
+    service = ChannelBridgeRuntimeService(
+        event_bus,
+        script_host,
+        {
+            TransportKind.TCP_SERVER: target,
+            TransportKind.UDP: target,
+        },
+    )
+    service.set_bridges(
+        (
+            ChannelBridgeConfig(
+                name="MQTT->TCP",
+                source_transport_kind=TransportKind.MQTT_CLIENT,
+                target_transport_kind=TransportKind.TCP_SERVER,
+                script_language=ScriptLanguage.PYTHON,
+                script_code="result = payload[::-1]",
+            ),
+            ChannelBridgeConfig(
+                name="Invalid Loop",
+                source_transport_kind=TransportKind.UDP,
+                target_transport_kind=TransportKind.UDP,
+            ),
+        )
+    )
+
+    try:
+        event_bus.publish(
+            create_log_entry(
+                level=LogLevel.INFO,
+                category="transport.message",
+                message="Inbound payload (4 bytes)",
+                transport_kind=TransportKind.MQTT_CLIENT.value,
+                raw_payload=b"ABCD",
+            )
+        )
+        assert run_started.wait(timeout=1.0)
+
+        event_bus.publish(
+            create_log_entry(
+                level=LogLevel.INFO,
+                category="transport.message",
+                message="Inbound payload (3 bytes)",
+                transport_kind=TransportKind.UDP.value,
+                raw_payload=b"XYZ",
+            )
+        )
+        _wait_until(lambda: service.snapshot.last_error == "桥接“Invalid Loop”不能在同一种传输类型之间回环。")
+
+        allow_first_run_to_finish.set()
+        _wait_until(lambda: len(target.sent) == 1)
+
+        assert target.sent[0][0] == b"DCBA"
+        assert service.snapshot.last_error == "桥接“Invalid Loop”不能在同一种传输类型之间回环。"
+    finally:
+        allow_first_run_to_finish.set()
+        service.shutdown()
+
+
 def test_channel_bridge_runtime_service_logs_script_and_send_failures() -> None:
     event_bus = EventBus()
     script_host = ScriptHostService()

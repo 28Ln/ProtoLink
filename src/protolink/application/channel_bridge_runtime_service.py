@@ -35,6 +35,8 @@ class ChannelBridgeRuntimeSnapshot:
     last_source_peer: str | None = None
     last_bridge_at: datetime | None = None
     last_error: str | None = None
+    last_error_at: datetime | None = None
+    last_error_sequence: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +44,7 @@ class _BridgeDispatchTask:
     bridge: ChannelBridgeConfig
     entry: StructuredLogEntry
     target: object
+    entry_sequence: int
 
 
 class ChannelBridgeRuntimeService:
@@ -57,6 +60,9 @@ class ChannelBridgeRuntimeService:
         self._bridges: tuple[ChannelBridgeConfig, ...] = ()
         self._snapshot = ChannelBridgeRuntimeSnapshot()
         self._listeners: list[Callable[[ChannelBridgeRuntimeSnapshot], None]] = []
+        self._snapshot_lock = threading.Lock()
+        self._sequence_lock = threading.Lock()
+        self._next_entry_sequence = 0
         self._stop_event = threading.Event()
         self._dispatch_queue: queue.Queue[_BridgeDispatchTask | None] = queue.Queue()
         self._worker = threading.Thread(target=self._run_worker, name="ProtoLinkChannelBridgeRuntime", daemon=True)
@@ -87,6 +93,8 @@ class ChannelBridgeRuntimeService:
             bridge_names=tuple(sorted(bridge.name for bridge in self._bridges)),
             enabled_bridge_names=tuple(sorted(bridge.name for bridge in self._bridges if bridge.enabled)),
             last_error=None,
+            last_error_at=None,
+            last_error_sequence=None,
         )
 
     def clear_bridges(self) -> None:
@@ -126,6 +134,7 @@ class ChannelBridgeRuntimeService:
             if source_peer and entry.metadata.get("peer") != source_peer:
                 return
 
+        entry_sequence = self._reserve_entry_sequence()
         for bridge in self._bridges:
             if not bridge.enabled or bridge.source_transport_kind != source_kind:
                 continue
@@ -133,6 +142,7 @@ class ChannelBridgeRuntimeService:
                 self._report_error(
                     f"桥接“{bridge.name}”不能在同一种传输类型之间回环。",
                     bridge=bridge,
+                    entry_sequence=entry_sequence,
                 )
                 continue
 
@@ -140,7 +150,14 @@ class ChannelBridgeRuntimeService:
             if target is None or not hasattr(target, "is_connected") or not target.is_connected():
                 continue
 
-            self._dispatch_queue.put(_BridgeDispatchTask(bridge=bridge, entry=entry, target=target))
+            self._dispatch_queue.put(
+                _BridgeDispatchTask(
+                    bridge=bridge,
+                    entry=entry,
+                    target=target,
+                    entry_sequence=entry_sequence,
+                )
+            )
 
     def _run_worker(self) -> None:
         while not self._stop_event.is_set():
@@ -156,11 +173,12 @@ class ChannelBridgeRuntimeService:
 
     def _process_dispatch(self, task: _BridgeDispatchTask) -> None:
         try:
-            transformed = self._transform_payload(task.bridge, task.entry)
+            transformed = self._transform_payload(task.bridge, task.entry, entry_sequence=task.entry_sequence)
         except Exception as exc:
             self._report_error(
                 f"桥接“{task.bridge.name}”脚本执行失败：{exc}",
                 bridge=task.bridge,
+                entry_sequence=task.entry_sequence,
             )
             return
         if self._stop_event.is_set():
@@ -184,19 +202,35 @@ class ChannelBridgeRuntimeService:
             self._report_error(
                 f"桥接“{task.bridge.name}”发送失败：{exc}",
                 bridge=task.bridge,
+                entry_sequence=task.entry_sequence,
             )
             return
 
-        self._set_snapshot(
-            bridged_count=self._snapshot.bridged_count + 1,
-            last_bridge_name=task.bridge.name,
-            last_source_session_id=task.entry.session_id,
-            last_source_peer=task.entry.metadata.get("peer"),
-            last_bridge_at=datetime.now(UTC),
-            last_error=None,
-        )
+        with self._snapshot_lock:
+            current_error_sequence = self._snapshot.last_error_sequence
+            can_clear_error = current_error_sequence is None or current_error_sequence < task.entry_sequence
+            changes: dict[str, object] = {
+                "bridged_count": self._snapshot.bridged_count + 1,
+                "last_bridge_name": task.bridge.name,
+                "last_source_session_id": task.entry.session_id,
+                "last_source_peer": task.entry.metadata.get("peer"),
+                "last_bridge_at": datetime.now(UTC),
+            }
+            if can_clear_error:
+                changes["last_error"] = None
+                changes["last_error_at"] = None
+                changes["last_error_sequence"] = None
+            self._snapshot = replace(self._snapshot, **changes)
+            snapshot = self._snapshot
+        self._notify(snapshot)
 
-    def _transform_payload(self, bridge: ChannelBridgeConfig, entry: StructuredLogEntry) -> bytes | None:
+    def _transform_payload(
+        self,
+        bridge: ChannelBridgeConfig,
+        entry: StructuredLogEntry,
+        *,
+        entry_sequence: int,
+    ) -> bytes | None:
         if bridge.script_language is None or not bridge.script_code.strip():
             return entry.raw_payload or b""
 
@@ -218,6 +252,7 @@ class ChannelBridgeRuntimeService:
             self._report_error(
                 f"桥接“{bridge.name}”脚本失败：{result.error}",
                 bridge=bridge,
+                entry_sequence=entry_sequence,
             )
             return None
         if result.result is None:
@@ -229,16 +264,23 @@ class ChannelBridgeRuntimeService:
         self._report_error(
             f"桥接“{bridge.name}”脚本结果必须是 bytes、str 或 None。",
             bridge=bridge,
+            entry_sequence=entry_sequence,
         )
         return None
 
     def _set_snapshot(self, **changes: object) -> None:
-        self._snapshot = replace(self._snapshot, **changes)
-        self._notify()
+        with self._snapshot_lock:
+            self._snapshot = replace(self._snapshot, **changes)
+            snapshot = self._snapshot
+        self._notify(snapshot)
 
-    def _report_error(self, message: str, *, bridge: ChannelBridgeConfig) -> None:
+    def _report_error(self, message: str, *, bridge: ChannelBridgeConfig, entry_sequence: int) -> None:
         self._publish_error_log(message, bridge=bridge)
-        self._set_snapshot(last_error=message)
+        self._set_snapshot(
+            last_error=message,
+            last_error_at=datetime.now(UTC),
+            last_error_sequence=entry_sequence,
+        )
 
     def _publish_error_log(self, message: str, *, bridge: ChannelBridgeConfig) -> None:
         self._event_bus.publish(
@@ -255,10 +297,14 @@ class ChannelBridgeRuntimeService:
             )
         )
 
-    def _notify(self) -> None:
-        snapshot = self._snapshot
+    def _notify(self, snapshot: ChannelBridgeRuntimeSnapshot) -> None:
         for listener in list(self._listeners):
             listener(snapshot)
+
+    def _reserve_entry_sequence(self) -> int:
+        with self._sequence_lock:
+            self._next_entry_sequence += 1
+            return self._next_entry_sequence
 
 
 def _target_active_session_id(target: object) -> str | None:
