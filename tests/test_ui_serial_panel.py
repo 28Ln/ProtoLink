@@ -14,6 +14,7 @@ from protolink.core.bootstrap import bootstrap_app_context
 from protolink.core.transport import ConnectionState
 from protolink.ui.qt_dispatch import QtCallbackDispatcher
 from protolink.ui.serial_panel import SerialStudioPanel
+from protolink.ui.text import CURRENT_DRAFT_TEXT, READY_TEXT
 
 
 @pytest.fixture(scope="module")
@@ -105,6 +106,12 @@ def test_serial_panel_uses_tabbed_layout_for_compact_workspace(qapp: QApplicatio
         "连接配置",
         "负载与预设",
     ]
+    assert panel.preset_combo.itemText(0) == CURRENT_DRAFT_TEXT
+    assert panel.error_label.text() == READY_TEXT
+    assert any(
+        CURRENT_DRAFT_TEXT in label.text()
+        for label in panel.findChildren(type(panel.status_label))
+    )
     assert panel.minimumSizeHint().height() < 560
     assert panel.content_tabs.height() > 420
 

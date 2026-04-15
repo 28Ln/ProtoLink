@@ -53,7 +53,7 @@ class ModbusTcpLabPanel(QWidget):
         self.inspector = inspector
         self.replay_service = replay_service
         self.workspace = workspace
-        self._last_action_text = "准备就绪"
+        self._last_action_text = READY_TEXT
         self._build_ui()
         self.tcp_client_service.subscribe(self._refresh_tcp_state)
         self.register_monitor_service.subscribe(self._refresh_monitor_state)
@@ -157,7 +157,7 @@ class ModbusTcpLabPanel(QWidget):
         self.replay_status_label.setWordWrap(True)
 
         self.workflow_hint = QLabel(
-            "工作流提示：通过当前 TCP 客户端发送请求，检查原始字节流，导出回放计划与抓包，再用下方保存的点位观察 Modbus TCP 入向值。"
+            "使用建议：通过当前 TCP 客户端发送请求，先核对原始字节，再导出回放计划和抓包，并用下方点位持续观察 Modbus TCP 的返回值。"
         )
         self.workflow_hint.setObjectName("MetaLabel")
         self.workflow_hint.setWordWrap(True)

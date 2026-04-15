@@ -24,6 +24,7 @@ from protolink.application.timed_task_service import TimedTaskService, TimedTask
 from protolink.core.device_scan import DeviceScanConfig, DeviceScanTransportKind
 from protolink.core.rule_engine import AutomationAction, AutomationActionKind, AutomationRule
 from protolink.core.transport import TransportKind
+from protolink.ui.text import READY_TEXT
 
 
 class AutomationRulesPanel(QWidget):
@@ -322,7 +323,7 @@ class AutomationRulesPanel(QWidget):
         )
         profile_path = self.service.profile_path
         self.profile_path_label.setText(f"配置文件: {profile_path}" if profile_path is not None else "配置文件: 内存中")
-        self.error_label.setText(snapshot.last_error or "准备就绪")
+        self.error_label.setText(snapshot.last_error or READY_TEXT)
         self._refresh_primary_actions(snapshot)
 
     def _refresh_auto_response_status(self, snapshot: AutoResponseRuntimeSnapshot) -> None:

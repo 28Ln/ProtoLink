@@ -23,6 +23,7 @@ from protolink.core.transport import ConnectionState
 from protolink.core.workspace import ensure_workspace_layout
 from protolink.ui.qt_dispatch import QtCallbackDispatcher
 from protolink.ui.modbus_rtu_panel import ModbusRtuLabPanel
+from protolink.ui.text import READY_TEXT
 
 
 @pytest.fixture(scope="module")
@@ -106,6 +107,8 @@ def test_modbus_rtu_panel_can_preview_and_send_request(qapp: QApplication) -> No
     ]
     assert panel.preview_splitter.count() == 2
     assert panel.status_label.wordWrap() is True
+    assert panel.error_label.text() == READY_TEXT
+    assert panel.workflow_hint.text().startswith("使用建议：")
 
     panel.unit_id_spin.setValue(17)
     panel.start_address_spin.setValue(10)

@@ -9,16 +9,16 @@ from protolink.core.script_host import ScriptLanguage
 from protolink.core.transport import ConnectionState, TransportKind
 
 
-READY_TEXT = "准备就绪"
-CURRENT_DRAFT_TEXT = "当前草稿"
-DRAFT_TEXT = "草稿"
+READY_TEXT = "等待操作"
+CURRENT_DRAFT_TEXT = "未保存配置"
+DRAFT_TEXT = "编辑内容"
 NONE_TEXT = "无"
 
 
 MODULE_STATUS_TEXT = {
-    ModuleStatus.BOOTSTRAPPED: "已具备",
-    ModuleStatus.NEXT: "下一阶段",
-    ModuleStatus.PLANNED: "规划中",
+    ModuleStatus.BOOTSTRAPPED: "可用",
+    ModuleStatus.NEXT: "持续完善",
+    ModuleStatus.PLANNED: "即将提供",
 }
 
 CONNECTION_STATE_TEXT = {

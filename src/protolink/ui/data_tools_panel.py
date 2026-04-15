@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from protolink.application.data_tools_service import DataToolMode, DataToolsService, DataToolsSnapshot
+from protolink.ui.text import READY_TEXT
 
 
 class DataToolsPanel(QWidget):
@@ -88,7 +89,7 @@ class DataToolsPanel(QWidget):
         selected_text = self.mode_combo.currentText() or snapshot.selected_mode.value
         self.status_label.setText(f"模式: {selected_text}    运行次数: {snapshot.execution_count}")
         self.output_text.setPlainText(snapshot.output_text)
-        self.error_label.setText(snapshot.last_error or "准备就绪")
+        self.error_label.setText(snapshot.last_error or READY_TEXT)
         self.run_button.setEnabled(bool(snapshot.input_text.strip()))
 
     def _on_mode_changed(self) -> None:

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication, QFrame, QLabel, QWidget
 
 from protolink.core.bootstrap import AppContext, bootstrap_app_context
 from protolink.ui.main_window import ProtoLinkMainWindow
+from protolink.ui.text import READY_TEXT
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,7 +141,7 @@ def test_owner_surfaces_share_primary_chrome_status_and_boundary_guidance(
             assert panel.notice_label.wordWrap() is True
             assert spec.notice_snippet in panel.notice_label.text()
             assert panel.error_label.objectName() == "MetaLabel"
-            assert panel.error_label.text() == "准备就绪"
+            assert panel.error_label.text() == READY_TEXT
 
             if spec.panel_attr == "automation_rules_panel":
                 assert panel.run_button.isEnabled() is False

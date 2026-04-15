@@ -167,7 +167,7 @@ class SerialStudioPanel(QWidget):
 
         preset_frame, preset_layout = self._create_section(
             "预设管理",
-            "预设与当前草稿分开显示，减少长表单里多组按钮同时挤压。",
+            f"预设与{CURRENT_DRAFT_TEXT}分开显示，减少长表单里多组按钮同时挤压。",
         )
         preset_grid = self._create_form_grid()
         preset_grid.addWidget(QLabel("预设"), 0, 0)

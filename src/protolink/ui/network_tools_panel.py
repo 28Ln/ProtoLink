@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from protolink.application.network_tools_service import NetworkToolsService, NetworkToolsSnapshot
+from protolink.ui.text import READY_TEXT
 
 
 class NetworkToolsPanel(QWidget):
@@ -103,7 +104,7 @@ class NetworkToolsPanel(QWidget):
         self.local_text.setPlainText("\n".join(snapshot.local_ip_addresses))
         self.resolve_text.setPlainText("\n".join(snapshot.resolved_ip_addresses))
         self.probe_label.setText(snapshot.tcp_probe_summary or "-")
-        self.error_label.setText(snapshot.last_error or "准备就绪")
+        self.error_label.setText(snapshot.last_error or READY_TEXT)
         self._refresh_action_state(snapshot)
 
     def _on_target_host_changed(self) -> None:

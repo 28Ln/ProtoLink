@@ -61,7 +61,7 @@ class ModbusRtuLabPanel(QWidget):
         self.replay_service = replay_service
         self.workspace = workspace
         self._syncing_controls = False
-        self._last_action_text = "准备就绪"
+        self._last_action_text = READY_TEXT
         self._build_ui()
         self.serial_service.subscribe(self._refresh_serial_state)
         self.register_monitor_service.subscribe(self._refresh_monitor_state)
@@ -160,7 +160,7 @@ class ModbusRtuLabPanel(QWidget):
         self.replay_status_label.setWordWrap(True)
 
         self.workflow_hint = QLabel(
-            "工作流提示：在此生成请求，先在报文分析台中校验原始字节，再导出为回放计划，通过当前串口会话重放，并用下方保留的点位观察 Modbus RTU 入向值。"
+            "使用建议：先在这里生成请求并核对原始字节，再导出回放计划，通过当前串口会话重放，并用下方点位持续观察 Modbus RTU 的返回值。"
         )
         self.workflow_hint.setObjectName("MetaLabel")
         self.workflow_hint.setWordWrap(True)
