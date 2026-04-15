@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4 - 2026-04-15
+
+- raised full pytest baseline to `293 passed`
+- added native installer MSI build CLI
+- added native installer signature verification CLI
+- advanced `PL-014` from scaffold/toolchain stage into MSI build/signature verification stage
+
 ## 0.2.3 - 2026-04-15
 
 - raised full pytest baseline to `288 passed`

@@ -4,22 +4,22 @@ Last updated: 2026-04-15
 
 ## 当前验证基线
 
-- `uv run pytest -q` -> 288 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 288` -> passed
+- `uv run pytest -q` -> 293 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 293` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
-- `python scripts/verify_dist_install.py` -> passed
+- `python scripts/verify_dist_install.py --artifact-version 0.2.4` -> passed
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
 - `uv run protolink --smoke-check` -> `smoke-check-ok`
-- 当前 full-suite 快照：`288 passed`
+- 当前 full-suite 快照：`293 passed`
 
 ## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run pytest -q
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 288
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 293
 ```
 
 ## UI / owner-surface 相关验证
@@ -34,13 +34,12 @@ uv run protolink --smoke-check
 
 ```powershell
 uv run python scripts/verify_release_staging.py --name local
-python scripts/verify_dist_install.py
-# 如 dist/ 下并存多个历史版本，默认会校验最新且 wheel/sdist 成对存在的版本；
-# 若最新 wheel / sdist 版本不一致，则传入明确版本或先清理 dist/。
-python scripts/verify_dist_install.py --artifact-version 0.2.3
+python scripts/verify_dist_install.py --artifact-version 0.2.4
 uv run protolink --build-native-installer-scaffold proto-stage
 uv run protolink --verify-native-installer-scaffold <scaffold-dir>
 uv run protolink --verify-native-installer-toolchain
+uv run protolink --build-native-installer-msi <scaffold-dir>
+uv run protolink --verify-native-installer-signature <msi-file>
 uv build
 ```
 
@@ -50,6 +49,8 @@ uv build
   - `--build-native-installer-scaffold`
   - `--verify-native-installer-scaffold`
   - `--verify-native-installer-toolchain`
+  - `--build-native-installer-msi`
+  - `--verify-native-installer-signature`
 - 这些命令必须满足以下门禁：
   1. `uv run protolink --help` 可见
   2. `README.md` 包含精确 flag 名称

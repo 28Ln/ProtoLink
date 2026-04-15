@@ -17,16 +17,17 @@ Last updated: 2026-04-15
 - 稳定的 release-staging / fresh-install 验证链
 - WiX/MSI scaffold 构建与校验 CLI
 - native installer toolchain 检测 CLI
+- MSI build 与签名校验 CLI
 
 ## 目标
 
-在不破坏 0.2.3 基线的前提下，推进原生安装器与签名路线，建立从 bundled-runtime 交付向更正式安装形态演进的工程路径。
+在不破坏 0.2.4 基线的前提下，推进原生安装器与签名路线，建立从 bundled-runtime 交付向更正式安装形态演进的工程路径。
 
 ## 为什么现在做这件事
 
 当前已经具备：
 
-- `288 passed`
+- `293 passed`
 - `release-staging passed`
 - `dist fresh-install passed`
 
@@ -34,7 +35,7 @@ Last updated: 2026-04-15
 
 - 明确 native installer / signing 路线
 - 明确切换条件、验证策略与回退边界
-- 保证 0.2.3 现有交付链在过渡期间保持稳定
+- 保证 0.2.4 现有交付链在过渡期间保持稳定
 
 ## 当前范围
 
@@ -43,8 +44,8 @@ Last updated: 2026-04-15
 1. 定义 native installer / signing 路线的目标交付形态
 2. 定义从 bundled-runtime 交付切换到更正式安装器形态的进入条件
 3. 定义验证策略、签名要求、回退边界
-4. 保持现有 0.2.3 交付链作为稳定回退基线
-5. 将 scaffold / toolchain 检测推进到真正 MSI build lane
+4. 保持现有 0.2.4 交付链作为稳定回退基线
+5. 将 scaffold / toolchain / MSI build / signature verify 推进到受控发布 lane
 
 ## 退出条件
 
@@ -52,7 +53,7 @@ Last updated: 2026-04-15
 
 - native installer / signing 路线文档化完成
 - 切换条件、回退条件、验证边界明确
-- WiX scaffold 已能进入真正的 MSI build 验证路径
+- WiX scaffold 已进入真正的 MSI build / 签名验证路径
 - 现有 bundled-runtime 交付基线继续保持稳定可验证
 - 下一阶段实现任务已具备明确入口
 

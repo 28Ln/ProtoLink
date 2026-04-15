@@ -50,7 +50,7 @@ def _native_installer_related_flags(cli_source: str) -> list[str]:
         match
         for match in re.findall(r"--[a-z0-9][a-z0-9-]*", cli_source)
         if any(keyword in match for keyword in ("installer", "native", "wix"))
-        and any(kind in match for kind in ("scaffold", "toolchain"))
+        and any(kind in match for kind in ("scaffold", "toolchain", "signature"))
     }
     return sorted(flags)
 

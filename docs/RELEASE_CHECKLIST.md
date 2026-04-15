@@ -18,18 +18,18 @@ Last updated: 2026-04-15
 ```powershell
 uv sync --python 3.11 --extra dev --extra ui
 uv run pytest -q
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 288
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 293
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local
-python scripts/verify_dist_install.py
+python scripts/verify_dist_install.py --artifact-version 0.2.4
 uv run protolink --build-native-installer-scaffold proto-stage
 uv run protolink --verify-native-installer-scaffold <scaffold-dir>
 uv run protolink --verify-native-installer-toolchain
+uv run protolink --build-native-installer-msi <scaffold-dir>
+uv run protolink --verify-native-installer-signature <msi-file>
 uv build
 ```
-
-> 若 `dist/` 下并存多个版本产物，`scripts/verify_dist_install.py` 默认验证最新且 wheel/sdist 成对存在的版本；若最新 wheel 与 sdist 版本不一致，应先清理旧产物，或使用 `python scripts/verify_dist_install.py --artifact-version <version>` 显式校验目标版本。
 
 ## 工作区与交付检查
 
@@ -44,20 +44,13 @@ uv build
 - README、`docs/CURRENT_STATE.md`、`docs/PROJECT_STATUS.md`、`docs/VALIDATION.md` 的主线与验证数字一致
 - `.github/workflows/ci.yml` 与当前验证基线一致
 - 发布手册与冒烟手册只保留当前有效命令
-- 当前 native installer scaffold/toolchain 命令为：
+- 当前 native installer scaffold/toolchain/build/signature 命令为：
   - `--build-native-installer-scaffold`
   - `--verify-native-installer-scaffold`
   - `--verify-native-installer-toolchain`
+  - `--build-native-installer-msi`
+  - `--verify-native-installer-signature`
 - `uv run protolink --help` 中必须能看到这些命令
 - `README.md`、`docs/NATIVE_INSTALLER_PLAN.md`、`docs/VALIDATION.md`、本文件必须包含**精确 flag 名称**
 - `scripts/verify_canonical_truth.py` 必须通过
-- scaffold / toolchain 检测仅用于推进原生安装器路线，不替代现有 release-staging / dist-install / build 门禁
-
-## 签收标准
-
-- full pytest 通过
-- targeted regressions 通过
-- canonical truth 通过
-- release-staging 通过
-- dist fresh-install 通过
-- build 成功
+- scaffold / toolchain / build / signature verify 仅用于推进原生安装器路线，不替代现有 release-staging / dist-install / build 门禁

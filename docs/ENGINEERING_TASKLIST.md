@@ -15,17 +15,17 @@ Last updated: 2026-04-15
 
 - Classification: `Active`
 - Objective:
-  - 在保持 0.2.3 基线稳定的前提下，推进原生安装器与签名交付路线。
+  - 在保持 0.2.4 基线稳定的前提下，推进原生安装器与签名交付路线。
 - Scope:
   1. 定义 native installer / signing 目标形态
   2. 定义切换条件、验证策略与回退边界
-  3. 保持 0.2.3 基线在过渡期间稳定可验证
-  4. 将当前 WiX scaffold 与 toolchain 检测推进到真正 MSI build lane
+  3. 保持 0.2.4 基线在过渡期间稳定可验证
+  4. 将当前 WiX scaffold / toolchain / MSI build / signature verify 推进到受控发布 lane
 - Exit criteria:
   - native installer / signing 路线形成正式计划
   - 切换条件、验证策略、回退边界文档化
-  - WiX scaffold 已进入 MSI build 验证路径
-  - 0.2.3 基线保持稳定
+  - WiX scaffold 已进入 MSI build / 签名验证路径
+  - 0.2.4 基线保持稳定
 
 ## Next
 

@@ -17,7 +17,7 @@ Last updated: 2026-04-15
 
 ## 2. Current baseline
 
-截至 `0.2.2`，ProtoLink 当前稳定交付形态为：
+截至 `0.2.4`，ProtoLink 当前稳定交付形态为：
 
 - release bundle
 - portable package
@@ -97,11 +97,13 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
 
 ### Current status
 
-当前 `0.2.2` CLI 基线已经暴露：
+当前 `0.2.4` CLI 基线已经暴露：
 
 - `--build-native-installer-scaffold`
 - `--verify-native-installer-scaffold`
 - `--verify-native-installer-toolchain`
+- `--build-native-installer-msi`
+- `--verify-native-installer-signature`
 
 ### Required role
 
@@ -151,6 +153,25 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
 - 检测当前机器上的 `signtool` / `signtool.exe`
 - 输出结构化 JSON，而不是依赖人工阅读 stderr
 - 给出推荐 build / sign / verify 命令
+
+### MSI build and signature verification
+
+当前 CLI 还必须提供：
+
+- `--build-native-installer-msi`
+- `--verify-native-installer-signature`
+
+职责：
+
+- `--build-native-installer-msi`
+  - 基于已验证 scaffold 调用 WiX Toolset 构建 MSI
+  - 在缺失 WiX 时返回稳定用户态错误
+  - 输出结构化 JSON
+
+- `--verify-native-installer-signature`
+  - 基于 `signtool verify /pa /v` 校验 MSI 签名
+  - 在缺失 SignTool 或签名无效时返回稳定用户态错误
+  - 输出结构化 JSON
 
 ## 6. Signing model
 
@@ -255,9 +276,11 @@ native installer 路线至少要具备以下验证：
 3. `--build-native-installer-scaffold`
 4. `--verify-native-installer-scaffold`
 5. `--verify-native-installer-toolchain`
-6. 切换条件与回退边界
-7. 验证矩阵接入点
-8. 下一阶段实现任务入口
+6. `--build-native-installer-msi`
+7. `--verify-native-installer-signature`
+8. 切换条件与回退边界
+9. 验证矩阵接入点
+10. 下一阶段实现任务入口
 
 ## 12. Next implementation handoff
 
