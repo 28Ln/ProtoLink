@@ -38,9 +38,10 @@ from protolink.application.tcp_server_service import TcpServerSessionService
 from protolink.application.timed_task_service import TimedTaskService
 from protolink.application.udp_service import UdpSessionService
 from protolink.catalog import build_module_catalog
-from protolink.core.models import FeatureModule, ModuleStatus
+from protolink.core.models import FeatureModule
 from protolink.core.packet_inspector import PacketInspectorState
 from protolink.core.workspace import WorkspaceLayout
+from protolink import __version__
 from protolink.presentation import (
     APPLICATION_SUBTITLE,
     APPLICATION_TITLE,
@@ -64,8 +65,8 @@ from protolink.ui.udp_panel import UdpPanel
 
 
 WINDOW_EDGE_MARGIN = 6
-CONTENT_SPLITTER_DETAIL_WIDTH = 240
-PACKET_DOCK_TARGET_HEIGHT = 160
+CONTENT_SPLITTER_DETAIL_WIDTH = 220
+PACKET_DOCK_TARGET_HEIGHT = 140
 
 
 class WindowTitleBar(QFrame):
@@ -75,8 +76,8 @@ class WindowTitleBar(QFrame):
         self.setObjectName("TitleBar")
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(18, 14, 14, 14)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 12, 12, 12)
+        layout.setSpacing(10)
 
         brand_layout = QVBoxLayout()
         brand_layout.setContentsMargins(0, 0, 0, 0)
@@ -86,7 +87,7 @@ class WindowTitleBar(QFrame):
         self.title_label.setObjectName("TitleBarTitle")
         self.subtitle_label = QLabel(APPLICATION_SUBTITLE)
         self.subtitle_label.setObjectName("TitleBarSubtitle")
-        self.context_label = QLabel("稳定交付模式")
+        self.context_label = QLabel("开始使用")
         self.context_label.setObjectName("TitleBarContext")
 
         brand_layout.addWidget(self.title_label)
@@ -241,46 +242,56 @@ class ProtoLinkMainWindow(QMainWindow):
     def _build_sidebar(self) -> QWidget:
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
-        sidebar.setMinimumWidth(290)
-        sidebar.setMaximumWidth(340)
+        sidebar.setMinimumWidth(260)
+        sidebar.setMaximumWidth(300)
 
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(18, 18, 18, 18)
-        sidebar_layout.setSpacing(12)
+        sidebar_layout.setContentsMargins(16, 16, 16, 16)
+        sidebar_layout.setSpacing(10)
 
-        title = QLabel("模块导航")
+        title = QLabel("快速导航")
         title.setObjectName("SectionTitle")
-        subtitle = QLabel("默认全中文工作台，所有模块统一从这里进入。")
+        subtitle = QLabel("按业务链路切换模块，常用入口优先展示。")
         subtitle.setObjectName("MetaLabel")
         subtitle.setWordWrap(True)
 
-        workspace_title = QLabel("当前工作区")
-        workspace_title.setObjectName("SectionTitle")
-        self.workspace_label = QLabel(self._format_sidebar_path(self.workspace.root, keep_segments=3))
+        workspace_card = QFrame()
+        workspace_card.setObjectName("WorkspaceCard")
+        workspace_layout = QVBoxLayout(workspace_card)
+        workspace_layout.setContentsMargins(12, 12, 12, 12)
+        workspace_layout.setSpacing(4)
+
+        workspace_title = QLabel("当前项目")
+        workspace_title.setObjectName("WorkspaceEyebrow")
+        workspace_name = QLabel(self._format_workspace_name(self.workspace.root))
+        workspace_name.setObjectName("WorkspaceTitle")
+        self.workspace_label = QLabel(self._format_sidebar_path(self.workspace.root, keep_segments=2))
         self.workspace_label.setObjectName("PathLabel")
         self.workspace_label.setWordWrap(True)
         self.workspace_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.workspace_label.setToolTip(str(self.workspace.root))
 
-        self.workspace_meta_label = QLabel(
-            "\n".join(
-                (
-                    f"日志目录：{self._format_sidebar_path(self.workspace.logs, keep_segments=2)}",
-                    f"导出目录：{self._format_sidebar_path(self.workspace.exports, keep_segments=2)}",
-                )
-            )
-        )
+        self.workspace_meta_label = QLabel("日志、抓包与导出目录已准备，可通过悬停查看完整路径。")
         self.workspace_meta_label.setObjectName("MetaLabel")
         self.workspace_meta_label.setWordWrap(True)
         self.workspace_meta_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.workspace_meta_label.setToolTip(
-            "\n".join(
-                (
-                    f"日志目录：{self.workspace.logs}",
-                    f"导出目录：{self.workspace.exports}",
-                )
-            )
-        )
+        self.workspace_meta_label.setToolTip(self._workspace_paths_tooltip())
+
+        workspace_layout.addWidget(workspace_title)
+        workspace_layout.addWidget(workspace_name)
+        workspace_layout.addWidget(self.workspace_label)
+        workspace_layout.addWidget(self.workspace_meta_label)
+
+        module_header = QHBoxLayout()
+        module_header.setContentsMargins(0, 0, 0, 0)
+        module_header.setSpacing(8)
+        module_title = QLabel("全部模块")
+        module_title.setObjectName("SectionTitle")
+        module_count = QLabel(f"{len(self.modules)} 项")
+        module_count.setObjectName("SidebarPill")
+        module_header.addWidget(module_title)
+        module_header.addStretch(1)
+        module_header.addWidget(module_count)
 
         self.module_list = QListWidget()
         self.module_list.setObjectName("ModuleList")
@@ -288,10 +299,8 @@ class ProtoLinkMainWindow(QMainWindow):
 
         sidebar_layout.addWidget(title)
         sidebar_layout.addWidget(subtitle)
-        sidebar_layout.addSpacing(4)
-        sidebar_layout.addWidget(workspace_title)
-        sidebar_layout.addWidget(self.workspace_label)
-        sidebar_layout.addWidget(self.workspace_meta_label)
+        sidebar_layout.addWidget(workspace_card)
+        sidebar_layout.addLayout(module_header)
         sidebar_layout.addWidget(self.module_list, 1)
         return sidebar
 
@@ -299,59 +308,61 @@ class ProtoLinkMainWindow(QMainWindow):
         content = QWidget()
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(12)
+        content_layout.setSpacing(10)
 
         hero = QFrame()
         hero.setObjectName("Hero")
-        hero_layout = QVBoxLayout(hero)
-        hero_layout.setContentsMargins(14, 12, 14, 12)
-        hero_layout.setSpacing(4)
+        hero_layout = QHBoxLayout(hero)
+        hero_layout.setContentsMargins(12, 10, 12, 10)
+        hero_layout.setSpacing(12)
+
+        hero_copy = QVBoxLayout()
+        hero_copy.setContentsMargins(0, 0, 0, 0)
+        hero_copy.setSpacing(2)
 
         hero_title = QLabel(APPLICATION_TITLE)
         hero_title.setObjectName("HeroTitle")
-        hero_subtitle = QLabel("围绕留痕、主链路、自动化和交付验证构建，默认优先保证工作面可用空间。")
+        hero_subtitle = QLabel("把连接、协议调试、报文分析与自动化协同集中在一个统一工作面中。")
         hero_subtitle.setObjectName("HeroSubtitle")
         hero_subtitle.setWordWrap(True)
 
-        hero_layout.addWidget(hero_title)
-        hero_layout.addWidget(hero_subtitle)
-        hero_layout.addWidget(self._build_stats_panel())
+        hero_copy.addWidget(hero_title)
+        hero_copy.addWidget(hero_subtitle)
+
+        hero_layout.addLayout(hero_copy, 1)
+        hero_layout.addWidget(self._build_stats_panel(), 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         panel_surface = QFrame()
         panel_surface.setObjectName("Panel")
         panel_layout = QVBoxLayout(panel_surface)
-        panel_layout.setContentsMargins(16, 16, 16, 16)
-        panel_layout.setSpacing(10)
+        panel_layout.setContentsMargins(14, 14, 14, 14)
+        panel_layout.setSpacing(8)
 
-        panel_title = QLabel("功能工作面")
+        panel_title = QLabel("当前工作面")
         panel_title.setObjectName("SectionTitle")
-        panel_hint = QLabel("默认优先展示主操作面板；右侧说明区可随时折叠，尽量把空间让给工作区。")
-        panel_hint.setObjectName("MetaLabel")
-        panel_hint.setWordWrap(True)
 
         self.panel_stack = QStackedWidget()
         self.panel_stack.setObjectName("PanelStack")
 
         panel_layout.addWidget(panel_title)
-        panel_layout.addWidget(panel_hint)
         panel_layout.addWidget(self.panel_stack, 1)
 
         context_surface = QFrame()
         context_surface.setObjectName("Panel")
-        context_surface.setMinimumWidth(220)
-        context_surface.setMaximumWidth(320)
+        context_surface.setMinimumWidth(200)
+        context_surface.setMaximumWidth(300)
         context_layout = QVBoxLayout(context_surface)
-        context_layout.setContentsMargins(16, 16, 16, 16)
-        context_layout.setSpacing(10)
+        context_layout.setContentsMargins(14, 14, 14, 14)
+        context_layout.setSpacing(8)
 
         section_header = QHBoxLayout()
         section_header.setContentsMargins(0, 0, 0, 0)
-        section_title = QLabel("当前模块")
+        section_title = QLabel("模块概览")
         section_title.setObjectName("SectionTitle")
         self.context_toggle_button = QToolButton()
         self.context_toggle_button.setObjectName("WindowButton")
-        self.context_toggle_button.setText("折叠")
-        self.context_toggle_button.setToolTip("收起或展开右侧模块说明区")
+        self.context_toggle_button.setText("收起")
+        self.context_toggle_button.setToolTip("收起或展开右侧模块概览")
         self.context_toggle_button.setAutoRaise(False)
         self.context_toggle_button.clicked.connect(self.toggle_module_context)
         section_header.addWidget(section_title)
@@ -371,11 +382,11 @@ class ProtoLinkMainWindow(QMainWindow):
 
         self.summary_text = QTextEdit()
         self.summary_text.setReadOnly(True)
-        self.summary_text.setPlaceholderText("当前模块的能力边界会显示在这里。")
+        self.summary_text.setPlaceholderText("这里会显示模块的主要能力、适用场景与使用边界。")
 
         self.acceptance_text = QTextEdit()
         self.acceptance_text.setReadOnly(True)
-        self.acceptance_text.setPlaceholderText("当前模块的验收标准会显示在这里。")
+        self.acceptance_text.setPlaceholderText("这里会显示建议的操作清单与验证要点。")
 
         summary_page = QWidget()
         summary_layout = QVBoxLayout(summary_page)
@@ -387,8 +398,8 @@ class ProtoLinkMainWindow(QMainWindow):
         acceptance_layout.setContentsMargins(0, 0, 0, 0)
         acceptance_layout.addWidget(self.acceptance_text, 1)
 
-        self.module_context_tabs.addTab(summary_page, "能力说明")
-        self.module_context_tabs.addTab(acceptance_page, "验收标准")
+        self.module_context_tabs.addTab(summary_page, "功能概览")
+        self.module_context_tabs.addTab(acceptance_page, "使用清单")
 
         context_layout.addLayout(section_header)
         context_layout.addWidget(self.name_label)
@@ -417,38 +428,36 @@ class ProtoLinkMainWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        title = QLabel("工作台总览")
+        title = QLabel("开始使用")
         title.setObjectName("SectionTitle")
 
-        overview = QLabel(
-            "ProtoLink 当前按稳定工具标准组织：左侧统一导航，右侧保持模块上下文，底部停靠报文分析台。"
-        )
+        overview = QLabel("从左侧选择模块即可开始连接、调试或分析；底部报文台会持续承接当前会话的原始数据。")
         overview.setObjectName("MetaLabel")
         overview.setWordWrap(True)
 
         directories = QLabel(
             "\n".join(
                 (
-                    f"工作区根目录：{self.workspace.root}",
-                    f"日志证据目录：{self.workspace.logs}",
-                    f"抓包目录：{self.workspace.captures}",
-                    f"导出目录：{self.workspace.exports}",
+                    f"当前项目：{self._format_workspace_name(self.workspace.root)}",
+                    f"工作区位置：{self._format_sidebar_path(self.workspace.root, keep_segments=3)}",
+                    "日志、抓包与导出目录会随操作自动归档，可通过提示查看完整路径。",
                 )
             )
         )
         directories.setObjectName("PathLabel")
         directories.setWordWrap(True)
         directories.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        directories.setToolTip(self._workspace_paths_tooltip())
 
         checklist = QTextEdit()
         checklist.setReadOnly(True)
         checklist.setPlainText(
             "\n".join(
                 (
-                    "1. 先在左侧选择目标模块，保持链路上下文清晰。",
-                    "2. 底部报文分析台统一承接原始负载、过滤和回放计划。",
-                    "3. 所有专业模块默认使用中文说明和边界提示。",
-                    "4. 打包、预检和交付验证链路保持独立，不与日常调试入口混杂。",
+                    "1. 先在左侧选择需要的模块，再进入对应的连接或调试流程。",
+                    "2. 设备通信产生的数据会自动汇入底部报文台，便于筛选、解析和回放。",
+                    "3. 右侧概览区提供当前模块的主要能力与使用清单，可按需收起以释放空间。",
+                    "4. 打包、预检与交付验证命令仍然独立保留，不影响日常操作体验。",
                 )
             )
         )
@@ -536,27 +545,25 @@ class ProtoLinkMainWindow(QMainWindow):
         stats_panel = QWidget()
         stats_layout = QGridLayout(stats_panel)
         stats_layout.setContentsMargins(0, 0, 0, 0)
-        stats_layout.setHorizontalSpacing(10)
-        stats_layout.setVerticalSpacing(8)
+        stats_layout.setHorizontalSpacing(8)
+        stats_layout.setVerticalSpacing(6)
 
-        counts = Counter(module.status for module in self.modules)
+        area_counts = Counter(display_module_area(module.area) for module in self.modules if module.key != "dashboard")
         badges = [
-            f"模块总数：{len(self.modules)}",
-            f"已落地：{counts.get(ModuleStatus.BOOTSTRAPPED, 0)}",
-            f"下一阶段：{counts.get(ModuleStatus.NEXT, 0)}",
-            f"规划中：{counts.get(ModuleStatus.PLANNED, 0)}",
-            f"主线基准：docs/MAINLINE_STATUS.md",
+            f"连接与采集 {area_counts.get('传输链路', 0)}",
+            f"协议与分析 {area_counts.get('协议调试', 0) + area_counts.get('共享能力', 0)}",
+            f"自动化与诊断 {area_counts.get('自动化', 0) + area_counts.get('运维诊断', 0)}",
+            f"版本 {__version__}",
         ]
 
         for index, text in enumerate(badges):
             badge = QLabel(text)
             badge.setObjectName("Badge")
             badge.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            stats_layout.addWidget(badge, index // 3, index % 3)
+            stats_layout.addWidget(badge, index // 2, index % 2)
 
         stats_layout.setColumnStretch(0, 1)
         stats_layout.setColumnStretch(1, 1)
-        stats_layout.setColumnStretch(2, 1)
         return stats_panel
 
     def _populate_modules(self) -> None:
@@ -574,9 +581,7 @@ class ProtoLinkMainWindow(QMainWindow):
     def _render_module(self, module: FeatureModule) -> None:
         module_title = module.name
         self.name_label.setText(module_title)
-        self.meta_label.setText(
-            f"领域：{display_module_area(module.area)}    状态：{display_module_status(module.status)}    里程碑：{module.milestone}"
-        )
+        self.meta_label.setText(f"{display_module_area(module.area)} · {display_module_status(module.status)}")
         self.summary_text.setPlainText(module.summary)
         self.acceptance_text.setPlainText("\n".join(f"• {item}" for item in module.acceptance))
         self.panel_stack.setCurrentWidget(self._panel_pages.get(module.key, self.dashboard_panel))
@@ -619,7 +624,7 @@ class ProtoLinkMainWindow(QMainWindow):
         self.content_splitter.setSizes([splitter_width - detail_width, detail_width])
         self.resizeDocks(
             [self.packet_console_dock],
-            [max(140, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.24)))],
+            [max(140, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.2)))],
             Qt.Orientation.Vertical,
         )
         if self.width() <= 1280 and self._module_context_visible:
@@ -729,9 +734,22 @@ class ProtoLinkMainWindow(QMainWindow):
             detail_width = min(CONTENT_SPLITTER_DETAIL_WIDTH, max(220, splitter_width // 6))
             restore_sizes = [splitter_width - detail_width, detail_width]
         self.content_splitter.setSizes(restore_sizes)
-        self.context_toggle_button.setText("折叠")
+        self.context_toggle_button.setText("收起")
         self._module_context_visible = True
         self._module_context_auto_collapsed = False
+
+    def _format_workspace_name(self, path) -> str:
+        return path.name or str(path)
+
+    def _workspace_paths_tooltip(self) -> str:
+        return "\n".join(
+            (
+                f"工作区：{self.workspace.root}",
+                f"日志：{self.workspace.logs}",
+                f"抓包：{self.workspace.captures}",
+                f"导出：{self.workspace.exports}",
+            )
+        )
 
     def _format_sidebar_path(self, path, *, keep_segments: int) -> str:
         parts = list(path.parts)

@@ -4,9 +4,9 @@ from protolink.core.models import ModuleStatus
 from protolink.core.transport import ConnectionState, TransportKind
 
 
-APPLICATION_TITLE = "ProtoLink 工业协议稳定工作台"
-APPLICATION_SUBTITLE = "面向 Windows 的工业通信、协议调试与自动化协同工具"
-HEADLESS_GOAL = "面向 Windows 的工业通信、协议调试与自动化协同平台"
+APPLICATION_TITLE = "ProtoLink 工业通信工作台"
+APPLICATION_SUBTITLE = "面向 Windows 的连接调试、协议分析与自动化协同平台"
+HEADLESS_GOAL = "面向 Windows 的连接调试、协议分析与自动化协同平台"
 
 MODULE_DISPLAY_NAMES = {
     "dashboard": "工作台总览",
@@ -57,9 +57,9 @@ AREA_DISPLAY_NAMES = {
 }
 
 STATUS_DISPLAY_NAMES = {
-    ModuleStatus.BOOTSTRAPPED: "已落地",
-    ModuleStatus.NEXT: "下一阶段",
-    ModuleStatus.PLANNED: "规划中",
+    ModuleStatus.BOOTSTRAPPED: "已就绪",
+    ModuleStatus.NEXT: "开发中",
+    ModuleStatus.PLANNED: "计划中",
 }
 
 CONNECTION_STATE_DISPLAY_NAMES = {

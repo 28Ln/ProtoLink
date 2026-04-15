@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTabWidget,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -99,7 +100,7 @@ class PacketConsoleWidget(QWidget):
         page.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
 
         controls_layout = QGridLayout()
         controls_layout.setHorizontalSpacing(10)
@@ -133,6 +134,11 @@ class PacketConsoleWidget(QWidget):
 
         self.clear_filters_button = QPushButton("清除筛选")
         self.clear_filters_button.clicked.connect(self._on_clear_filters)
+        self.filter_toggle_button = QToolButton()
+        self.filter_toggle_button.setObjectName("WindowButton")
+        self.filter_toggle_button.setText("显示筛选")
+        self.filter_toggle_button.setCheckable(True)
+        self.filter_toggle_button.toggled.connect(self._set_filters_visible)
 
         controls_layout.addWidget(QLabel("负载视图"), 0, 0)
         controls_layout.addWidget(self.view_mode, 0, 1)
@@ -152,6 +158,15 @@ class PacketConsoleWidget(QWidget):
         self.entry_summary = QLabel()
         self.entry_summary.setObjectName("MetaLabel")
         self.entry_summary.setWordWrap(True)
+        summary_row = QHBoxLayout()
+        summary_row.setContentsMargins(0, 0, 0, 0)
+        summary_row.setSpacing(8)
+        summary_row.addWidget(self.entry_summary, 1)
+        summary_row.addWidget(self.filter_toggle_button)
+        self.filter_panel = QWidget()
+        self.filter_panel.setVisible(False)
+        self.filter_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        self.filter_panel.setLayout(controls_layout)
 
         self.entry_list = QListWidget()
         self.entry_list.currentItemChanged.connect(self._on_selection_changed)
@@ -181,8 +196,8 @@ class PacketConsoleWidget(QWidget):
         self.inspector_splitter.setStretchFactor(1, 5)
         self.inspector_splitter.setSizes([380, 520])
 
-        layout.addLayout(controls_layout)
-        layout.addWidget(self.entry_summary)
+        layout.addLayout(summary_row)
+        layout.addWidget(self.filter_panel)
         layout.addWidget(self.inspector_splitter, 1)
         return page
 
@@ -408,6 +423,7 @@ class PacketConsoleWidget(QWidget):
 
     def _on_clear_filters(self) -> None:
         self.inspector.clear_filter()
+        self.filter_toggle_button.setChecked(False)
 
     def _on_selection_changed(self, current: QListWidgetItem | None) -> None:
         entry_id = current.data(Qt.ItemDataRole.UserRole) if current is not None else None
@@ -636,3 +652,7 @@ class PacketConsoleWidget(QWidget):
         self.replay_plan_name_input.setEnabled(enabled and self.workspace is not None)
         self.replay_direction_combo.setEnabled(enabled and self.workspace is not None)
         self.replay_build_button.setEnabled(enabled and self.workspace is not None)
+
+    def _set_filters_visible(self, visible: bool) -> None:
+        self.filter_panel.setVisible(visible)
+        self.filter_toggle_button.setText("收起筛选" if visible else "显示筛选")

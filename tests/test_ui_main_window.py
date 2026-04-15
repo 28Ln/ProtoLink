@@ -12,8 +12,8 @@ pytest.importorskip("PySide6.QtWidgets")
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDockWidget, QLabel
 
+from protolink import __version__
 from protolink.core.bootstrap import bootstrap_app_context
-from protolink.core.packet_inspector import PacketInspectorState
 from protolink.presentation import APPLICATION_TITLE
 from protolink.ui.main_window import ProtoLinkMainWindow
 
@@ -57,7 +57,13 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     assert dock.widget() is window.packet_console_scroll
     assert window.packet_console_scroll.widget() is window.packet_console
     labels = [label.text() for label in window.findChildren(QLabel)]
-    assert any("docs/MAINLINE_STATUS.md" in text for text in labels)
+    assert any("版本" in text and __version__ in text for text in labels)
+    assert "当前项目" in labels
+    assert "快速导航" in labels
+    assert window.workspace_meta_label.text() == "日志、抓包与导出目录已准备，可通过悬停查看完整路径。"
+    assert "抓包：" in window.workspace_meta_label.toolTip()
+    assert window.module_context_tabs.tabText(0) == "功能概览"
+    assert window.module_context_tabs.tabText(1) == "使用清单"
     assert window.windowTitle() == APPLICATION_TITLE
     assert window.windowFlags() & Qt.WindowType.FramelessWindowHint
     assert window.title_bar.context_label.text() == "工作台总览"
@@ -137,6 +143,33 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     assert window.script_console_panel is not None
     assert window.script_console_panel.isVisible() is True
     assert window.network_tools_panel.isVisible() is False
+    window.close()
+    qapp.processEvents()
+
+    compact_window = ProtoLinkMainWindow(
+        workspace=context.workspace,
+        inspector=context.packet_inspector,
+        data_tools_service=context.data_tools_service,
+        network_tools_service=context.network_tools_service,
+        serial_service=context.serial_session_service,
+        mqtt_client_service=context.mqtt_client_service,
+        mqtt_server_service=context.mqtt_server_service,
+        tcp_client_service=context.tcp_client_service,
+        tcp_server_service=context.tcp_server_service,
+        udp_service=context.udp_service,
+        packet_replay_service=context.packet_replay_service,
+        register_monitor_service=context.register_monitor_service,
+        rule_engine_service=context.rule_engine_service,
+        auto_response_runtime_service=context.auto_response_runtime_service,
+        script_console_service=context.script_console_service,
+        timed_task_service=context.timed_task_service,
+        channel_bridge_runtime_service=context.channel_bridge_runtime_service,
+    )
+    compact_window.resize(1200, 760)
+    compact_window.show()
+    qapp.processEvents()
+    assert compact_window.module_context_surface.isVisible() is False
+    assert compact_window.context_toggle_button.text() == "展开"
     context.serial_session_service.shutdown()
     context.mqtt_client_service.shutdown()
     context.mqtt_server_service.shutdown()
@@ -146,4 +179,4 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     context.packet_replay_service.shutdown()
     context.timed_task_service.shutdown()
     context.channel_bridge_runtime_service.shutdown()
-    window.close()
+    compact_window.close()

@@ -90,6 +90,7 @@ def test_packet_console_filter_controls_drive_inspector_state(qapp: QApplication
     assert inspector.filter.category_query == ""
     assert inspector.filter.text_query == ""
     assert widget.entry_list.count() == 2
+    assert widget.filter_panel.isVisible() is False
     widget.close()
 
 
@@ -274,6 +275,10 @@ def test_packet_console_uses_tabbed_dock_friendly_layout(qapp: QApplication) -> 
         "元数据",
         "协议解析",
     ]
+    assert widget.filter_panel.isVisible() is False
+    widget.filter_toggle_button.click()
+    qapp.processEvents()
+    assert widget.filter_panel.isVisible() is True
     assert widget.inspector_splitter.count() == 2
     assert widget.composer_splitter.count() == 2
     assert widget.minimumSizeHint().height() < 500

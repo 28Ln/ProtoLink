@@ -24,7 +24,7 @@ QFrame#TitleBar {
 }
 
 QLabel#TitleBarTitle {
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 700;
     color: #f7fbff;
 }
@@ -37,8 +37,8 @@ QLabel#TitleBarContext {
     background: #18324a;
     color: #d6e7f7;
     border: 1px solid #2c5678;
-    border-radius: 12px;
-    padding: 5px 12px;
+    border-radius: 11px;
+    padding: 4px 10px;
     font-weight: 600;
 }
 
@@ -88,8 +88,8 @@ QListWidget {
 }
 
 QListWidget::item {
-    padding: 11px 12px;
-    margin: 4px 0;
+    padding: 9px 11px;
+    margin: 3px 0;
     border-radius: 10px;
 }
 
@@ -103,54 +103,84 @@ QListWidget::item:selected {
 }
 
 QLabel#HeroTitle {
-    font-size: 22px;
+    font-size: 19px;
     font-weight: 700;
     color: #f5f9fd;
 }
 
 QLabel#HeroSubtitle {
     color: #b7c6d6;
-    font-size: 12px;
+    font-size: 11px;
 }
 
 QLabel#ModuleTitle {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
     color: #f7fbff;
 }
 
 QLabel#SectionTitle {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
-    color: #f3c76a;
+    color: #dbe7f3;
 }
 
 QLabel#MetaLabel {
     color: #9fb0c1;
 }
 
+QFrame#WorkspaceCard {
+    background: #111a23;
+    border: 1px solid #263544;
+    border-radius: 12px;
+}
+
+QLabel#WorkspaceEyebrow {
+    color: #88a2bb;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+QLabel#WorkspaceTitle {
+    color: #f4f8fc;
+    font-size: 16px;
+    font-weight: 700;
+}
+
 QLabel#PathLabel {
     background: #111922;
     border: 1px solid #263544;
     border-radius: 10px;
-    padding: 10px 12px;
+    padding: 8px 10px;
     color: #dfe8f1;
 }
 
 QLabel#Badge {
-    background: #213a52;
+    background: #1b3246;
     color: #dbeaf7;
-    padding: 5px 12px;
-    border-radius: 12px;
-    border: 1px solid #32587b;
+    padding: 4px 10px;
+    border-radius: 11px;
+    border: 1px solid #2d536f;
     font-weight: 600;
+    font-size: 12px;
+}
+
+QLabel#SidebarPill {
+    background: #1b3246;
+    color: #dbeaf7;
+    padding: 3px 10px;
+    border-radius: 10px;
+    border: 1px solid #2d536f;
+    font-weight: 600;
+    font-size: 12px;
 }
 
 QDockWidget::title {
     background: #16212c;
     text-align: left;
     padding: 10px 12px;
-    color: #f3c76a;
+    color: #dbe7f3;
     font-weight: 700;
 }
 
