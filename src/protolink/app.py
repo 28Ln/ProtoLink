@@ -155,6 +155,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="列出当前工作区通过静态校验的 extension descriptor registry。",
     )
     parser.add_argument(
+        "--plan-extension-loading",
+        action="store_true",
+        help="基于 registry.json 与 extension descriptors 输出受控装载计划，不执行动态加载。",
+    )
+    parser.add_argument(
         "--export-release-bundle",
         metavar="NAME",
         help="导出发布包，包含最新运行日志、抓包、配置和预检报告。",
@@ -519,7 +524,9 @@ def build_release_preflight_report(context) -> dict[str, object]:
     smoke_result = run_ui_smoke_check()
     manifest_file = workspace_manifest_path(workspace.root)
     plugin_manifest_audit: PluginManifestAuditReport = context.plugin_manifest_audit
+    extension_registry_config = context.extension_registry_config
     extension_registry = context.extension_registry
+    extension_loading_plan = context.extension_loading_plan
     settings_invalid_backup_files = _invalid_config_backups(context.settings_layout.root, context.settings_layout.settings_file.name)
     workspace_invalid_backup_files = _invalid_config_backups(workspace.root, manifest_file.name)
     runtime_log_valid, runtime_log_line_count, runtime_log_parse_error = _inspect_workspace_log_jsonl(log_file)
@@ -590,6 +597,10 @@ def build_release_preflight_report(context) -> dict[str, object]:
         blocking_items.append("smoke_check_failed")
     if plugin_manifest_audit.invalid_manifest_count > 0:
         blocking_items.append("plugin_manifests_invalid")
+    if not extension_registry_config.valid:
+        blocking_items.append("extension_registry_config_invalid")
+    if extension_loading_plan.blocked_count > 0:
+        blocking_items.append("extension_loading_policy_blocked")
     return {
         "workspace": str(workspace.root),
         "manifest_file": str(manifest_file),
@@ -630,8 +641,11 @@ def build_release_preflight_report(context) -> dict[str, object]:
         "plugin_manifest_valid_count": plugin_manifest_audit.valid_manifest_count,
         "plugin_manifest_invalid_count": plugin_manifest_audit.invalid_manifest_count,
         "plugin_manifest_warning_count": plugin_manifest_audit.warning_count,
+        "extension_registry_config": extension_registry_config.to_dict(),
         "extension_registry": extension_registry.to_dict(),
         "extension_descriptor_count": extension_registry.descriptor_count,
+        "extension_loading_plan": extension_loading_plan.to_dict(),
+        "extension_loading_blocked_count": extension_loading_plan.blocked_count,
         "smoke_check": smoke_result,
         "blocking_items": blocking_items,
         "ready": not blocking_items,
@@ -867,6 +881,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.release_preflight,
                 args.audit_plugin_manifests,
                 args.list_extension_descriptors,
+                args.plan_extension_loading,
                 args.export_release_bundle,
                 args.generate_smoke_artifacts,
                 args.prepare_release,
@@ -933,6 +948,11 @@ def main(argv: list[str] | None = None) -> int:
                 f"{context.plugin_manifest_audit.invalid_manifest_count} invalid"
             )
             print(f"扩展描述：{context.extension_registry.descriptor_count}")
+            print(
+                "装载计划："
+                f"{context.extension_loading_plan.enabled_requested_count} requested / "
+                f"{context.extension_loading_plan.blocked_count} blocked"
+            )
             return int(CliExitCode.OK)
 
         if args.audit_plugin_manifests:
@@ -941,6 +961,20 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.list_extension_descriptors:
             print(json.dumps(context.extension_registry.to_dict(), ensure_ascii=False, indent=2))
+            return int(CliExitCode.OK)
+
+        if args.plan_extension_loading:
+            print(
+                json.dumps(
+                    {
+                        "registry_config": context.extension_registry_config.to_dict(),
+                        "descriptor_registry": context.extension_registry.to_dict(),
+                        "loading_plan": context.extension_loading_plan.to_dict(),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
             return int(CliExitCode.OK)
 
         if args.create_export_scaffold:

@@ -24,9 +24,13 @@ from protolink.application.timed_task_service import TimedTaskService
 from protolink.application.udp_service import UdpSessionService
 from protolink.core.extensions import (
     ExtensionDescriptorRegistry,
+    ExtensionLoadingPlanReport,
+    ExtensionRegistryConfig,
     WorkspaceExtensionAuditReport,
     audit_workspace_extensions,
     build_extension_descriptor_registry,
+    build_extension_loading_plan,
+    load_extension_registry_config,
 )
 from protolink.core.event_bus import EventBus
 from protolink.core.logging import (
@@ -101,8 +105,10 @@ class AppContext:
     timed_task_service: TimedTaskService
     channel_bridge_runtime_service: ChannelBridgeRuntimeService
     capture_replay_job_service: CaptureReplayJobService
+    extension_registry_config: ExtensionRegistryConfig
     extension_audit_report: WorkspaceExtensionAuditReport
     extension_registry: ExtensionDescriptorRegistry
+    extension_loading_plan: ExtensionLoadingPlanReport
 
 
 class PlaceholderTransportAdapter(TransportAdapter):
@@ -346,8 +352,10 @@ def bootstrap_app_context(
     )
     capture_replay_job_service = CaptureReplayJobService(packet_replay_service)
     timed_task_service = TimedTaskService(rule_engine_service, event_bus=event_bus)
+    extension_registry_config = load_extension_registry_config(workspace.plugins)
     extension_audit_report = audit_workspace_extensions(workspace.plugins, app_version=__version__)
     extension_registry = build_extension_descriptor_registry(extension_audit_report)
+    extension_loading_plan = build_extension_loading_plan(extension_registry, extension_registry_config)
 
     return AppContext(
         base_dir=base_dir,
@@ -379,6 +387,8 @@ def bootstrap_app_context(
         timed_task_service=timed_task_service,
         channel_bridge_runtime_service=channel_bridge_runtime_service,
         capture_replay_job_service=capture_replay_job_service,
+        extension_registry_config=extension_registry_config,
         extension_audit_report=extension_audit_report,
         extension_registry=extension_registry,
+        extension_loading_plan=extension_loading_plan,
     )

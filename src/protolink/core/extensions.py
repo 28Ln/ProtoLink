@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,6 +16,27 @@ from protolink.core.plugin_manifests import (
 
 EXTENSION_MANIFEST_FILE = PLUGIN_MANIFEST_FILE
 EXTENSION_MANIFEST_FORMAT_VERSION = PLUGIN_MANIFEST_FORMAT_VERSION
+EXTENSION_REGISTRY_FILE = "registry.json"
+EXTENSION_REGISTRY_FORMAT_VERSION = "protolink-extension-registry-v1"
+
+CLASS_A_CAPABILITIES = {
+    "protocol_parser",
+    "data_transform",
+    "import_export_codec",
+    "export_codec",
+    "payload_inspector",
+}
+CLASS_B_CAPABILITIES = {
+    "read_only_diagnostic",
+    "report_export",
+    "workspace_asset_analysis",
+}
+CLASS_C_CAPABILITIES = {
+    "transport_adapter",
+    "automation_hook",
+    "script_host_integration",
+    "ui_surface",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +87,30 @@ class ExtensionDescriptor:
 
 
 @dataclass(frozen=True, slots=True)
+class ExtensionRegistryConfig:
+    config_file: Path
+    exists: bool
+    valid: bool
+    enabled_plugin_ids: tuple[str, ...]
+    disabled_plugin_ids: tuple[str, ...]
+    allow_high_risk_plugins: bool
+    errors: tuple[str, ...]
+    warnings: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "config_file": str(self.config_file),
+            "exists": self.exists,
+            "valid": self.valid,
+            "enabled_plugin_ids": list(self.enabled_plugin_ids),
+            "disabled_plugin_ids": list(self.disabled_plugin_ids),
+            "allow_high_risk_plugins": self.allow_high_risk_plugins,
+            "errors": list(self.errors),
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class WorkspaceExtensionAuditEntry:
     plugin_dir: Path
     manifest_file: Path | None
@@ -106,6 +152,46 @@ class ExtensionDescriptorRegistry:
             "plugin_ids": list(self.plugin_ids()),
             "capabilities": list(self.capabilities()),
             "descriptors": [descriptor.to_dict() for descriptor in self.descriptors],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExtensionLoadingPlanEntry:
+    plugin_id: str
+    display_name: str
+    capability_class: str
+    desired_state: str
+    effective_state: str
+    reasons: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "plugin_id": self.plugin_id,
+            "display_name": self.display_name,
+            "capability_class": self.capability_class,
+            "desired_state": self.desired_state,
+            "effective_state": self.effective_state,
+            "reasons": list(self.reasons),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExtensionLoadingPlanReport:
+    ready: bool
+    descriptor_count: int
+    enabled_requested_count: int
+    blocked_count: int
+    review_required_count: int
+    entries: tuple[ExtensionLoadingPlanEntry, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "ready": self.ready,
+            "descriptor_count": self.descriptor_count,
+            "enabled_requested_count": self.enabled_requested_count,
+            "blocked_count": self.blocked_count,
+            "review_required_count": self.review_required_count,
+            "entries": [entry.to_dict() for entry in self.entries],
         }
 
 
@@ -158,6 +244,156 @@ def build_extension_descriptor_registry(
     return ExtensionDescriptorRegistry(descriptors=descriptors)
 
 
+def load_extension_registry_config(plugin_root: Path) -> ExtensionRegistryConfig:
+    config_file = plugin_root / EXTENSION_REGISTRY_FILE
+    if not config_file.exists():
+        return ExtensionRegistryConfig(
+            config_file=config_file,
+            exists=False,
+            valid=True,
+            enabled_plugin_ids=(),
+            disabled_plugin_ids=(),
+            allow_high_risk_plugins=False,
+            errors=(),
+            warnings=(),
+        )
+
+    errors: list[str] = []
+    warnings: list[str] = []
+    try:
+        payload = json.loads(config_file.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("extension registry config must contain a JSON object")
+    except (OSError, ValueError, json.JSONDecodeError, TypeError) as exc:
+        return ExtensionRegistryConfig(
+            config_file=config_file,
+            exists=True,
+            valid=False,
+            enabled_plugin_ids=(),
+            disabled_plugin_ids=(),
+            allow_high_risk_plugins=False,
+            errors=(f"{type(exc).__name__}: {exc}",),
+            warnings=(),
+        )
+
+    format_version = payload.get("format_version")
+    if format_version != EXTENSION_REGISTRY_FORMAT_VERSION:
+        errors.append(
+            f"'format_version' must be '{EXTENSION_REGISTRY_FORMAT_VERSION}', got '{format_version}'."
+        )
+
+    enabled_plugin_ids = _read_plugin_id_list(payload.get("enabled_plugin_ids"), "enabled_plugin_ids", errors)
+    disabled_plugin_ids = _read_plugin_id_list(payload.get("disabled_plugin_ids"), "disabled_plugin_ids", errors)
+    overlap = sorted(set(enabled_plugin_ids) & set(disabled_plugin_ids))
+    if overlap:
+        errors.append(
+            "enabled_plugin_ids and disabled_plugin_ids must not overlap: " + ", ".join(overlap)
+        )
+
+    allow_high_risk_plugins = payload.get("allow_high_risk_plugins", False)
+    if not isinstance(allow_high_risk_plugins, bool):
+        errors.append("'allow_high_risk_plugins' must be a boolean value.")
+        allow_high_risk_plugins = False
+
+    return ExtensionRegistryConfig(
+        config_file=config_file,
+        exists=True,
+        valid=not errors,
+        enabled_plugin_ids=enabled_plugin_ids,
+        disabled_plugin_ids=disabled_plugin_ids,
+        allow_high_risk_plugins=allow_high_risk_plugins,
+        errors=tuple(errors),
+        warnings=tuple(warnings),
+    )
+
+
+def build_extension_loading_plan(
+    registry: ExtensionDescriptorRegistry,
+    config: ExtensionRegistryConfig,
+) -> ExtensionLoadingPlanReport:
+    entries: list[ExtensionLoadingPlanEntry] = []
+    blocked_count = 0
+    review_required_count = 0
+    enabled_requested_count = len(config.enabled_plugin_ids)
+
+    known_plugin_ids = set(registry.plugin_ids())
+    for plugin_id in config.enabled_plugin_ids:
+        if plugin_id not in known_plugin_ids:
+            blocked_count += 1
+            entries.append(
+                ExtensionLoadingPlanEntry(
+                    plugin_id=plugin_id,
+                    display_name=plugin_id,
+                    capability_class="unknown",
+                    desired_state="enabled",
+                    effective_state="blocked_unknown_plugin",
+                    reasons=("registry.json enabled_plugin_ids includes an unknown plugin_id.",),
+                )
+            )
+
+    for descriptor in registry.descriptors:
+        capability_class = _capability_class(descriptor.capabilities)
+        desired_state = (
+            "disabled"
+            if descriptor.plugin_id in config.disabled_plugin_ids
+            else "enabled"
+            if descriptor.plugin_id in config.enabled_plugin_ids
+            else "described_only"
+        )
+        effective_state = "described_only"
+        reasons: list[str] = []
+
+        if desired_state == "disabled":
+            effective_state = "disabled"
+            reasons.append("plugin is explicitly listed in disabled_plugin_ids.")
+        elif desired_state == "enabled":
+            if not config.valid:
+                effective_state = "blocked_registry_invalid"
+                reasons.append("registry.json is invalid.")
+                blocked_count += 1
+            elif capability_class == "class_a":
+                effective_state = "eligible_for_loading"
+                reasons.append("Class A capability set can enter controlled loading next.")
+            elif capability_class == "class_b":
+                effective_state = "review_required"
+                reasons.append("Class B capability set requires explicit review before loading.")
+                review_required_count += 1
+            elif capability_class == "class_c":
+                if config.allow_high_risk_plugins:
+                    effective_state = "high_risk_enabled"
+                    reasons.append("High-risk plugin is enabled only because allow_high_risk_plugins=true.")
+                else:
+                    effective_state = "blocked_high_risk"
+                    reasons.append("Class C capability set is blocked unless allow_high_risk_plugins=true.")
+                    blocked_count += 1
+            else:
+                effective_state = "blocked_unsupported_capability"
+                reasons.append("Capabilities are not mapped to a supported extension class.")
+                blocked_count += 1
+        else:
+            reasons.append("Plugin is described and validated, but not enabled in registry.json.")
+
+        entries.append(
+            ExtensionLoadingPlanEntry(
+                plugin_id=descriptor.plugin_id,
+                display_name=descriptor.display_name,
+                capability_class=capability_class,
+                desired_state=desired_state,
+                effective_state=effective_state,
+                reasons=tuple(reasons),
+            )
+        )
+
+    return ExtensionLoadingPlanReport(
+        ready=blocked_count == 0 and config.valid,
+        descriptor_count=registry.descriptor_count,
+        enabled_requested_count=enabled_requested_count,
+        blocked_count=blocked_count,
+        review_required_count=review_required_count,
+        entries=tuple(entries),
+    )
+
+
 def serialize_extension_audit_report(report: WorkspaceExtensionAuditReport) -> dict[str, object]:
     return {
         "plugin_root": str(report.plugin_root),
@@ -199,6 +435,34 @@ def serialize_extension_audit_report(report: WorkspaceExtensionAuditReport) -> d
             for entry in report.entries
         ],
     }
+
+
+def _read_plugin_id_list(raw_value: object, field_name: str, errors: list[str]) -> tuple[str, ...]:
+    if raw_value is None:
+        return ()
+    if not isinstance(raw_value, list):
+        errors.append(f"'{field_name}' must be a list of plugin ids.")
+        return ()
+    normalized: list[str] = []
+    for item in raw_value:
+        if not isinstance(item, str) or not item.strip():
+            errors.append(f"'{field_name}' must contain non-empty plugin ids.")
+            return ()
+        value = item.strip()
+        normalized.append(value)
+    return tuple(dict.fromkeys(normalized))
+
+
+def _capability_class(capabilities: tuple[str, ...]) -> str:
+    if not capabilities:
+        return "unsupported"
+    if any(capability in CLASS_C_CAPABILITIES for capability in capabilities):
+        return "class_c"
+    if any(capability in CLASS_B_CAPABILITIES for capability in capabilities):
+        return "class_b"
+    if all(capability in CLASS_A_CAPABILITIES for capability in capabilities):
+        return "class_a"
+    return "unsupported"
 
 
 def _convert_entry(entry: PluginManifestAuditEntry) -> WorkspaceExtensionAuditEntry:

@@ -50,6 +50,6 @@ Last updated: 2026-04-15
 - Trigger: 新增协议、插件或外部扩展需求进入主线
 - Impact: 扩展实现分叉，维护成本上升
 - Current control: 已具备正式 `EXTENSION_CONTRACT` 文档、workspace/plugins manifest discovery、静态校验、descriptor listing 与 release-preflight 阻断
-- Evidence: 当前仅做到 manifest discovery / validation / audit / descriptor listing；尚未进入受控运行时装载与 SDK 化阶段
+- Evidence: 当前仅做到 manifest discovery / validation / audit / descriptor listing / loading plan；尚未进入受控运行时装载与 SDK 化阶段
 - Next action: 在 `PL-015` 中推进 registry / descriptor / loading boundary / enforcement
 - Residual risk: Medium

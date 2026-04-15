@@ -2,7 +2,13 @@ import json
 from pathlib import Path
 
 from protolink import __version__
-from protolink.core.extensions import build_extension_descriptor_registry
+from protolink.core.extensions import (
+    EXTENSION_REGISTRY_FILE,
+    EXTENSION_REGISTRY_FORMAT_VERSION,
+    build_extension_descriptor_registry,
+    build_extension_loading_plan,
+    load_extension_registry_config,
+)
 from protolink.core.plugin_manifests import (
     PLUGIN_MANIFEST_FILE,
     PLUGIN_MANIFEST_FORMAT_VERSION,
@@ -118,3 +124,55 @@ def test_audit_workspace_plugin_manifests_rejects_incompatible_app_version(tmp_p
     assert report.invalid_manifest_count == 1
     assert report.blocking_items == ("plugin_manifest_validation_failed",)
     assert "Current app version" in report.entries[0].errors[-1]
+
+
+def test_load_extension_registry_config_reads_enabled_plugins(tmp_path: Path) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    config_file = workspace.plugins / EXTENSION_REGISTRY_FILE
+    config_file.write_text(
+        json.dumps(
+            {
+                "format_version": EXTENSION_REGISTRY_FORMAT_VERSION,
+                "enabled_plugin_ids": ["bench-plugin"],
+                "disabled_plugin_ids": [],
+                "allow_high_risk_plugins": False,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_extension_registry_config(workspace.plugins)
+
+    assert config.valid is True
+    assert config.enabled_plugin_ids == ("bench-plugin",)
+    assert config.disabled_plugin_ids == ()
+
+
+def test_build_extension_loading_plan_blocks_unknown_enabled_plugin(tmp_path: Path) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    plugin_dir = workspace.plugins / "bench-plugin"
+    plugin_dir.mkdir()
+    _write_plugin_manifest(plugin_dir)
+    report = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
+    registry = build_extension_descriptor_registry(report)
+    config_file = workspace.plugins / EXTENSION_REGISTRY_FILE
+    config_file.write_text(
+        json.dumps(
+            {
+                "format_version": EXTENSION_REGISTRY_FORMAT_VERSION,
+                "enabled_plugin_ids": ["missing-plugin"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    config = load_extension_registry_config(workspace.plugins)
+
+    loading_plan = build_extension_loading_plan(registry, config)
+
+    assert loading_plan.ready is False
+    assert loading_plan.blocked_count == 1
+    assert loading_plan.entries[0].effective_state == "blocked_unknown_plugin"

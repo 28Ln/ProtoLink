@@ -475,6 +475,33 @@ def test_main_lists_extension_descriptors(monkeypatch, tmp_path, capsys) -> None
     assert payload["descriptors"][0]["entrypoint"] == "bench_plugin.plugin:register"
 
 
+def test_main_plans_extension_loading(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_plugin_manifest(workspace)
+    registry_file = workspace.plugins / "registry.json"
+    registry_file.write_text(
+        json.dumps(
+            {
+                "format_version": "protolink-extension-registry-v1",
+                "enabled_plugin_ids": ["bench-plugin"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["--plan-extension-loading"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert payload["registry_config"]["enabled_plugin_ids"] == ["bench-plugin"]
+    assert payload["loading_plan"]["enabled_requested_count"] == 1
+    assert payload["loading_plan"]["entries"][0]["effective_state"] == "eligible_for_loading"
+
+
 def test_main_release_preflight_reports_missing_capture_artifacts(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
@@ -533,16 +560,81 @@ def test_main_release_preflight_rejects_invalid_plugin_manifest(monkeypatch, tmp
     assert payload["ready"] is False
 
 
+def test_main_release_preflight_rejects_invalid_extension_registry_config(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    _write_valid_plugin_manifest(workspace)
+    (workspace.plugins / "registry.json").write_text('{"format_version":"bad"}', encoding="utf-8")
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "extension_registry_config_invalid" in payload["blocking_items"]
+    assert payload["extension_registry_config"]["valid"] is False
+    assert payload["ready"] is False
+
+
+def test_main_release_preflight_rejects_blocked_extension_loading_policy(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    _write_valid_plugin_manifest(
+        workspace,
+        capabilities=["ui_surface"],
+    )
+    (workspace.plugins / "registry.json").write_text(
+        json.dumps(
+            {
+                "format_version": "protolink-extension-registry-v1",
+                "enabled_plugin_ids": ["bench-plugin"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "extension_loading_policy_blocked" in payload["blocking_items"]
+    assert payload["extension_loading_blocked_count"] == 1
+    assert payload["ready"] is False
+
+
 def test_main_headless_summary_reports_extension_descriptor_count(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
     _write_valid_plugin_manifest(workspace)
+    (workspace.plugins / "registry.json").write_text(
+        json.dumps(
+            {
+                "format_version": "protolink-extension-registry-v1",
+                "enabled_plugin_ids": ["bench-plugin"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     exit_code = main(["--headless-summary"])
     captured = capsys.readouterr()
 
     assert exit_code == int(CliExitCode.OK)
     assert "扩展描述：1" in captured.out
+    assert "装载计划：1 requested / 0 blocked" in captured.out
 
 
 def test_main_release_preflight_rejects_junk_profile_and_capture_artifacts(monkeypatch, tmp_path, capsys) -> None:
