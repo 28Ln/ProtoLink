@@ -28,6 +28,11 @@ from protolink.core.packaging import (
     PORTABLE_MANIFEST_FILE,
     PORTABLE_PACKAGE_FORMAT_VERSION,
 )
+from protolink.core.plugin_manifests import (
+    PLUGIN_MANIFEST_FILE,
+    PLUGIN_MANIFEST_FORMAT_VERSION,
+    SUPPORTED_EXTENSION_API_VERSION,
+)
 from protolink.core.workspace import WORKSPACE_MANIFEST_FILE, WORKSPACE_FORMAT_VERSION, ensure_workspace_layout
 from protolink.transports.serial import SerialPortSummary
 
@@ -171,6 +176,25 @@ def _write_valid_capture(workspace, *, name: str = "replay.json") -> Path:
         encoding="utf-8",
     )
     return capture_file
+
+
+def _write_valid_plugin_manifest(workspace, *, plugin_dir_name: str = "bench-plugin", **overrides: object) -> Path:
+    plugin_dir = workspace.plugins / plugin_dir_name
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "format_version": PLUGIN_MANIFEST_FORMAT_VERSION,
+        "plugin_id": plugin_dir.name,
+        "display_name": "Bench Plugin",
+        "plugin_version": "1.2.3",
+        "extension_api_version": SUPPORTED_EXTENSION_API_VERSION,
+        "capabilities": ["protocol_parser"],
+        "entrypoint": "bench_plugin.plugin:register",
+        "min_app_version": "0.2.0",
+    }
+    manifest.update(overrides)
+    manifest_file = plugin_dir / PLUGIN_MANIFEST_FILE
+    manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return manifest_file
 
 
 def _configure_fake_bundled_runtime(monkeypatch, tmp_path: Path) -> None:
@@ -412,8 +436,27 @@ def test_main_runs_release_preflight(monkeypatch, tmp_path, capsys) -> None:
     assert payload["log_file_exists"] is True
     assert payload["profile_file_count"] >= 1
     assert payload["smoke_check"] == "smoke-check-ok"
+    assert payload["plugin_manifest_valid_count"] == 0
+    assert payload["plugin_manifest_invalid_count"] == 0
     assert payload["blocking_items"] == []
     assert payload["ready"] is True
+
+
+def test_main_audits_plugin_manifests(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_plugin_manifest(workspace)
+
+    exit_code = main(["--audit-plugin-manifests"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert payload["plugin_directory_count"] == 1
+    assert payload["valid_manifest_count"] == 1
+    assert payload["invalid_manifest_count"] == 0
+    assert payload["ready"] is True
+    assert payload["entries"][0]["plugin_id"] == "bench-plugin"
 
 
 def test_main_release_preflight_reports_missing_capture_artifacts(monkeypatch, tmp_path, capsys) -> None:
@@ -448,6 +491,29 @@ def test_main_release_preflight_rejects_invalid_runtime_log(monkeypatch, tmp_pat
     assert exit_code == int(CliExitCode.OK)
     assert "runtime_log_invalid_jsonl" in payload["blocking_items"]
     assert payload["runtime_log_valid"] is False
+    assert payload["ready"] is False
+
+
+def test_main_release_preflight_rejects_invalid_plugin_manifest(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    invalid_plugin_dir = workspace.plugins / "broken-plugin"
+    invalid_plugin_dir.mkdir()
+    (invalid_plugin_dir / PLUGIN_MANIFEST_FILE).write_text('{"plugin_id":"broken-plugin"}', encoding="utf-8")
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "plugin_manifests_invalid" in payload["blocking_items"]
+    assert payload["plugin_manifest_invalid_count"] == 1
+    assert payload["plugin_manifest_audit"]["invalid_manifest_count"] == 1
+    assert payload["plugin_manifest_audit"]["entries"][0]["plugin_id"] == "broken-plugin"
     assert payload["ready"] is False
 
 

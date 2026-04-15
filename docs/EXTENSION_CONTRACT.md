@@ -83,18 +83,30 @@ ProtoLink 当前已经具备以下事实基础：
 
 ## 5. Plugin manifest requirements
 
-任何未来插件都必须有显式 manifest，最少字段建议为：
+任何未来插件都必须有显式 manifest。当前仓库已经落地的静态校验口径为：
 
+- 路径：`workspace/plugins/<plugin-id>/manifest.json`
+- `format_version`：`protolink-plugin-manifest-v1`
 - `plugin_id`
 - `display_name`
 - `plugin_version`
-- `api_version`
+- `extension_api_version`
 - `capabilities`
 - `entrypoint`
-- `min_protolink_version`
-- `max_protolink_version`
+- `min_app_version`
+- `max_app_version`（可选）
 
-manifest 必须先通过静态校验，才允许进入运行时发现流程。
+兼容说明：
+- 当前静态校验暂时接受 legacy 字段 `api_version`、`min_protolink_version`、`max_protolink_version`
+- legacy 字段不会触发阻断，但会进入 warning，后续应统一迁移到 canonical 字段
+
+当前静态校验还会额外检查：
+- `plugin_id` 必须与目录名一致
+- 版本字符串必须为数字点分格式
+- 当前 app version 必须满足 `min_app_version` / `max_app_version`
+- 同一 workspace 内 `plugin_id` 不得重复
+
+manifest 必须先通过静态校验，才允许进入后续发现/装载流程。当前版本只做到 discovery / validation / audit / preflight gate，不做动态加载。
 
 ## 6. Lifecycle
 
@@ -193,9 +205,10 @@ manifest 必须先通过静态校验，才允许进入运行时发现流程。
 
 ## 13. Immediate engineering consequence
 
-在 `PL-015` 之前，不应直接开始实现任意运行时插件加载。
+在 `PL-015` 完成前，不应直接开始实现任意运行时插件加载。
 
 正确顺序是：
 1. 先固定扩展契约
-2. 再实现最小能力范围（优先 Class A）
-3. 再接入验证与交付链
+2. 已落地：manifest discovery / validation / audit / release-preflight gate
+3. 再实现最小能力范围（优先 Class A）
+4. 再接入运行时装载、验证与交付链

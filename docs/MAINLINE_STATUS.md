@@ -27,7 +27,7 @@ Last updated: 2026-04-15
 
 当前已经具备：
 
-- `315 passed`
+- `324 passed`
 - `release-staging passed`
 - `dist fresh-install passed`
 - `soak ready gate passed`
@@ -61,4 +61,3 @@ Last updated: 2026-04-15
 
 - `PL-015` — Extension Contract and Plugin Boundary
 - `PL-016` — Hardware-in-the-Loop and Long-Run Validation
-

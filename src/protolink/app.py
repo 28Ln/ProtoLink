@@ -68,6 +68,7 @@ from protolink.core.packet_replay import (
     load_packet_replay_plan,
     save_packet_replay_plan,
 )
+from protolink.core.plugin_manifests import PluginManifestAuditReport
 from protolink.core.settings import resolve_application_base_dir
 from protolink.core.workspace import migrate_workspace, workspace_manifest_path
 from protolink.presentation import APPLICATION_SUBTITLE, APPLICATION_TITLE, HEADLESS_GOAL
@@ -142,6 +143,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--release-preflight",
         action="store_true",
         help="针对当前工作区执行发布预检，并输出 JSON 报告。",
+    )
+    parser.add_argument(
+        "--audit-plugin-manifests",
+        action="store_true",
+        help="审计当前工作区 workspace/plugins 下的插件 manifest，并输出静态校验报告。",
     )
     parser.add_argument(
         "--export-release-bundle",
@@ -507,6 +513,7 @@ def build_release_preflight_report(context) -> dict[str, object]:
     selected_capture_file = _latest_artifact(valid_capture_candidates)
     smoke_result = run_ui_smoke_check()
     manifest_file = workspace_manifest_path(workspace.root)
+    plugin_manifest_audit: PluginManifestAuditReport = context.plugin_manifest_audit
     settings_invalid_backup_files = _invalid_config_backups(context.settings_layout.root, context.settings_layout.settings_file.name)
     workspace_invalid_backup_files = _invalid_config_backups(workspace.root, manifest_file.name)
     runtime_log_valid, runtime_log_line_count, runtime_log_parse_error = _inspect_workspace_log_jsonl(log_file)
@@ -575,6 +582,8 @@ def build_release_preflight_report(context) -> dict[str, object]:
         blocking_items.append("service_close_failures_present")
     if smoke_result != "smoke-check-ok":
         blocking_items.append("smoke_check_failed")
+    if plugin_manifest_audit.invalid_manifest_count > 0:
+        blocking_items.append("plugin_manifests_invalid")
     return {
         "workspace": str(workspace.root),
         "manifest_file": str(manifest_file),
@@ -611,6 +620,10 @@ def build_release_preflight_report(context) -> dict[str, object]:
         "runtime_failure_evidence_count": len(runtime_failure_evidence_entries),
         "runtime_failure_evidence_entries": runtime_failure_evidence_entries,
         "runtime_failure_evidence_error": runtime_failure_evidence_error,
+        "plugin_manifest_audit": plugin_manifest_audit.to_dict(),
+        "plugin_manifest_valid_count": plugin_manifest_audit.valid_manifest_count,
+        "plugin_manifest_invalid_count": plugin_manifest_audit.invalid_manifest_count,
+        "plugin_manifest_warning_count": plugin_manifest_audit.warning_count,
         "smoke_check": smoke_result,
         "blocking_items": blocking_items,
         "ready": not blocking_items,
@@ -844,6 +857,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.smoke_check,
                 args.migrate_workspace,
                 args.release_preflight,
+                args.audit_plugin_manifests,
                 args.export_release_bundle,
                 args.generate_smoke_artifacts,
                 args.prepare_release,
@@ -904,6 +918,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"已落地：{counts.get(ModuleStatus.BOOTSTRAPPED.value, 0)}")
             print(f"下一阶段：{counts.get(ModuleStatus.NEXT.value, 0)}")
             print(f"规划中：{counts.get(ModuleStatus.PLANNED.value, 0)}")
+            print(
+                "插件清单："
+                f"{context.plugin_manifest_audit.valid_manifest_count} valid / "
+                f"{context.plugin_manifest_audit.invalid_manifest_count} invalid"
+            )
+            return int(CliExitCode.OK)
+
+        if args.audit_plugin_manifests:
+            print(json.dumps(context.plugin_manifest_audit.to_dict(), ensure_ascii=False, indent=2))
             return int(CliExitCode.OK)
 
         if args.create_export_scaffold:

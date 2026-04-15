@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from protolink import __version__
 from protolink.application.auto_response_runtime_service import AutoResponseRuntimeService
 from protolink.application.capture_replay_job_service import CaptureReplayJobService
 from protolink.application.channel_bridge_runtime_service import ChannelBridgeRuntimeService
@@ -21,6 +22,7 @@ from protolink.application.tcp_client_service import TcpClientSessionService
 from protolink.application.tcp_server_service import TcpServerSessionService
 from protolink.application.timed_task_service import TimedTaskService
 from protolink.application.udp_service import UdpSessionService
+from protolink.core.extensions import WorkspaceExtensionAuditReport, audit_workspace_extensions
 from protolink.core.event_bus import EventBus
 from protolink.core.logging import (
     InMemoryLogStore,
@@ -32,6 +34,7 @@ from protolink.core.logging import (
     default_workspace_log_path,
 )
 from protolink.core.packet_inspector import PacketInspectorState
+from protolink.core.plugin_manifests import PluginManifestAuditReport, audit_workspace_plugin_manifests
 from protolink.core.settings import (
     AppSettings,
     SettingsLayout,
@@ -74,6 +77,7 @@ class AppContext:
     runtime_failure_evidence_recorder: RuntimeFailureEvidenceRecorder
     workspace_log_writer: WorkspaceJsonlLogWriter
     packet_inspector: PacketInspectorState
+    plugin_manifest_audit: PluginManifestAuditReport
     data_tools_service: DataToolsService
     network_tools_service: NetworkToolsService
     serial_session_service: SerialSessionService
@@ -92,6 +96,7 @@ class AppContext:
     timed_task_service: TimedTaskService
     channel_bridge_runtime_service: ChannelBridgeRuntimeService
     capture_replay_job_service: CaptureReplayJobService
+    extension_audit_report: WorkspaceExtensionAuditReport
 
 
 class PlaceholderTransportAdapter(TransportAdapter):
@@ -246,6 +251,7 @@ def bootstrap_app_context(
         failure_evidence_recorder=runtime_failure_evidence_recorder,
     )
     packet_inspector = PacketInspectorState()
+    plugin_manifest_audit = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
     data_tools_service = DataToolsService()
     network_tools_service = NetworkToolsService()
     transport_registry = build_transport_registry()
@@ -334,6 +340,7 @@ def bootstrap_app_context(
     )
     capture_replay_job_service = CaptureReplayJobService(packet_replay_service)
     timed_task_service = TimedTaskService(rule_engine_service, event_bus=event_bus)
+    extension_audit_report = audit_workspace_extensions(workspace.plugins, app_version=__version__)
 
     return AppContext(
         base_dir=base_dir,
@@ -346,6 +353,7 @@ def bootstrap_app_context(
         runtime_failure_evidence_recorder=runtime_failure_evidence_recorder,
         workspace_log_writer=workspace_log_writer,
         packet_inspector=packet_inspector,
+        plugin_manifest_audit=plugin_manifest_audit,
         data_tools_service=data_tools_service,
         network_tools_service=network_tools_service,
         serial_session_service=serial_session_service,
@@ -364,4 +372,5 @@ def bootstrap_app_context(
         timed_task_service=timed_task_service,
         channel_bridge_runtime_service=channel_bridge_runtime_service,
         capture_replay_job_service=capture_replay_job_service,
+        extension_audit_report=extension_audit_report,
     )
