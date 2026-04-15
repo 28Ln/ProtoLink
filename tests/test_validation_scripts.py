@@ -280,3 +280,51 @@ def test_execute_soak_validation_raises_when_all_ready_is_required(tmp_path: Pat
 
     with pytest.raises(ns['VerificationError'], match='failing cycle'):
         execute(workspace=tmp_path / 'workspace', cycles=1, sleep_ms=0, require_all_ready=True)
+
+
+def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Path) -> None:
+    ns = _load_script('build_release_deliverables.py')
+    workspace = tmp_path / 'workspace'
+    target_dir = tmp_path / 'deliverables'
+    build_root = tmp_path / 'build-root'
+    build_root.mkdir()
+    release_archive = build_root / 'release.zip'
+    portable_archive = build_root / 'portable.zip'
+    distribution_archive = build_root / 'distribution.zip'
+    installer_archive = build_root / 'installer.zip'
+    for file in (release_archive, portable_archive, distribution_archive, installer_archive):
+        file.write_text(file.stem, encoding='utf-8')
+
+    def fake_run_json(command, *, cwd=None):
+        command_text = ' '.join(command)
+        if '--build-installer-package' in command_text:
+            return {
+                'release_archive_file': str(release_archive),
+                'portable_archive_file': str(portable_archive),
+                'distribution_archive_file': str(distribution_archive),
+                'installer_archive_file': str(installer_archive),
+            }
+        if '--verify-portable-package' in command_text:
+            return {'checksum_matches': True}
+        if '--verify-distribution-package' in command_text:
+            return {'checksum_matches': True}
+        if '--verify-installer-package' in command_text:
+            return {'checksum_matches': True}
+        raise AssertionError(command)
+
+    execute = ns['execute_release_deliverables']
+    execute.__globals__['_run_json'] = fake_run_json
+    execute.__globals__['_project_version'] = lambda: '0.2.5'
+    execute.__globals__['_run_install_smoke'] = lambda installer_archive, target_dir: {'launch_script': 'Launch-ProtoLink.ps1'}
+
+    result = execute(
+        name='release-0.2.5',
+        workspace=workspace,
+        target_dir=target_dir,
+        skip_install_smoke=False,
+    )
+
+    assert Path(result['copied_artifacts']['installer_archive']).exists()
+    assert Path(result['copied_artifacts']['portable_archive']).exists()
+    assert result['verification']['installer']['checksum_matches'] is True
+    assert result['install_smoke']['launch_script'] == 'Launch-ProtoLink.ps1'

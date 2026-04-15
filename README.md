@@ -56,6 +56,7 @@ uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --exp
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local
+uv run python scripts/build_release_deliverables.py --name release-0.2.5 --target-dir dist\\deliverables
 python scripts/verify_dist_install.py --artifact-version 0.2.5
 uv run protolink --build-native-installer-scaffold proto-stage
 uv run protolink --verify-native-installer-scaffold <scaffold-dir>

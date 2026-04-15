@@ -1,0 +1,178 @@
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_TARGET_DIR = ROOT / "dist" / "deliverables"
+VERSION_PATTERN = re.compile(r'^version\s*=\s*"([^"]+)"', re.MULTILINE)
+
+
+class DeliveryBuildError(RuntimeError):
+    pass
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="构建 ProtoLink 可交付归档并完成基础校验。")
+    parser.add_argument("--name", default="release-0.2.5", help="构建名后缀。默认 release-0.2.5。")
+    parser.add_argument("--workspace", type=Path, help="可选，指定构建 workspace。默认创建临时 workspace。")
+    parser.add_argument("--target-dir", type=Path, default=DEFAULT_TARGET_DIR, help="产物输出目录。默认 dist/deliverables。")
+    parser.add_argument("--skip-install-smoke", action="store_true", help="跳过安装链路自检。")
+    parser.add_argument("--keep-workspace", action="store_true", help="保留自动创建的临时 workspace。")
+    return parser
+
+
+def _run(command: list[str], *, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False)
+
+
+def _run_json(command: list[str], *, cwd: Path = ROOT) -> dict[str, object]:
+    completed = _run(command, cwd=cwd)
+    if completed.returncode != 0:
+        raise DeliveryBuildError(
+            "Command failed:\n"
+            f"{' '.join(command)}\n\n"
+            f"stdout:\n{completed.stdout}\n\n"
+            f"stderr:\n{completed.stderr}"
+        )
+    try:
+        return json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise DeliveryBuildError(
+            "Command did not return JSON:\n"
+            f"{' '.join(command)}\n\nstdout:\n{completed.stdout}"
+        ) from exc
+
+
+def _uv(*args: str) -> list[str]:
+    return ["uv", "run", *args]
+
+
+def _project_version() -> str:
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    match = VERSION_PATTERN.search(text)
+    if match is None:
+        raise DeliveryBuildError("Could not determine project version from pyproject.toml.")
+    return match.group(1)
+
+
+def _copy_artifact(source: Path, destination: Path) -> str:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    return str(destination)
+
+
+def _run_install_smoke(installer_archive: Path, *, target_dir: Path) -> dict[str, object]:
+    staging_dir = target_dir / "_staging"
+    install_dir = target_dir / "_installed"
+    if staging_dir.exists():
+        shutil.rmtree(staging_dir, ignore_errors=True)
+    if install_dir.exists():
+        shutil.rmtree(install_dir, ignore_errors=True)
+
+    install_payload = _run_json(
+        _uv("protolink", "--install-installer-package", str(installer_archive), str(staging_dir), str(install_dir))
+    )
+    launch_script = install_dir / "Launch-ProtoLink.ps1"
+    command = [
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; & '{launch_script}' --headless-summary",
+    ]
+    completed = _run(command, cwd=ROOT)
+    if completed.returncode != 0:
+        raise DeliveryBuildError(
+            "Installed launch smoke failed:\n"
+            f"{' '.join(command)}\n\n"
+            f"stdout:\n{completed.stdout}\n\n"
+            f"stderr:\n{completed.stderr}"
+        )
+    return {
+        "install_payload": install_payload,
+        "launch_script": str(launch_script),
+        "headless_summary": completed.stdout.strip().splitlines(),
+    }
+
+
+def execute_release_deliverables(
+    *,
+    name: str,
+    workspace: Path | None = None,
+    target_dir: Path = DEFAULT_TARGET_DIR,
+    skip_install_smoke: bool = False,
+) -> dict[str, object]:
+    temp_root: Path | None = None
+    if workspace is None:
+        temp_root = Path(tempfile.mkdtemp(prefix="protolink-release-deliverables-"))
+        workspace = temp_root / "workspace"
+    workspace = workspace.resolve()
+    target_dir = target_dir.resolve()
+    version = _project_version()
+
+    build_payload = _run_json(_uv("protolink", "--workspace", str(workspace), "--build-installer-package", name))
+
+    release_archive = target_dir / f"protolink-{version}-release-bundle.zip"
+    portable_archive = target_dir / f"protolink-{version}-portable-package.zip"
+    distribution_archive = target_dir / f"protolink-{version}-distribution-package.zip"
+    installer_archive = target_dir / f"protolink-{version}-installer-package.zip"
+
+    copied_artifacts = {
+        "release_archive": _copy_artifact(Path(str(build_payload["release_archive_file"])), release_archive),
+        "portable_archive": _copy_artifact(Path(str(build_payload["portable_archive_file"])), portable_archive),
+        "distribution_archive": _copy_artifact(Path(str(build_payload["distribution_archive_file"])), distribution_archive),
+        "installer_archive": _copy_artifact(Path(str(build_payload["installer_archive_file"])), installer_archive),
+    }
+
+    verification = {
+        "portable": _run_json(_uv("protolink", "--verify-portable-package", str(portable_archive))),
+        "distribution": _run_json(_uv("protolink", "--verify-distribution-package", str(distribution_archive))),
+        "installer": _run_json(_uv("protolink", "--verify-installer-package", str(installer_archive))),
+    }
+
+    install_smoke = None
+    if not skip_install_smoke:
+        install_smoke = _run_install_smoke(installer_archive, target_dir=target_dir)
+
+    return {
+        "version": version,
+        "workspace": str(workspace),
+        "temporary_root": str(temp_root) if temp_root is not None else None,
+        "copied_artifacts": copied_artifacts,
+        "verification": verification,
+        "install_smoke": install_smoke,
+    }
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    temp_root_for_cleanup: Path | None = None
+    workspace = args.workspace
+    if workspace is None and not args.keep_workspace:
+        temp_root_for_cleanup = Path(tempfile.mkdtemp(prefix="protolink-release-deliverables-main-"))
+        workspace = temp_root_for_cleanup / "workspace"
+    try:
+        result = execute_release_deliverables(
+            name=args.name,
+            workspace=workspace,
+            target_dir=args.target_dir,
+            skip_install_smoke=args.skip_install_smoke,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    finally:
+        if temp_root_for_cleanup is not None and not args.keep_workspace:
+            shutil.rmtree(temp_root_for_cleanup, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
