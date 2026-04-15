@@ -64,8 +64,8 @@ from protolink.ui.udp_panel import UdpPanel
 
 
 WINDOW_EDGE_MARGIN = 6
-CONTENT_SPLITTER_DETAIL_WIDTH = 220
-PACKET_DOCK_TARGET_HEIGHT = 140
+CONTENT_SPLITTER_DETAIL_WIDTH = 210
+PACKET_DOCK_TARGET_HEIGHT = 120
 
 
 class WindowTitleBar(QFrame):
@@ -250,7 +250,7 @@ class ProtoLinkMainWindow(QMainWindow):
 
         title = QLabel("快速导航")
         title.setObjectName("SectionTitle")
-        subtitle = QLabel("按业务链路切换模块，常用入口优先展示。")
+        subtitle = QLabel("按业务链路切换模块。")
         subtitle.setObjectName("MetaLabel")
         subtitle.setWordWrap(True)
 
@@ -270,7 +270,7 @@ class ProtoLinkMainWindow(QMainWindow):
         self.workspace_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.workspace_label.setToolTip(str(self.workspace.root))
 
-        self.workspace_meta_label = QLabel("日志、抓包与导出目录已准备，可通过悬停查看完整路径。")
+        self.workspace_meta_label = QLabel("日志与导出目录见悬停提示。")
         self.workspace_meta_label.setObjectName("MetaLabel")
         self.workspace_meta_label.setWordWrap(True)
         self.workspace_meta_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -321,7 +321,7 @@ class ProtoLinkMainWindow(QMainWindow):
 
         hero_title = QLabel(APPLICATION_TITLE)
         hero_title.setObjectName("HeroTitle")
-        hero_subtitle = QLabel("把连接、协议调试、报文分析与自动化协同集中在一个统一工作面中。")
+        hero_subtitle = QLabel("把连接、调试、报文分析与自动化操作集中在一个统一工作面中。")
         hero_subtitle.setObjectName("HeroSubtitle")
         hero_subtitle.setWordWrap(True)
 
@@ -335,15 +335,11 @@ class ProtoLinkMainWindow(QMainWindow):
         panel_surface.setObjectName("Panel")
         panel_layout = QVBoxLayout(panel_surface)
         panel_layout.setContentsMargins(14, 14, 14, 14)
-        panel_layout.setSpacing(8)
-
-        panel_title = QLabel("当前工作面")
-        panel_title.setObjectName("SectionTitle")
+        panel_layout.setSpacing(0)
 
         self.panel_stack = QStackedWidget()
         self.panel_stack.setObjectName("PanelStack")
 
-        panel_layout.addWidget(panel_title)
         panel_layout.addWidget(self.panel_stack, 1)
 
         context_surface = QFrame()
@@ -609,7 +605,7 @@ class ProtoLinkMainWindow(QMainWindow):
             QDockWidget.DockWidgetFeature.DockWidgetMovable
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
-        self.packet_console_dock.setMinimumHeight(140)
+        self.packet_console_dock.setMinimumHeight(120)
         self.packet_console_dock.setWidget(self.packet_console_scroll)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.packet_console_dock)
 
@@ -623,7 +619,7 @@ class ProtoLinkMainWindow(QMainWindow):
         self.content_splitter.setSizes([splitter_width - detail_width, detail_width])
         self.resizeDocks(
             [self.packet_console_dock],
-            [max(140, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.2)))],
+            [max(120, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.18)))],
             Qt.Orientation.Vertical,
         )
         if self.width() <= 1280 and self._module_context_visible:

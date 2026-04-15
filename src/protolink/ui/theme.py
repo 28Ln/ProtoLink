@@ -34,9 +34,9 @@ QLabel#TitleBarSubtitle {
 }
 
 QLabel#TitleBarContext {
-    background: #18324a;
-    color: #d6e7f7;
-    border: 1px solid #2c5678;
+    background: #152433;
+    color: #c9d7e5;
+    border: 1px solid #27435d;
     border-radius: 11px;
     padding: 4px 10px;
     font-weight: 600;
@@ -88,7 +88,7 @@ QListWidget {
 }
 
 QListWidget::item {
-    padding: 9px 11px;
+    padding: 8px 10px;
     margin: 3px 0;
     border-radius: 10px;
 }
@@ -179,7 +179,7 @@ QLabel#SidebarPill {
 QDockWidget::title {
     background: #16212c;
     text-align: left;
-    padding: 10px 12px;
+    padding: 8px 10px;
     color: #dbe7f3;
     font-weight: 700;
 }

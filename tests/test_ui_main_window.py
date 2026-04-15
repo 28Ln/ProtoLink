@@ -59,7 +59,7 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     assert "Windows 桌面" in labels
     assert "当前项目" in labels
     assert "快速导航" in labels
-    assert window.workspace_meta_label.text() == "日志、抓包与导出目录已准备，可通过悬停查看完整路径。"
+    assert window.workspace_meta_label.text() == "日志与导出目录见悬停提示。"
     assert "抓包：" in window.workspace_meta_label.toolTip()
     assert window.module_context_tabs.tabText(0) == "功能概览"
     assert window.module_context_tabs.tabText(1) == "使用清单"

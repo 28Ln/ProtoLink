@@ -63,7 +63,7 @@ class PacketConsoleWidget(QWidget):
 
     def _build_ui(self) -> None:
         self.setObjectName("PacketConsoleWidget")
-        self.setMinimumHeight(260)
+        self.setMinimumHeight(220)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         layout = QVBoxLayout(self)
@@ -132,11 +132,11 @@ class PacketConsoleWidget(QWidget):
         self.text_filter.setPlaceholderText("搜索消息或载荷…")
         self.text_filter.textChanged.connect(self._on_filters_changed)
 
-        self.clear_filters_button = QPushButton("清除筛选")
+        self.clear_filters_button = QPushButton("清空")
         self.clear_filters_button.clicked.connect(self._on_clear_filters)
         self.filter_toggle_button = QToolButton()
         self.filter_toggle_button.setObjectName("WindowButton")
-        self.filter_toggle_button.setText("显示筛选")
+        self.filter_toggle_button.setText("筛选")
         self.filter_toggle_button.setCheckable(True)
         self.filter_toggle_button.toggled.connect(self._set_filters_visible)
 
@@ -361,13 +361,16 @@ class PacketConsoleWidget(QWidget):
         self._sync_filter_controls(sessions)
 
         self.entry_summary.setText(
-            "条目: "
-            f"{len(self.inspector)}    "
-            f"可见: {len(rows)}    "
-            f"会话: {len(sessions)}    "
-            f"信息: {counts.get(LogLevel.INFO, 0)}    "
-            f"警告: {counts.get(LogLevel.WARNING, 0)}    "
-            f"错误: {counts.get(LogLevel.ERROR, 0)}"
+            " · ".join(
+                (
+                    f"{len(self.inspector)} 条",
+                    f"{len(rows)} 可见",
+                    f"{len(sessions)} 会话",
+                    f"{counts.get(LogLevel.INFO, 0)} 信息",
+                    f"{counts.get(LogLevel.WARNING, 0)} 警告",
+                    f"{counts.get(LogLevel.ERROR, 0)} 错误",
+                )
+            )
         )
 
         self.entry_list.blockSignals(True)
@@ -655,4 +658,4 @@ class PacketConsoleWidget(QWidget):
 
     def _set_filters_visible(self, visible: bool) -> None:
         self.filter_panel.setVisible(visible)
-        self.filter_toggle_button.setText("收起筛选" if visible else "显示筛选")
+        self.filter_toggle_button.setText("收起" if visible else "筛选")
