@@ -9,7 +9,7 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 ## 当前真实进展
 
 - 工程代码入口、工作区、日志、配置、打包链路已统一
-- 301 个 pytest 用例通过
+- 312 个 pytest 用例通过
 - targeted regression 全绿
 - release-staging 验证全链通过
 - wheel / sdist fresh-install 验证通过
@@ -21,8 +21,8 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 
 ## 当前验证快照
 
-- `uv run python scripts/run_full_test_suite.py` -> `301 passed`
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 301` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> `312 passed`
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 312` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
 - `python scripts/verify_dist_install.py --artifact-version 0.2.5` -> passed
@@ -33,6 +33,7 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 ### P0
 1. 将当前 WiX scaffold / toolchain / MSI build / signature verify 推进到受控签名的正式发布 lane
 2. 维持 CI、文档、交付脚本在同一真值口径上，保证 0.2.5 基线不回退
+3. 对当前 GUI 做第三轮细粒度视觉修整，消除剩余的中文标题/输入框边缘压缩
 
 ### P1
 3. 定义签名与时间戳的受控发布流程

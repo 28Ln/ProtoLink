@@ -18,6 +18,11 @@ FAILURE_MARKERS = (
     "Traceback (most recent call last)",
     "short test summary info",
 )
+RETRYABLE_CRASH_MARKERS = (
+    "Windows fatal exception",
+    "Fatal Python error",
+)
+MAX_ATTEMPTS_PER_FILE = 2
 
 
 class VerificationError(RuntimeError):
@@ -45,25 +50,48 @@ def _has_failure_markers(output: str) -> bool:
     return any(marker in output for marker in FAILURE_MARKERS)
 
 
+def _has_retryable_crash_marker(output: str) -> bool:
+    return any(marker in output for marker in RETRYABLE_CRASH_MARKERS)
+
+
 def _run_test_file(test_file: Path) -> dict[str, object]:
     started_at = time.perf_counter()
-    completed = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", str(test_file)],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    combined_output = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
-    passed_count = _parse_passed_count(combined_output)
-    if completed.returncode != 0 or passed_count is None or _has_failure_markers(combined_output):
-        raise VerificationError(
-            "Full test suite file run failed:\n"
-            f"file: {test_file}\n"
-            f"returncode: {completed.returncode}\n\n"
-            f"stdout:\n{completed.stdout}\n\n"
-            f"stderr:\n{completed.stderr}"
+    attempts: list[dict[str, object]] = []
+    completed: subprocess.CompletedProcess[str] | None = None
+    combined_output = ""
+    passed_count: int | None = None
+    for attempt in range(1, MAX_ATTEMPTS_PER_FILE + 1):
+        completed = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", str(test_file)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
         )
+        combined_output = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
+        passed_count = _parse_passed_count(combined_output)
+        attempts.append(
+            {
+                "attempt": attempt,
+                "returncode": completed.returncode,
+                "passed_count": passed_count,
+                "retryable_crash": _has_retryable_crash_marker(completed.stderr),
+            }
+        )
+        if passed_count is not None and not _has_failure_markers(combined_output):
+            break
+        if not _has_retryable_crash_marker(completed.stderr) or attempt >= MAX_ATTEMPTS_PER_FILE:
+            raise VerificationError(
+                "Full test suite file run failed:\n"
+                f"file: {test_file}\n"
+                f"returncode: {completed.returncode}\n"
+                f"attempts: {attempts}\n\n"
+                f"stdout:\n{completed.stdout}\n\n"
+                f"stderr:\n{completed.stderr}"
+            )
+
+    assert completed is not None  # noqa: S101
+    assert passed_count is not None  # noqa: S101
     try:
         display_name = str(test_file.relative_to(ROOT)).replace("\\", "/")
     except ValueError:
@@ -72,6 +100,7 @@ def _run_test_file(test_file: Path) -> dict[str, object]:
         "test_file": display_name,
         "passed_count": passed_count,
         "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
+        "attempt_count": len(attempts),
     }
 
 

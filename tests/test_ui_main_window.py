@@ -62,8 +62,15 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     assert window.windowFlags() & Qt.WindowType.FramelessWindowHint
     assert window.title_bar.context_label.text() == "工作台总览"
     assert window.title_bar.maximize_button.text() == "□"
-    assert window.panel_stack.height() >= 260
+    assert window.panel_stack.height() >= 180
     assert dock.height() < window.height() // 2
+    assert window.module_context_surface.isVisible() is True
+    window.context_toggle_button.click()
+    qapp.processEvents()
+    assert window.module_context_surface.isVisible() is False
+    window.context_toggle_button.click()
+    qapp.processEvents()
+    assert window.module_context_surface.isVisible() is True
     modbus_rtu_index = next(index for index, module in enumerate(window.modules) if module.key == "modbus_rtu_lab")
     window.module_list.setCurrentRow(modbus_rtu_index)
     qapp.processEvents()

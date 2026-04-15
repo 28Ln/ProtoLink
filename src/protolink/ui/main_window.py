@@ -64,8 +64,8 @@ from protolink.ui.udp_panel import UdpPanel
 
 
 WINDOW_EDGE_MARGIN = 6
-CONTENT_SPLITTER_DETAIL_WIDTH = 360
-PACKET_DOCK_TARGET_HEIGHT = 320
+CONTENT_SPLITTER_DETAIL_WIDTH = 240
+PACKET_DOCK_TARGET_HEIGHT = 160
 
 
 class WindowTitleBar(QFrame):
@@ -185,6 +185,9 @@ class ProtoLinkMainWindow(QMainWindow):
         self.modules = build_module_catalog()
         self._panel_pages: dict[str, QWidget] = {}
         self._initial_layout_applied = False
+        self._module_context_visible = True
+        self._module_context_auto_collapsed = False
+        self._last_context_splitter_sizes: list[int] | None = None
         self._setup_window()
         self._build_ui()
         self._populate_modules()
@@ -253,17 +256,31 @@ class ProtoLinkMainWindow(QMainWindow):
 
         workspace_title = QLabel("当前工作区")
         workspace_title.setObjectName("SectionTitle")
-        self.workspace_label = QLabel(str(self.workspace.root))
+        self.workspace_label = QLabel(self._format_sidebar_path(self.workspace.root, keep_segments=3))
         self.workspace_label.setObjectName("PathLabel")
         self.workspace_label.setWordWrap(True)
         self.workspace_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.workspace_label.setToolTip(str(self.workspace.root))
 
         self.workspace_meta_label = QLabel(
-            f"日志目录：{self.workspace.logs}\n导出目录：{self.workspace.exports}"
+            "\n".join(
+                (
+                    f"日志目录：{self._format_sidebar_path(self.workspace.logs, keep_segments=2)}",
+                    f"导出目录：{self._format_sidebar_path(self.workspace.exports, keep_segments=2)}",
+                )
+            )
         )
         self.workspace_meta_label.setObjectName("MetaLabel")
         self.workspace_meta_label.setWordWrap(True)
         self.workspace_meta_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.workspace_meta_label.setToolTip(
+            "\n".join(
+                (
+                    f"日志目录：{self.workspace.logs}",
+                    f"导出目录：{self.workspace.exports}",
+                )
+            )
+        )
 
         self.module_list = QListWidget()
         self.module_list.setObjectName("ModuleList")
@@ -287,8 +304,8 @@ class ProtoLinkMainWindow(QMainWindow):
         hero = QFrame()
         hero.setObjectName("Hero")
         hero_layout = QVBoxLayout(hero)
-        hero_layout.setContentsMargins(16, 14, 16, 14)
-        hero_layout.setSpacing(6)
+        hero_layout.setContentsMargins(14, 12, 14, 12)
+        hero_layout.setSpacing(4)
 
         hero_title = QLabel(APPLICATION_TITLE)
         hero_title.setObjectName("HeroTitle")
@@ -308,7 +325,7 @@ class ProtoLinkMainWindow(QMainWindow):
 
         panel_title = QLabel("功能工作面")
         panel_title.setObjectName("SectionTitle")
-        panel_hint = QLabel("默认展示当前模块的主操作面板；说明和验收要求收敛到右侧标签页，避免占用垂直空间。")
+        panel_hint = QLabel("默认优先展示主操作面板；右侧说明区可随时折叠，尽量把空间让给工作区。")
         panel_hint.setObjectName("MetaLabel")
         panel_hint.setWordWrap(True)
 
@@ -321,14 +338,26 @@ class ProtoLinkMainWindow(QMainWindow):
 
         context_surface = QFrame()
         context_surface.setObjectName("Panel")
-        context_surface.setMinimumWidth(320)
-        context_surface.setMaximumWidth(440)
+        context_surface.setMinimumWidth(220)
+        context_surface.setMaximumWidth(320)
         context_layout = QVBoxLayout(context_surface)
         context_layout.setContentsMargins(16, 16, 16, 16)
         context_layout.setSpacing(10)
 
+        section_header = QHBoxLayout()
+        section_header.setContentsMargins(0, 0, 0, 0)
         section_title = QLabel("当前模块")
         section_title.setObjectName("SectionTitle")
+        self.context_toggle_button = QToolButton()
+        self.context_toggle_button.setObjectName("WindowButton")
+        self.context_toggle_button.setText("折叠")
+        self.context_toggle_button.setToolTip("收起或展开右侧模块说明区")
+        self.context_toggle_button.setAutoRaise(False)
+        self.context_toggle_button.clicked.connect(self.toggle_module_context)
+        section_header.addWidget(section_title)
+        section_header.addStretch(1)
+        section_header.addWidget(self.context_toggle_button)
+
         self.name_label = QLabel()
         self.name_label.setObjectName("ModuleTitle")
         self.name_label.setWordWrap(True)
@@ -361,7 +390,7 @@ class ProtoLinkMainWindow(QMainWindow):
         self.module_context_tabs.addTab(summary_page, "能力说明")
         self.module_context_tabs.addTab(acceptance_page, "验收标准")
 
-        context_layout.addWidget(section_title)
+        context_layout.addLayout(section_header)
         context_layout.addWidget(self.name_label)
         context_layout.addWidget(self.meta_label)
         context_layout.addWidget(self.module_context_tabs, 1)
@@ -373,6 +402,7 @@ class ProtoLinkMainWindow(QMainWindow):
         self.content_splitter.addWidget(context_surface)
         self.content_splitter.setStretchFactor(0, 4)
         self.content_splitter.setStretchFactor(1, 1)
+        self.module_context_surface = context_surface
 
         content_layout.addWidget(hero)
         content_layout.addWidget(self.content_splitter, 1)
@@ -575,6 +605,7 @@ class ProtoLinkMainWindow(QMainWindow):
             QDockWidget.DockWidgetFeature.DockWidgetMovable
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
+        self.packet_console_dock.setMinimumHeight(140)
         self.packet_console_dock.setWidget(self.packet_console_scroll)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.packet_console_dock)
 
@@ -584,13 +615,15 @@ class ProtoLinkMainWindow(QMainWindow):
 
         self._initial_layout_applied = True
         splitter_width = max(self.content_splitter.width(), 960)
-        detail_width = min(CONTENT_SPLITTER_DETAIL_WIDTH, max(320, splitter_width // 4))
+        detail_width = min(CONTENT_SPLITTER_DETAIL_WIDTH, max(220, splitter_width // 6))
         self.content_splitter.setSizes([splitter_width - detail_width, detail_width])
         self.resizeDocks(
             [self.packet_console_dock],
-            [max(260, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.38)))],
+            [max(140, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.24)))],
             Qt.Orientation.Vertical,
         )
+        if self.width() <= 1280 and self._module_context_visible:
+            self._set_module_context_visible(False, manual=False)
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -608,6 +641,13 @@ class ProtoLinkMainWindow(QMainWindow):
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange:
             self.title_bar.sync_window_state(self.isMaximized())
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if not self._initial_layout_applied:
+            return
+        if self.width() > 1280 and self._module_context_auto_collapsed and not self._module_context_visible:
+            self._set_module_context_visible(True, manual=False)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
@@ -665,3 +705,37 @@ class ProtoLinkMainWindow(QMainWindow):
         ):
             return Qt.CursorShape.SizeFDiagCursor
         return Qt.CursorShape.SizeBDiagCursor
+
+    def toggle_module_context(self) -> None:
+        self._set_module_context_visible(not self._module_context_visible, manual=True)
+
+    def _set_module_context_visible(self, visible: bool, *, manual: bool) -> None:
+        if visible == self._module_context_visible:
+            return
+
+        if not visible:
+            self._last_context_splitter_sizes = self.content_splitter.sizes()
+            self.module_context_surface.hide()
+            self.content_splitter.setSizes([max(1, self.content_splitter.width()), 0])
+            self.context_toggle_button.setText("展开")
+            self._module_context_visible = False
+            self._module_context_auto_collapsed = not manual
+            return
+
+        self.module_context_surface.show()
+        restore_sizes = self._last_context_splitter_sizes
+        if restore_sizes is None or len(restore_sizes) != 2:
+            splitter_width = max(self.content_splitter.width(), 960)
+            detail_width = min(CONTENT_SPLITTER_DETAIL_WIDTH, max(220, splitter_width // 6))
+            restore_sizes = [splitter_width - detail_width, detail_width]
+        self.content_splitter.setSizes(restore_sizes)
+        self.context_toggle_button.setText("折叠")
+        self._module_context_visible = True
+        self._module_context_auto_collapsed = False
+
+    def _format_sidebar_path(self, path, *, keep_segments: int) -> str:
+        parts = list(path.parts)
+        if len(parts) <= keep_segments:
+            return str(path)
+        tail = "\\".join(parts[-keep_segments:])
+        return f"...\\{tail}"

@@ -103,14 +103,14 @@ QListWidget::item:selected {
 }
 
 QLabel#HeroTitle {
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 700;
     color: #f5f9fd;
 }
 
 QLabel#HeroSubtitle {
     color: #b7c6d6;
-    font-size: 13px;
+    font-size: 12px;
 }
 
 QLabel#ModuleTitle {
