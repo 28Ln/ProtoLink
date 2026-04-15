@@ -21,6 +21,8 @@ Last updated: 2026-04-15
   2. 定义切换条件、验证策略与回退边界
   3. 保持 0.2.5 基线在过渡期间稳定可验证
   4. 将当前 WiX scaffold / toolchain / MSI build / signature verify 推进到受控发布 lane
+- Supporting workstream:
+  - GUI 收口与交付级验收标准见 `docs/GUI_REFACTOR_TASKLIST.md`；该文档不改变当前 `Active` 主线归属。
 - Exit criteria:
   - native installer / signing 路线形成正式计划
   - 切换条件、验证策略、回退边界文档化
