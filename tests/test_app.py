@@ -7,6 +7,7 @@ import tempfile
 from protolink.app import main
 from protolink.core.logging import create_log_entry, LogLevel
 from protolink.core.errors import CliExitCode, ProtoLinkUserError
+from protolink.core.extensions import EXTENSION_REGISTRY_FORMAT_VERSION
 from protolink.core.logging import (
     RuntimeFailureEvidenceRecorder,
     default_config_failure_evidence_path,
@@ -195,6 +196,30 @@ def _write_valid_plugin_manifest(workspace, *, plugin_dir_name: str = "bench-plu
     manifest_file = plugin_dir / PLUGIN_MANIFEST_FILE
     manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return manifest_file
+
+
+def _write_extension_registry_config(
+    workspace,
+    *,
+    enabled_plugin_ids: list[str] | None = None,
+    disabled_plugin_ids: list[str] | None = None,
+    allow_high_risk_plugins: bool = False,
+) -> Path:
+    config_file = workspace.plugins / "registry.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "format_version": EXTENSION_REGISTRY_FORMAT_VERSION,
+                "enabled_plugin_ids": enabled_plugin_ids or [],
+                "disabled_plugin_ids": disabled_plugin_ids or [],
+                "allow_high_risk_plugins": allow_high_risk_plugins,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return config_file
 
 
 def _configure_fake_bundled_runtime(monkeypatch, tmp_path: Path) -> None:
@@ -479,11 +504,90 @@ def test_main_plans_extension_loading(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
     _write_valid_plugin_manifest(workspace)
+    _write_extension_registry_config(workspace, enabled_plugin_ids=["bench-plugin"])
+
+    exit_code = main(["--plan-extension-loading"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert payload["registry_config"]["enabled_plugin_ids"] == ["bench-plugin"]
+    assert payload["loading_plan"]["enabled_requested_count"] == 1
+    assert payload["loading_plan"]["entries"][0]["effective_state"] == "eligible_for_loading"
+
+
+def test_main_plans_extension_loading_marks_class_b_plugins_for_review(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_plugin_manifest(workspace, capabilities=["read_only_diagnostic"])
+    _write_extension_registry_config(workspace, enabled_plugin_ids=["bench-plugin"])
+
+    exit_code = main(["--plan-extension-loading"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert payload["loading_plan"]["ready"] is True
+    assert payload["loading_plan"]["blocked_count"] == 0
+    assert payload["loading_plan"]["review_required_count"] == 1
+    assert payload["loading_plan"]["entries"][0]["capability_class"] == "class_b"
+    assert payload["loading_plan"]["entries"][0]["effective_state"] == "review_required"
+
+
+def test_main_plans_extension_loading_blocks_high_risk_plugins_without_opt_in(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_plugin_manifest(workspace, capabilities=["ui_surface"])
+    _write_extension_registry_config(workspace, enabled_plugin_ids=["bench-plugin"])
+
+    exit_code = main(["--plan-extension-loading"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert payload["loading_plan"]["ready"] is False
+    assert payload["loading_plan"]["blocked_count"] == 1
+    assert payload["loading_plan"]["review_required_count"] == 0
+    assert payload["loading_plan"]["entries"][0]["capability_class"] == "class_c"
+    assert payload["loading_plan"]["entries"][0]["effective_state"] == "blocked_high_risk"
+
+
+def test_main_plans_extension_loading_allows_high_risk_plugins_with_opt_in(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_plugin_manifest(workspace, capabilities=["ui_surface"])
+    _write_extension_registry_config(
+        workspace,
+        enabled_plugin_ids=["bench-plugin"],
+        allow_high_risk_plugins=True,
+    )
+
+    exit_code = main(["--plan-extension-loading"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert payload["registry_config"]["allow_high_risk_plugins"] is True
+    assert payload["loading_plan"]["ready"] is True
+    assert payload["loading_plan"]["blocked_count"] == 0
+    assert payload["loading_plan"]["entries"][0]["effective_state"] == "high_risk_enabled"
+
+
+def test_main_plans_extension_loading_blocks_enabled_plugins_when_registry_is_invalid(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_plugin_manifest(workspace)
     registry_file = workspace.plugins / "registry.json"
     registry_file.write_text(
         json.dumps(
             {
-                "format_version": "protolink-extension-registry-v1",
+                "format_version": "invalid-format",
                 "enabled_plugin_ids": ["bench-plugin"],
             },
             ensure_ascii=False,
@@ -497,9 +601,10 @@ def test_main_plans_extension_loading(monkeypatch, tmp_path, capsys) -> None:
     payload = json.loads(captured.out)
 
     assert exit_code == int(CliExitCode.OK)
-    assert payload["registry_config"]["enabled_plugin_ids"] == ["bench-plugin"]
-    assert payload["loading_plan"]["enabled_requested_count"] == 1
-    assert payload["loading_plan"]["entries"][0]["effective_state"] == "eligible_for_loading"
+    assert payload["registry_config"]["valid"] is False
+    assert payload["loading_plan"]["ready"] is False
+    assert payload["loading_plan"]["blocked_count"] == 1
+    assert payload["loading_plan"]["entries"][0]["effective_state"] == "blocked_registry_invalid"
 
 
 def test_main_release_preflight_reports_missing_capture_artifacts(monkeypatch, tmp_path, capsys) -> None:

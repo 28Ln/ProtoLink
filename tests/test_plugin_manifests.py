@@ -176,3 +176,124 @@ def test_build_extension_loading_plan_blocks_unknown_enabled_plugin(tmp_path: Pa
     assert loading_plan.ready is False
     assert loading_plan.blocked_count == 1
     assert loading_plan.entries[0].effective_state == "blocked_unknown_plugin"
+
+
+def test_build_extension_loading_plan_marks_class_b_plugins_for_review(tmp_path: Path) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    plugin_dir = workspace.plugins / "bench-plugin"
+    plugin_dir.mkdir()
+    _write_plugin_manifest(plugin_dir, capabilities=["read_only_diagnostic"])
+    report = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
+    registry = build_extension_descriptor_registry(report)
+    config_file = workspace.plugins / EXTENSION_REGISTRY_FILE
+    config_file.write_text(
+        json.dumps(
+            {
+                "format_version": EXTENSION_REGISTRY_FORMAT_VERSION,
+                "enabled_plugin_ids": ["bench-plugin"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    config = load_extension_registry_config(workspace.plugins)
+
+    loading_plan = build_extension_loading_plan(registry, config)
+
+    assert loading_plan.ready is True
+    assert loading_plan.blocked_count == 0
+    assert loading_plan.review_required_count == 1
+    assert loading_plan.entries[0].capability_class == "class_b"
+    assert loading_plan.entries[0].effective_state == "review_required"
+
+
+def test_build_extension_loading_plan_blocks_high_risk_plugins_without_opt_in(tmp_path: Path) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    plugin_dir = workspace.plugins / "bench-plugin"
+    plugin_dir.mkdir()
+    _write_plugin_manifest(plugin_dir, capabilities=["ui_surface"])
+    report = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
+    registry = build_extension_descriptor_registry(report)
+    config_file = workspace.plugins / EXTENSION_REGISTRY_FILE
+    config_file.write_text(
+        json.dumps(
+            {
+                "format_version": EXTENSION_REGISTRY_FORMAT_VERSION,
+                "enabled_plugin_ids": ["bench-plugin"],
+                "allow_high_risk_plugins": False,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    config = load_extension_registry_config(workspace.plugins)
+
+    loading_plan = build_extension_loading_plan(registry, config)
+
+    assert loading_plan.ready is False
+    assert loading_plan.blocked_count == 1
+    assert loading_plan.review_required_count == 0
+    assert loading_plan.entries[0].capability_class == "class_c"
+    assert loading_plan.entries[0].effective_state == "blocked_high_risk"
+
+
+def test_build_extension_loading_plan_allows_high_risk_plugins_with_opt_in(tmp_path: Path) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    plugin_dir = workspace.plugins / "bench-plugin"
+    plugin_dir.mkdir()
+    _write_plugin_manifest(plugin_dir, capabilities=["ui_surface"])
+    report = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
+    registry = build_extension_descriptor_registry(report)
+    config_file = workspace.plugins / EXTENSION_REGISTRY_FILE
+    config_file.write_text(
+        json.dumps(
+            {
+                "format_version": EXTENSION_REGISTRY_FORMAT_VERSION,
+                "enabled_plugin_ids": ["bench-plugin"],
+                "allow_high_risk_plugins": True,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    config = load_extension_registry_config(workspace.plugins)
+
+    loading_plan = build_extension_loading_plan(registry, config)
+
+    assert loading_plan.ready is True
+    assert loading_plan.blocked_count == 0
+    assert loading_plan.entries[0].effective_state == "high_risk_enabled"
+
+
+def test_build_extension_loading_plan_blocks_enabled_plugins_when_registry_config_is_invalid(
+    tmp_path: Path,
+) -> None:
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    plugin_dir = workspace.plugins / "bench-plugin"
+    plugin_dir.mkdir()
+    _write_plugin_manifest(plugin_dir)
+    report = audit_workspace_plugin_manifests(workspace.plugins, app_version=__version__)
+    registry = build_extension_descriptor_registry(report)
+    config_file = workspace.plugins / EXTENSION_REGISTRY_FILE
+    config_file.write_text(
+        json.dumps(
+            {
+                "format_version": "invalid-format",
+                "enabled_plugin_ids": ["bench-plugin"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    config = load_extension_registry_config(workspace.plugins)
+
+    loading_plan = build_extension_loading_plan(registry, config)
+
+    assert config.valid is False
+    assert loading_plan.ready is False
+    assert loading_plan.blocked_count == 1
+    assert loading_plan.entries[0].effective_state == "blocked_registry_invalid"
