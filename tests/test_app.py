@@ -459,6 +459,22 @@ def test_main_audits_plugin_manifests(monkeypatch, tmp_path, capsys) -> None:
     assert payload["entries"][0]["plugin_id"] == "bench-plugin"
 
 
+def test_main_lists_extension_descriptors(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_plugin_manifest(workspace)
+
+    exit_code = main(["--list-extension-descriptors"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert payload["descriptor_count"] == 1
+    assert payload["plugin_ids"] == ["bench-plugin"]
+    assert payload["capabilities"] == ["protocol_parser"]
+    assert payload["descriptors"][0]["entrypoint"] == "bench_plugin.plugin:register"
+
+
 def test_main_release_preflight_reports_missing_capture_artifacts(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
@@ -515,6 +531,18 @@ def test_main_release_preflight_rejects_invalid_plugin_manifest(monkeypatch, tmp
     assert payload["plugin_manifest_audit"]["invalid_manifest_count"] == 1
     assert payload["plugin_manifest_audit"]["entries"][0]["plugin_id"] == "broken-plugin"
     assert payload["ready"] is False
+
+
+def test_main_headless_summary_reports_extension_descriptor_count(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_plugin_manifest(workspace)
+
+    exit_code = main(["--headless-summary"])
+    captured = capsys.readouterr()
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "扩展描述：1" in captured.out
 
 
 def test_main_release_preflight_rejects_junk_profile_and_capture_artifacts(monkeypatch, tmp_path, capsys) -> None:

@@ -106,7 +106,7 @@ ProtoLink 当前已经具备以下事实基础：
 - 当前 app version 必须满足 `min_app_version` / `max_app_version`
 - 同一 workspace 内 `plugin_id` 不得重复
 
-manifest 必须先通过静态校验，才允许进入后续发现/装载流程。当前版本只做到 discovery / validation / audit / preflight gate，不做动态加载。
+manifest 必须先通过静态校验，才允许进入后续发现/装载流程。当前版本已做到 discovery / validation / audit / descriptor listing / preflight gate，不做动态加载。
 
 ## 6. Lifecycle
 

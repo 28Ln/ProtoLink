@@ -35,7 +35,7 @@ Last updated: 2026-04-15
 
 - Classification: `Next`
 - Objective:
-  - 在现有 manifest discovery / validation / preflight gate 基线之上，为协议扩展、模块扩展、插件接入建立 registry、descriptor 与运行时装载边界。
+  - 在现有 manifest discovery / validation / descriptor listing / preflight gate 基线之上，为协议扩展、模块扩展、插件接入建立 registry、descriptor 与运行时装载边界。
 
 ### PL-016 — Hardware-in-the-Loop and Long-Run Validation
 

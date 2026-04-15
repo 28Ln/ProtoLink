@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from protolink import __version__
+from protolink.core.extensions import build_extension_descriptor_registry
 from protolink.core.plugin_manifests import (
     PLUGIN_MANIFEST_FILE,
     PLUGIN_MANIFEST_FORMAT_VERSION,
@@ -44,6 +45,13 @@ def test_audit_workspace_plugin_manifests_reports_valid_entries(tmp_path: Path) 
     assert report.blocking_items == ()
     assert report.entries[0].plugin_id == "bench-plugin"
     assert report.entries[0].capabilities == ("protocol_parser", "export_codec")
+
+    registry = build_extension_descriptor_registry(report)
+    assert registry.descriptor_count == 1
+    assert registry.plugin_ids() == ("bench-plugin",)
+    assert registry.capabilities() == ("protocol_parser", "export_codec")
+    assert registry.get("bench-plugin") is not None
+    assert registry.get("missing-plugin") is None
 
 
 def test_audit_workspace_plugin_manifests_flags_missing_manifest(tmp_path: Path) -> None:

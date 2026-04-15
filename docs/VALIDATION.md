@@ -4,27 +4,29 @@ Last updated: 2026-04-15
 
 ## 当前验证基线
 
-- `uv run python scripts/run_full_test_suite.py` -> 325 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 325` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> 327 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 327` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest` -> passed
 - `uv run protolink --audit-plugin-manifests` -> passed
+- `uv run protolink --list-extension-descriptors` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
 - `python scripts/verify_dist_install.py --artifact-version 0.2.5` -> passed
 - `python scripts/run_soak_validation.py --cycles 2 --sleep-ms 0 --require-all-ready` -> passed
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
 - `uv run protolink --smoke-check` -> `smoke-check-ok`
-- 当前 full-suite 快照：`325 passed`
+- 当前 full-suite 快照：`327 passed`
 
 ## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 325
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 327
 uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest
 uv run protolink --audit-plugin-manifests
+uv run protolink --list-extension-descriptors
 ```
 
 ## UI / owner-surface 相关验证
@@ -54,6 +56,7 @@ uv build
 - `run_soak_validation.py` 在使用 `--require-all-ready` 时会把非 ready 循环转为非零退出码，并输出 `cycle_ready`、`failing_cycles`、`total_duration_ms`。
 - `run_full_test_suite.py` 以逐文件方式聚合 full-suite 真值，是当前正式的 pytest 基线入口。
 - `audit-plugin-manifests` 会静态审计 `workspace/plugins/*/manifest.json`；任何 invalid manifest 都会进入 `--release-preflight` 阻断。
+- `list-extension-descriptors` 只列出通过静态校验的扩展描述清单，不代表动态加载已开放。
 
 ## Native installer scaffold 真值门禁
 

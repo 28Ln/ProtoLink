@@ -37,6 +37,34 @@ class ExtensionManifest:
 
 
 @dataclass(frozen=True, slots=True)
+class ExtensionDescriptor:
+    plugin_id: str
+    display_name: str
+    plugin_version: str
+    extension_api_version: str
+    capabilities: tuple[str, ...]
+    entrypoint: str
+    min_protolink_version: str
+    max_protolink_version: str | None
+    plugin_dir: Path
+    manifest_file: Path
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "plugin_id": self.plugin_id,
+            "display_name": self.display_name,
+            "plugin_version": self.plugin_version,
+            "extension_api_version": self.extension_api_version,
+            "capabilities": list(self.capabilities),
+            "entrypoint": self.entrypoint,
+            "min_protolink_version": self.min_protolink_version,
+            "max_protolink_version": self.max_protolink_version,
+            "plugin_dir": str(self.plugin_dir),
+            "manifest_file": str(self.manifest_file),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class WorkspaceExtensionAuditEntry:
     plugin_dir: Path
     manifest_file: Path | None
@@ -45,6 +73,40 @@ class WorkspaceExtensionAuditEntry:
     display_name: str | None
     issues: tuple[ExtensionManifestIssue, ...]
     manifest: ExtensionManifest | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ExtensionDescriptorRegistry:
+    descriptors: tuple[ExtensionDescriptor, ...]
+
+    @property
+    def descriptor_count(self) -> int:
+        return len(self.descriptors)
+
+    def plugin_ids(self) -> tuple[str, ...]:
+        return tuple(descriptor.plugin_id for descriptor in self.descriptors)
+
+    def capabilities(self) -> tuple[str, ...]:
+        seen: list[str] = []
+        for descriptor in self.descriptors:
+            for capability in descriptor.capabilities:
+                if capability not in seen:
+                    seen.append(capability)
+        return tuple(seen)
+
+    def get(self, plugin_id: str) -> ExtensionDescriptor | None:
+        return next((descriptor for descriptor in self.descriptors if descriptor.plugin_id == plugin_id), None)
+
+    def descriptors_for_capability(self, capability: str) -> tuple[ExtensionDescriptor, ...]:
+        return tuple(descriptor for descriptor in self.descriptors if capability in descriptor.capabilities)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "descriptor_count": self.descriptor_count,
+            "plugin_ids": list(self.plugin_ids()),
+            "capabilities": list(self.capabilities()),
+            "descriptors": [descriptor.to_dict() for descriptor in self.descriptors],
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +132,30 @@ def audit_workspace_extensions(plugin_root: Path, *, app_version: str) -> Worksp
         highest_severity="error" if report.invalid_manifest_count > 0 else "clean",
         entries=entries,
     )
+
+
+def build_extension_descriptor_registry(
+    report: WorkspaceExtensionAuditReport | PluginManifestAuditReport,
+) -> ExtensionDescriptorRegistry:
+    if isinstance(report, PluginManifestAuditReport):
+        report = audit_workspace_extensions(report.plugins_root, app_version=report.app_version)
+    descriptors = tuple(
+        ExtensionDescriptor(
+            plugin_id=entry.manifest.plugin_id,
+            display_name=entry.manifest.display_name,
+            plugin_version=entry.manifest.plugin_version,
+            extension_api_version=entry.manifest.extension_api_version,
+            capabilities=entry.manifest.capabilities,
+            entrypoint=entry.manifest.entrypoint,
+            min_protolink_version=entry.manifest.min_protolink_version,
+            max_protolink_version=entry.manifest.max_protolink_version,
+            plugin_dir=entry.plugin_dir,
+            manifest_file=entry.manifest_file or (entry.plugin_dir / EXTENSION_MANIFEST_FILE),
+        )
+        for entry in report.entries
+        if entry.manifest is not None and entry.status == "valid"
+    )
+    return ExtensionDescriptorRegistry(descriptors=descriptors)
 
 
 def serialize_extension_audit_report(report: WorkspaceExtensionAuditReport) -> dict[str, object]:

@@ -49,6 +49,8 @@ def test_bootstrap_app_context_builds_workspace_and_transport_registry(tmp_path:
     assert context.timed_task_service.snapshot.running is False
     assert context.channel_bridge_runtime_service.snapshot.bridge_names == ()
     assert context.capture_replay_job_service.snapshot.job_names == ()
+    assert context.plugin_manifest_audit.valid_manifest_count == 0
+    assert context.extension_registry.descriptor_count == 0
 
 
 def test_bootstrap_persists_workspace_when_requested(tmp_path: Path) -> None:

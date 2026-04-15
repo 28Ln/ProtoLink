@@ -23,8 +23,8 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 
 ## 当前验证快照
 
-- `uv run python scripts/run_full_test_suite.py` -> `325 passed`
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 325` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> `327 passed`
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 327` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
 - `python scripts/verify_dist_install.py --artifact-version 0.2.5` -> passed

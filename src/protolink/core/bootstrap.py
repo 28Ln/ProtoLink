@@ -22,7 +22,12 @@ from protolink.application.tcp_client_service import TcpClientSessionService
 from protolink.application.tcp_server_service import TcpServerSessionService
 from protolink.application.timed_task_service import TimedTaskService
 from protolink.application.udp_service import UdpSessionService
-from protolink.core.extensions import WorkspaceExtensionAuditReport, audit_workspace_extensions
+from protolink.core.extensions import (
+    ExtensionDescriptorRegistry,
+    WorkspaceExtensionAuditReport,
+    audit_workspace_extensions,
+    build_extension_descriptor_registry,
+)
 from protolink.core.event_bus import EventBus
 from protolink.core.logging import (
     InMemoryLogStore,
@@ -97,6 +102,7 @@ class AppContext:
     channel_bridge_runtime_service: ChannelBridgeRuntimeService
     capture_replay_job_service: CaptureReplayJobService
     extension_audit_report: WorkspaceExtensionAuditReport
+    extension_registry: ExtensionDescriptorRegistry
 
 
 class PlaceholderTransportAdapter(TransportAdapter):
@@ -341,6 +347,7 @@ def bootstrap_app_context(
     capture_replay_job_service = CaptureReplayJobService(packet_replay_service)
     timed_task_service = TimedTaskService(rule_engine_service, event_bus=event_bus)
     extension_audit_report = audit_workspace_extensions(workspace.plugins, app_version=__version__)
+    extension_registry = build_extension_descriptor_registry(extension_audit_report)
 
     return AppContext(
         base_dir=base_dir,
@@ -373,4 +380,5 @@ def bootstrap_app_context(
         channel_bridge_runtime_service=channel_bridge_runtime_service,
         capture_replay_job_service=capture_replay_job_service,
         extension_audit_report=extension_audit_report,
+        extension_registry=extension_registry,
     )
