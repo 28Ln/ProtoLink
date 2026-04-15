@@ -257,3 +257,24 @@ def test_packet_console_can_build_replay_plan_from_visible_rows(qapp: QApplicati
     assert plan.steps[0].payload == b"PING"
     assert "重放计划构建完成：" in widget.replay_status_label.text()
     widget.close()
+
+
+def test_packet_console_uses_tabbed_dock_friendly_layout(qapp: QApplication) -> None:
+    widget = PacketConsoleWidget(PacketInspectorState())
+    widget.show()
+    qapp.processEvents()
+
+    assert [widget.console_tabs.tabText(index) for index in range(widget.console_tabs.count())] == [
+        "分析",
+        "构建",
+        "重放",
+    ]
+    assert [widget.entry_detail_tabs.tabText(index) for index in range(widget.entry_detail_tabs.count())] == [
+        "载荷",
+        "元数据",
+        "协议解析",
+    ]
+    assert widget.inspector_splitter.count() == 2
+    assert widget.composer_splitter.count() == 2
+    assert widget.minimumSizeHint().height() < 500
+    widget.close()

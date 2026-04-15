@@ -13,6 +13,9 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
+    QSplitter,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -58,34 +61,55 @@ class PacketConsoleWidget(QWidget):
         self.refresh()
 
     def _build_ui(self) -> None:
+        self.setObjectName("PacketConsoleWidget")
+        self.setMinimumHeight(260)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        layout.setSpacing(0)
 
         frame = QFrame()
         frame.setObjectName("Panel")
+        frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         frame_layout = QVBoxLayout(frame)
-        frame_layout.setContentsMargins(18, 18, 18, 18)
+        frame_layout.setContentsMargins(14, 14, 14, 14)
         frame_layout.setSpacing(10)
 
         header_layout = QHBoxLayout()
         title = QLabel("报文分析台")
         title.setObjectName("SectionTitle")
 
+        header_layout.addWidget(title)
+        header_layout.addStretch(1)
+        frame_layout.addLayout(header_layout)
+        self.console_tabs = QTabWidget()
+        self.console_tabs.setObjectName("PacketConsoleTabs")
+        self.console_tabs.setDocumentMode(True)
+        self.console_tabs.setTabPosition(QTabWidget.TabPosition.North)
+        self.console_tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.console_tabs.addTab(self._build_inspector_tab(), "分析")
+        self.console_tabs.addTab(self._build_composer_tab(), "构建")
+        self.console_tabs.addTab(self._build_replay_section(), "重放")
+        frame_layout.addWidget(self.console_tabs, 1)
+        layout.addWidget(frame)
+
+    def _build_inspector_tab(self) -> QWidget:
+        page = QWidget()
+        page.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        controls_layout = QGridLayout()
+        controls_layout.setHorizontalSpacing(10)
+        controls_layout.setVerticalSpacing(8)
+
         self.view_mode = QComboBox()
         self.view_mode.addItem("十六进制视图", PayloadViewMode.HEX)
         self.view_mode.addItem("ASCII 视图", PayloadViewMode.ASCII)
         self.view_mode.addItem("UTF-8 视图", PayloadViewMode.UTF8)
         self.view_mode.currentIndexChanged.connect(self._on_view_mode_changed)
-
-        header_layout.addWidget(title)
-        header_layout.addStretch(1)
-        header_layout.addWidget(QLabel("负载视图"))
-        header_layout.addWidget(self.view_mode)
-
-        filters_layout = QGridLayout()
-        filters_layout.setHorizontalSpacing(10)
-        filters_layout.setVerticalSpacing(8)
 
         self.level_filter = QComboBox()
         self.level_filter.addItem("全部等级", None)
@@ -110,49 +134,64 @@ class PacketConsoleWidget(QWidget):
         self.clear_filters_button = QPushButton("清除筛选")
         self.clear_filters_button.clicked.connect(self._on_clear_filters)
 
-        filters_layout.addWidget(QLabel("等级"), 0, 0)
-        filters_layout.addWidget(self.level_filter, 0, 1)
-        filters_layout.addWidget(QLabel("会话"), 0, 2)
-        filters_layout.addWidget(self.session_filter, 0, 3)
-        filters_layout.addWidget(self.clear_filters_button, 0, 4)
-        filters_layout.addWidget(QLabel("类别"), 1, 0)
-        filters_layout.addWidget(self.category_filter, 1, 1, 1, 2)
-        filters_layout.addWidget(QLabel("搜索"), 1, 3)
-        filters_layout.addWidget(self.text_filter, 1, 4)
-        filters_layout.setColumnStretch(1, 1)
-        filters_layout.setColumnStretch(3, 1)
-        filters_layout.setColumnStretch(4, 1)
-
-        body = QGridLayout()
-        body.setHorizontalSpacing(12)
-        body.setVerticalSpacing(8)
-
-        self.entry_list = QListWidget()
-        self.entry_list.currentItemChanged.connect(self._on_selection_changed)
+        controls_layout.addWidget(QLabel("负载视图"), 0, 0)
+        controls_layout.addWidget(self.view_mode, 0, 1)
+        controls_layout.addWidget(QLabel("等级"), 0, 2)
+        controls_layout.addWidget(self.level_filter, 0, 3)
+        controls_layout.addWidget(QLabel("会话"), 0, 4)
+        controls_layout.addWidget(self.session_filter, 0, 5)
+        controls_layout.addWidget(self.clear_filters_button, 0, 6)
+        controls_layout.addWidget(QLabel("类别"), 1, 0)
+        controls_layout.addWidget(self.category_filter, 1, 1, 1, 3)
+        controls_layout.addWidget(QLabel("搜索"), 1, 4)
+        controls_layout.addWidget(self.text_filter, 1, 5, 1, 2)
+        controls_layout.setColumnStretch(1, 1)
+        controls_layout.setColumnStretch(3, 1)
+        controls_layout.setColumnStretch(5, 1)
 
         self.entry_summary = QLabel()
         self.entry_summary.setObjectName("MetaLabel")
+        self.entry_summary.setWordWrap(True)
 
-        self.payload_text = QTextEdit()
-        self.payload_text.setReadOnly(True)
-        self.metadata_text = QTextEdit()
-        self.metadata_text.setReadOnly(True)
-        self.modbus_text = QTextEdit()
-        self.modbus_text.setReadOnly(True)
+        self.entry_list = QListWidget()
+        self.entry_list.currentItemChanged.connect(self._on_selection_changed)
+        self.entry_list.setMinimumWidth(260)
+        self.entry_list.setMinimumHeight(160)
+        self.entry_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.entry_list.setUniformItemSizes(True)
 
-        body.addWidget(QLabel("日志条目"), 0, 0)
-        body.addWidget(QLabel("载荷"), 0, 1)
-        body.addWidget(QLabel("元数据"), 2, 1)
-        body.addWidget(QLabel("协议解析"), 4, 1)
-        body.addWidget(self.entry_list, 1, 0, 4, 1)
-        body.addWidget(self.payload_text, 1, 1)
-        body.addWidget(self.metadata_text, 3, 1)
-        body.addWidget(self.modbus_text, 5, 1)
-        body.setColumnStretch(0, 1)
-        body.setColumnStretch(1, 1)
+        self.payload_text = self._create_readonly_text_panel("选择日志条目后查看载荷。")
+        self.metadata_text = self._create_readonly_text_panel("选择日志条目后查看元数据。")
+        self.modbus_text = self._create_readonly_text_panel("识别到协议后显示解析结果。")
 
-        composer_title = QLabel("原始报文构建器")
-        composer_title.setObjectName("SectionTitle")
+        self.entry_detail_tabs = QTabWidget()
+        self.entry_detail_tabs.setObjectName("PacketConsoleInspectorTabs")
+        self.entry_detail_tabs.setDocumentMode(True)
+        self.entry_detail_tabs.addTab(self.payload_text, "载荷")
+        self.entry_detail_tabs.addTab(self.metadata_text, "元数据")
+        self.entry_detail_tabs.addTab(self.modbus_text, "协议解析")
+        self.entry_detail_tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        self.inspector_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.inspector_splitter.setObjectName("PacketConsoleInspectorSplitter")
+        self.inspector_splitter.setChildrenCollapsible(False)
+        self.inspector_splitter.addWidget(self.entry_list)
+        self.inspector_splitter.addWidget(self.entry_detail_tabs)
+        self.inspector_splitter.setStretchFactor(0, 3)
+        self.inspector_splitter.setStretchFactor(1, 5)
+        self.inspector_splitter.setSizes([380, 520])
+
+        layout.addLayout(controls_layout)
+        layout.addWidget(self.entry_summary)
+        layout.addWidget(self.inspector_splitter, 1)
+        return page
+
+    def _build_composer_tab(self) -> QWidget:
+        page = QWidget()
+        page.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
 
         composer_header = QHBoxLayout()
         composer_header.setSpacing(8)
@@ -186,48 +225,41 @@ class PacketConsoleWidget(QWidget):
 
         self.composer_summary = QLabel()
         self.composer_summary.setObjectName("MetaLabel")
+        self.composer_summary.setWordWrap(True)
         self.composer_error = QLabel()
         self.composer_error.setObjectName("MetaLabel")
         self.composer_error.setWordWrap(True)
 
-        composer_body = QGridLayout()
-        composer_body.setHorizontalSpacing(12)
-        composer_body.setVerticalSpacing(8)
-
         self.composer_input = QTextEdit()
         self.composer_input.setPlaceholderText("输入十六进制、ASCII 或 UTF-8 文本负载…")
         self.composer_input.textChanged.connect(self._on_composer_text_changed)
-        self.composer_preview = QTextEdit()
-        self.composer_preview.setReadOnly(True)
+        self.composer_input.setMinimumHeight(150)
+        self.composer_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        composer_body.addWidget(QLabel("草稿"), 0, 0)
-        composer_body.addWidget(QLabel("字节预览"), 0, 1)
-        composer_body.addWidget(self.composer_input, 1, 0)
-        composer_body.addWidget(self.composer_preview, 1, 1)
-        composer_body.setColumnStretch(0, 1)
-        composer_body.setColumnStretch(1, 1)
+        self.composer_preview = self._create_readonly_text_panel("预览编码后的字节内容。")
+        self.composer_preview.setMinimumHeight(150)
 
-        frame_layout.addLayout(header_layout)
-        frame_layout.addWidget(self.entry_summary)
-        frame_layout.addLayout(filters_layout)
-        frame_layout.addLayout(body)
-        frame_layout.addWidget(composer_title)
-        frame_layout.addLayout(composer_header)
-        frame_layout.addWidget(self.composer_summary)
-        frame_layout.addWidget(self.composer_error)
-        frame_layout.addLayout(composer_body)
-        frame_layout.addWidget(self._build_replay_section())
-        layout.addWidget(frame)
+        self.composer_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.composer_splitter.setObjectName("PacketConsoleComposerSplitter")
+        self.composer_splitter.setChildrenCollapsible(False)
+        self.composer_splitter.addWidget(self._wrap_labeled_panel("草稿", self.composer_input))
+        self.composer_splitter.addWidget(self._wrap_labeled_panel("字节预览", self.composer_preview))
+        self.composer_splitter.setStretchFactor(0, 1)
+        self.composer_splitter.setStretchFactor(1, 1)
+        self.composer_splitter.setSizes([480, 480])
+
+        layout.addLayout(composer_header)
+        layout.addWidget(self.composer_summary)
+        layout.addWidget(self.composer_error)
+        layout.addWidget(self.composer_splitter, 1)
+        return page
 
     def _build_replay_section(self) -> QWidget:
-        section = QFrame()
-        section.setObjectName("Panel")
+        section = QWidget()
+        section.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         section_layout = QVBoxLayout(section)
-        section_layout.setContentsMargins(12, 12, 12, 12)
+        section_layout.setContentsMargins(0, 0, 0, 0)
         section_layout.setSpacing(8)
-
-        title = QLabel("报文重放")
-        title.setObjectName("SectionTitle")
 
         controls = QGridLayout()
         controls.setHorizontalSpacing(10)
@@ -274,11 +306,36 @@ class PacketConsoleWidget(QWidget):
         controls.addWidget(self.replay_plan_name_input, 2, 1)
         controls.addWidget(self.replay_direction_combo, 2, 2)
         controls.addWidget(self.replay_build_button, 2, 3)
+        controls.setColumnStretch(1, 1)
+        controls.setColumnStretch(2, 1)
 
-        section_layout.addWidget(title)
+        hint = QLabel("将捕获记录转成回放计划，或直接执行现有计划。")
+        hint.setObjectName("MetaLabel")
+        hint.setWordWrap(True)
+
+        section_layout.addWidget(hint)
         section_layout.addLayout(controls)
         section_layout.addWidget(self.replay_status_label)
+        section_layout.addStretch(1)
         return section
+
+    def _create_readonly_text_panel(self, placeholder: str) -> QTextEdit:
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlaceholderText(placeholder)
+        text_edit.setMinimumHeight(140)
+        text_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        return text_edit
+
+    def _wrap_labeled_panel(self, title: str, widget: QWidget) -> QWidget:
+        container = QWidget()
+        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(QLabel(title))
+        layout.addWidget(widget, 1)
+        return container
 
     def refresh(self) -> None:
         rows = self.inspector.rows()
