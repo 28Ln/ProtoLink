@@ -12,7 +12,6 @@ pytest.importorskip("PySide6.QtWidgets")
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDockWidget, QLabel
 
-from protolink import __version__
 from protolink.core.bootstrap import bootstrap_app_context
 from protolink.presentation import APPLICATION_TITLE
 from protolink.ui.main_window import ProtoLinkMainWindow
@@ -57,7 +56,7 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
     assert dock.widget() is window.packet_console_scroll
     assert window.packet_console_scroll.widget() is window.packet_console
     labels = [label.text() for label in window.findChildren(QLabel)]
-    assert any("版本" in text and __version__ in text for text in labels)
+    assert "Windows 桌面" in labels
     assert "当前项目" in labels
     assert "快速导航" in labels
     assert window.workspace_meta_label.text() == "日志、抓包与导出目录已准备，可通过悬停查看完整路径。"

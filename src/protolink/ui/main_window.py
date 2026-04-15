@@ -41,7 +41,6 @@ from protolink.catalog import build_module_catalog
 from protolink.core.models import FeatureModule
 from protolink.core.packet_inspector import PacketInspectorState
 from protolink.core.workspace import WorkspaceLayout
-from protolink import __version__
 from protolink.presentation import (
     APPLICATION_SUBTITLE,
     APPLICATION_TITLE,
@@ -553,7 +552,7 @@ class ProtoLinkMainWindow(QMainWindow):
             f"连接与采集 {area_counts.get('传输链路', 0)}",
             f"协议与分析 {area_counts.get('协议调试', 0) + area_counts.get('共享能力', 0)}",
             f"自动化与诊断 {area_counts.get('自动化', 0) + area_counts.get('运维诊断', 0)}",
-            f"版本 {__version__}",
+            "Windows 桌面",
         ]
 
         for index, text in enumerate(badges):
