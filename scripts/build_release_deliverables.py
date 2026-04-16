@@ -170,6 +170,7 @@ def _build_deliverables_manifest(
     lane_phase = None
     blocking_items: list[object] = []
     cutover_policy = native_installer_lane_receipt.get("cutover_policy", {})
+    policy_status = native_installer_lane_receipt.get("policy_status", {})
     if isinstance(cutover_policy, dict):
         lane_phase = cutover_policy.get("native_installer_lane_phase")
         raw_blocking_items = cutover_policy.get("blocking_items", [])
@@ -203,7 +204,9 @@ def _build_deliverables_manifest(
             if isinstance(native_installer_lane_receipt.get("stage_status", {}), dict)
             else None,
             "ready_for_release": native_installer_lane_receipt.get("ready_for_release"),
+            "policy_ready": policy_status.get("ready") if isinstance(policy_status, dict) else None,
         },
+        "native_installer_policy_status": policy_status,
         "included_entries": included_entries,
         "target_dir": str(target_dir),
     }

@@ -122,6 +122,9 @@ def execute_verify_release_deliverables(
     native_installer_lane_summary = _require_dict(
         manifest, "native_installer_lane_summary", label="Deliverables manifest"
     )
+    native_installer_policy_status = _require_dict(
+        manifest, "native_installer_policy_status", label="Deliverables manifest"
+    )
     included_entries = _require_list(manifest, "included_entries", label="Deliverables manifest")
     included_entry_names = {str(item) for item in included_entries}
 
@@ -207,6 +210,7 @@ def execute_verify_release_deliverables(
 
     receipt = _read_json_file(receipt_file, label="Native installer lane receipt")
     stage_status = _require_dict(receipt, "stage_status", label="Native installer lane receipt")
+    receipt_policy_status = _require_dict(receipt, "policy_status", label="Native installer lane receipt")
     cutover_policy = _require_dict(receipt, "cutover_policy", label="Native installer lane receipt")
     receipt_phase = _require_string(cutover_policy, "native_installer_lane_phase", label="Native installer lane receipt")
     receipt_blocking_items = cutover_policy.get("blocking_items")
@@ -246,8 +250,16 @@ def execute_verify_release_deliverables(
         raise DeliveryVerificationError("Deliverables manifest and native installer lane receipt must provide boolean ready_for_release.")
     if summary_ready != receipt_ready:
         raise DeliveryVerificationError("Deliverables manifest native installer lane summary.ready_for_release does not match the receipt.")
-    if require_native_ready and not receipt_ready:
-        raise DeliveryVerificationError("Native installer lane is not ready_for_release for these deliverables.")
+    summary_policy_ready = native_installer_lane_summary.get("policy_ready")
+    receipt_policy_ready = receipt_policy_status.get("ready")
+    if not isinstance(summary_policy_ready, bool) or not isinstance(receipt_policy_ready, bool):
+        raise DeliveryVerificationError("Deliverables manifest and native installer lane receipt must provide boolean policy_ready.")
+    if summary_policy_ready != receipt_policy_ready:
+        raise DeliveryVerificationError("Deliverables manifest native installer lane summary.policy_ready does not match the receipt.")
+    if native_installer_policy_status != receipt_policy_status:
+        raise DeliveryVerificationError("Deliverables manifest native installer policy status does not match the receipt.")
+    if require_native_ready and not receipt_policy_ready:
+        raise DeliveryVerificationError("Native installer policy is not ready for these deliverables.")
     for receipt_key, policy_key in (
         ("policy_id", "policy_id"),
         ("policy_format_version", "format_version"),
@@ -282,6 +294,8 @@ def execute_verify_release_deliverables(
                 "lifecycle_contract_ready": stage_status.get("lifecycle_contract_ready"),
                 "toolchain_ready": stage_status.get("toolchain_ready"),
                 "ready_for_release": receipt_ready,
+                "policy_ready": receipt_policy_ready,
+                "policy_status": receipt_policy_status,
             },
         },
     }

@@ -146,12 +146,142 @@ def _native_installer_lane_phase(stage_status: dict[str, bool]) -> str:
     return "probe-failed"
 
 
+def _build_policy_status(
+    *,
+    policy: dict[str, object],
+    stage_status: dict[str, bool],
+    scaffold_build: dict[str, object],
+) -> dict[str, object]:
+    payload = policy["payload"]
+    verification_expectations = tuple(
+        str(item).strip()
+        for item in scaffold_build.get("verification_expectations", [])
+        if isinstance(item, str) and str(item).strip()
+    )
+    required_commands = tuple(policy["required_commands"])
+    missing_required_commands = [command for command in required_commands if command not in verification_expectations]
+
+    installer_archive_file = scaffold_build.get("installer_archive_file")
+    rollback_artifact_present = isinstance(installer_archive_file, str) and Path(installer_archive_file).exists()
+
+    sections: dict[str, dict[str, object]] = {}
+
+    signing_required = bool(payload["signing"]["required"])
+    signing_blocking_items: list[str] = []
+    approved_certificate_evidence_present = False
+    if signing_required:
+        if not stage_status.get("signature_verified", False):
+            signing_blocking_items.append("signature_not_verified")
+        elif bool(payload["signing"]["approved_certificate_required"]) and not approved_certificate_evidence_present:
+            signing_blocking_items.append("approved_certificate_evidence_missing")
+    sections["signing"] = {
+        "required": signing_required,
+        "ready": not signing_blocking_items,
+        "blocking_items": signing_blocking_items,
+        "signature_verified": bool(stage_status.get("signature_verified", False)),
+        "approved_certificate_evidence_present": approved_certificate_evidence_present,
+    }
+
+    timestamp_required = bool(payload["timestamp"]["required"])
+    timestamp_blocking_items: list[str] = []
+    approved_timestamp_evidence_present = False
+    if timestamp_required:
+        if not stage_status.get("signature_verified", False):
+            timestamp_blocking_items.append("signature_not_verified")
+        elif bool(payload["timestamp"]["approved_service_required"]) and not approved_timestamp_evidence_present:
+            timestamp_blocking_items.append("approved_timestamp_evidence_missing")
+    sections["timestamp"] = {
+        "required": timestamp_required,
+        "ready": not timestamp_blocking_items,
+        "blocking_items": timestamp_blocking_items,
+        "signature_verified": bool(stage_status.get("signature_verified", False)),
+        "approved_timestamp_evidence_present": approved_timestamp_evidence_present,
+    }
+
+    approvals_blocking_items: list[str] = []
+    release_owner_approval_present = False
+    signing_operation_approval_present = False
+    if bool(payload["approvals"]["release_owner_approval_required"]) and not release_owner_approval_present:
+        approvals_blocking_items.append("release_owner_approval_missing")
+    if bool(payload["approvals"]["signing_operation_approval_required"]) and not signing_operation_approval_present:
+        approvals_blocking_items.append("signing_operation_approval_missing")
+    sections["approvals"] = {
+        "required": True,
+        "ready": not approvals_blocking_items,
+        "blocking_items": approvals_blocking_items,
+        "release_owner_approval_present": release_owner_approval_present,
+        "signing_operation_approval_present": signing_operation_approval_present,
+    }
+
+    rollback_blocking_items: list[str] = []
+    rollback_validation_present = False
+    if bool(payload["rollback"]["bundled_runtime_artifact_required"]) and not rollback_artifact_present:
+        rollback_blocking_items.append("bundled_runtime_artifact_missing")
+    if bool(payload["rollback"]["rollback_validation_required"]) and not rollback_validation_present:
+        rollback_blocking_items.append("rollback_validation_evidence_missing")
+    sections["rollback"] = {
+        "required": True,
+        "ready": not rollback_blocking_items,
+        "blocking_items": rollback_blocking_items,
+        "bundled_runtime_artifact_present": rollback_artifact_present,
+        "rollback_validation_evidence_present": rollback_validation_present,
+    }
+
+    clean_machine_required = bool(payload["clean_machine_validation"]["required"])
+    clean_machine_validation_present = False
+    clean_machine_blocking_items: list[str] = []
+    if clean_machine_required and missing_required_commands:
+        clean_machine_blocking_items.append("required_commands_not_declared")
+    if clean_machine_required and not clean_machine_validation_present:
+        clean_machine_blocking_items.append("clean_machine_validation_evidence_missing")
+    sections["clean_machine_validation"] = {
+        "required": clean_machine_required,
+        "ready": not clean_machine_blocking_items,
+        "blocking_items": clean_machine_blocking_items,
+        "required_commands": list(required_commands),
+        "missing_required_commands": missing_required_commands,
+        "verification_expectations": list(verification_expectations),
+        "validation_evidence_present": clean_machine_validation_present,
+    }
+
+    blocking_items = [
+        f"{section}.{blocking_item}"
+        for section, section_status in sections.items()
+        for blocking_item in section_status["blocking_items"]
+    ]
+    ready = all(bool(section_status["ready"]) for section_status in sections.values())
+
+    next_action = None
+    if not ready:
+        if sections["signing"]["blocking_items"]:
+            next_action = (
+                "complete_msi_signing"
+                if "signature_not_verified" in sections["signing"]["blocking_items"]
+                else "record_signing_certificate_evidence"
+            )
+        elif sections["timestamp"]["blocking_items"]:
+            next_action = "record_timestamp_evidence"
+        elif sections["approvals"]["blocking_items"]:
+            next_action = "record_release_approvals"
+        elif sections["rollback"]["blocking_items"]:
+            next_action = "record_rollback_evidence"
+        elif sections["clean_machine_validation"]["blocking_items"]:
+            next_action = "record_clean_machine_validation"
+
+    return {
+        "ready": ready,
+        "blocking_items": blocking_items,
+        "next_action": next_action,
+        "sections": sections,
+    }
+
+
 def _build_cutover_policy(
     *,
     policy: dict[str, object],
     toolchain: dict[str, object],
     stage_status: dict[str, bool],
-    ready_for_release: bool,
+    policy_status: dict[str, object],
 ) -> dict[str, object]:
     probe_ready = bool(stage_status.get("scaffold_built", False) and stage_status.get("scaffold_verified", False))
     blocking_items: list[str] = []
@@ -192,10 +322,12 @@ def _build_cutover_policy(
         "current_canonical_release_lane": policy["current_canonical_release_lane"],
         "native_installer_lane_phase": _native_installer_lane_phase(stage_status),
         "probe_ready": probe_ready,
-        "cutover_ready": ready_for_release,
+        "cutover_ready": bool(policy_status["ready"]),
         "blocking_items": blocking_items,
         "next_action": next_action,
         "manual_cutover_requirements": list(policy["manual_cutover_requirements"]),
+        "policy_ready": bool(policy_status["ready"]),
+        "policy_blocking_items": list(policy_status["blocking_items"]),
     }
 
 
@@ -245,11 +377,16 @@ def execute_native_installer_lane(
         "signature_verified": bool(signature_verify and signature_verify.get("ok")),
     }
     ready_for_release = all(stage_status.values())
+    policy_status = _build_policy_status(
+        policy=policy,
+        stage_status=stage_status,
+        scaffold_build=scaffold_build,
+    )
     cutover_policy = _build_cutover_policy(
         policy=policy,
         toolchain=toolchain,
         stage_status=stage_status,
-        ready_for_release=ready_for_release,
+        policy_status=policy_status,
     )
 
     result = {
@@ -258,6 +395,7 @@ def execute_native_installer_lane(
         "temporary_root": str(temp_root) if temp_root is not None else None,
         "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
         "stage_status": stage_status,
+        "policy_status": policy_status,
         "cutover_policy": cutover_policy,
         "toolchain": toolchain,
         "scaffold_build": scaffold_build,
@@ -265,6 +403,7 @@ def execute_native_installer_lane(
         "msi_build": msi_build,
         "signature_verify": signature_verify,
         "ready_for_release": ready_for_release,
+        "policy_ready": bool(policy_status["ready"]),
     }
 
     if require_toolchain and not bool(toolchain.get("ready", False)):

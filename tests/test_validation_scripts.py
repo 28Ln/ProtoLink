@@ -286,10 +286,16 @@ def test_execute_native_installer_lane_handles_missing_toolchain_with_structured
     assert result['stage_status']['toolchain_ready'] is False
     assert 'native_installer_manifest' not in result['scaffold_build']
     assert result['ready_for_release'] is False
+    assert result['policy_ready'] is False
+    assert result['policy_status']['ready'] is False
+    assert result['policy_status']['next_action'] == 'complete_msi_signing'
+    assert result['policy_status']['sections']['approvals']['ready'] is False
+    assert result['policy_status']['sections']['clean_machine_validation']['ready'] is False
     assert result['cutover_policy']['current_canonical_release_lane'] == 'bundled-runtime-installer-package'
     assert result['cutover_policy']['native_installer_lane_phase'] == 'probe-only'
     assert result['cutover_policy']['probe_ready'] is True
     assert result['cutover_policy']['cutover_ready'] is False
+    assert result['cutover_policy']['policy_ready'] is False
     assert result['cutover_policy']['blocking_items'] == ['missing_wix', 'missing_signtool']
     assert result['cutover_policy']['next_action'] == 'install_wix_and_signtool'
     assert 'documented_release_approval' in result['cutover_policy']['manual_cutover_requirements']
@@ -311,6 +317,18 @@ def test_main_writes_native_installer_lane_receipt_file(tmp_path: Path, capsys) 
             'lifecycle_contract_ready': True,
             'msi_built': False,
             'signature_verified': False,
+        },
+        'policy_status': {
+            'ready': False,
+            'blocking_items': ['approvals.release_owner_approval_missing'],
+            'next_action': 'record_release_approvals',
+            'sections': {
+                'approvals': {
+                    'required': True,
+                    'ready': False,
+                    'blocking_items': ['release_owner_approval_missing'],
+                },
+            },
         },
         'cutover_policy': {
             'current_canonical_release_lane': 'bundled-runtime-installer-package',
@@ -411,6 +429,7 @@ def test_execute_native_installer_lane_reports_contract_blocker_before_toolchain
 
     assert result['stage_status']['scaffold_verified'] is True
     assert result['stage_status']['lifecycle_contract_ready'] is False
+    assert result['policy_status']['ready'] is False
     assert result['cutover_policy']['native_installer_lane_phase'] == 'contract-incomplete'
     assert result['cutover_policy']['blocking_items'] == ['lifecycle_contract_incomplete', 'missing_wix', 'missing_signtool']
     assert result['cutover_policy']['next_action'] == 'repair_lifecycle_contract'
@@ -456,6 +475,7 @@ def test_execute_native_installer_lane_reports_unsigned_msi_cutover_blocker(tmp_
     assert result['stage_status']['msi_built'] is True
     assert result['stage_status']['lifecycle_contract_ready'] is True
     assert result['stage_status']['signature_verified'] is False
+    assert result['policy_status']['ready'] is False
     assert result['cutover_policy']['native_installer_lane_phase'] == 'unsigned-msi'
     assert result['cutover_policy']['blocking_items'] == ['signature_not_verified']
     assert result['cutover_policy']['next_action'] == 'sign_and_verify_msi'
@@ -604,6 +624,18 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
                 'toolchain_ready': False,
                 'lifecycle_contract_ready': True,
             },
+            'policy_status': {
+                'ready': False,
+                'blocking_items': ['approvals.release_owner_approval_missing'],
+                'next_action': 'record_release_approvals',
+                'sections': {
+                    'approvals': {
+                        'required': True,
+                        'ready': False,
+                        'blocking_items': ['release_owner_approval_missing'],
+                    },
+                },
+            },
             'cutover_policy': {
                 'policy_file': policy_file.name,
                 'policy_id': policy['policy_id'],
@@ -612,6 +644,8 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
                 'current_canonical_release_lane': policy['current_canonical_release_lane'],
                 'native_installer_lane_phase': 'probe-only',
                 'blocking_items': ['missing_wix', 'missing_signtool'],
+                'policy_ready': False,
+                'policy_blocking_items': ['approvals.release_owner_approval_missing'],
                 'manual_cutover_requirements': list(policy['manual_cutover_requirements']),
             },
             'ready_for_release': False,
@@ -635,6 +669,8 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
     assert Path(result['native_installer_cutover_policy_file']).exists()
     assert Path(result['deliverables_manifest_file']).exists()
     assert result['deliverables_manifest']['native_installer_lane_summary']['phase'] == 'probe-only'
+    assert result['deliverables_manifest']['native_installer_lane_summary']['policy_ready'] is False
+    assert result['deliverables_manifest']['native_installer_policy_status']['ready'] is False
     assert result['deliverables_manifest']['checksums']['protolink-0.2.5-installer-package.zip']
     assert result['deliverables_manifest']['checksums']['native-installer-lane-receipt.json']
     assert result['deliverables_manifest']['checksums'][policy_file.name]
@@ -666,6 +702,18 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
             'msi_built': False,
             'signature_verified': False,
         },
+        'policy_status': {
+            'ready': False,
+            'blocking_items': ['approvals.release_owner_approval_missing'],
+            'next_action': 'record_release_approvals',
+            'sections': {
+                'approvals': {
+                    'required': True,
+                    'ready': False,
+                    'blocking_items': ['release_owner_approval_missing'],
+                },
+            },
+        },
         'cutover_policy': {
             'policy_file': policy_file.name,
             'policy_id': policy['policy_id'],
@@ -678,6 +726,8 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
             'blocking_items': ['missing_wix', 'missing_signtool'],
             'next_action': 'install_wix_and_signtool',
             'manual_cutover_requirements': list(policy['manual_cutover_requirements']),
+            'policy_ready': False,
+            'policy_blocking_items': ['approvals.release_owner_approval_missing'],
         },
         'ready_for_release': False,
     }
@@ -719,7 +769,9 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
             'lifecycle_contract_ready': True,
             'toolchain_ready': False,
             'ready_for_release': False,
+            'policy_ready': False,
         },
+        'native_installer_policy_status': receipt['policy_status'],
         'included_entries': [
             'deliverables-manifest.json',
             'native-installer-lane-receipt.json',
@@ -751,6 +803,7 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
     assert result['native_installer_lane_phase'] == 'probe-only'
     assert result['install_smoke_present'] is False
     assert Path(result['receipt_file']).exists()
+    assert result['checks']['native_installer_lane']['policy_ready'] is False
 
 
 def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tmp_path: Path) -> None:
@@ -778,6 +831,18 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
             'msi_built': False,
             'signature_verified': False,
         },
+        'policy_status': {
+            'ready': False,
+            'blocking_items': ['approvals.release_owner_approval_missing'],
+            'next_action': 'record_release_approvals',
+            'sections': {
+                'approvals': {
+                    'required': True,
+                    'ready': False,
+                    'blocking_items': ['release_owner_approval_missing'],
+                },
+            },
+        },
         'cutover_policy': {
             'policy_file': policy_file.name,
             'policy_id': policy['policy_id'],
@@ -790,6 +855,8 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
             'blocking_items': ['missing_wix', 'missing_signtool'],
             'next_action': 'install_wix_and_signtool',
             'manual_cutover_requirements': list(policy['manual_cutover_requirements']),
+            'policy_ready': False,
+            'policy_blocking_items': ['approvals.release_owner_approval_missing'],
         },
         'ready_for_release': False,
     }
@@ -836,7 +903,9 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
                     'lifecycle_contract_ready': True,
                     'toolchain_ready': False,
                     'ready_for_release': False,
+                    'policy_ready': False,
                 },
+                'native_installer_policy_status': receipt['policy_status'],
                 'included_entries': [
                     'deliverables-manifest.json',
                     'native-installer-lane-receipt.json',
@@ -895,6 +964,18 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
             'msi_built': False,
             'signature_verified': False,
         },
+        'policy_status': {
+            'ready': False,
+            'blocking_items': ['approvals.release_owner_approval_missing'],
+            'next_action': 'record_release_approvals',
+            'sections': {
+                'approvals': {
+                    'required': True,
+                    'ready': False,
+                    'blocking_items': ['release_owner_approval_missing'],
+                },
+            },
+        },
         'cutover_policy': {
             'policy_file': policy_file.name,
             'policy_id': policy['policy_id'],
@@ -907,6 +988,8 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
             'blocking_items': ['missing_wix', 'missing_signtool'],
             'next_action': 'install_wix_and_signtool',
             'manual_cutover_requirements': list(policy['manual_cutover_requirements']),
+            'policy_ready': False,
+            'policy_blocking_items': ['approvals.release_owner_approval_missing'],
         },
         'ready_for_release': False,
     }
@@ -953,7 +1036,9 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
                     'lifecycle_contract_ready': True,
                     'toolchain_ready': False,
                     'ready_for_release': False,
+                    'policy_ready': False,
                 },
+                'native_installer_policy_status': receipt['policy_status'],
                 'included_entries': [
                     'deliverables-manifest.json',
                     'native-installer-lane-receipt.json',
@@ -983,7 +1068,7 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
 
     ns['execute_verify_release_deliverables'].__globals__['_run_json'] = fake_run_json
 
-    with pytest.raises(ns['DeliveryVerificationError'], match='ready_for_release'):
+    with pytest.raises(ns['DeliveryVerificationError'], match='policy is not ready'):
         ns['execute_verify_release_deliverables'](target_dir=target_dir, require_native_ready=True)
 
 
@@ -1010,6 +1095,18 @@ def test_execute_verify_release_deliverables_rejects_missing_archived_policy(tmp
             'msi_built': False,
             'signature_verified': False,
         },
+        'policy_status': {
+            'ready': False,
+            'blocking_items': ['approvals.release_owner_approval_missing'],
+            'next_action': 'record_release_approvals',
+            'sections': {
+                'approvals': {
+                    'required': True,
+                    'ready': False,
+                    'blocking_items': ['release_owner_approval_missing'],
+                },
+            },
+        },
         'cutover_policy': {
             'policy_file': 'NATIVE_INSTALLER_CUTOVER_POLICY.json',
             'policy_id': 'native-installer-cutover-policy',
@@ -1021,6 +1118,8 @@ def test_execute_verify_release_deliverables_rejects_missing_archived_policy(tmp
             'cutover_ready': False,
             'blocking_items': ['missing_wix', 'missing_signtool'],
             'next_action': 'install_wix_and_signtool',
+            'policy_ready': False,
+            'policy_blocking_items': ['approvals.release_owner_approval_missing'],
             'manual_cutover_requirements': [
                 'approved_code_signing_certificate',
                 'approved_rfc3161_timestamp_service',
@@ -1073,7 +1172,9 @@ def test_execute_verify_release_deliverables_rejects_missing_archived_policy(tmp
                     'lifecycle_contract_ready': True,
                     'toolchain_ready': False,
                     'ready_for_release': False,
+                    'policy_ready': False,
                 },
+                'native_installer_policy_status': receipt['policy_status'],
                 'included_entries': [
                     'deliverables-manifest.json',
                     'native-installer-lane-receipt.json',
