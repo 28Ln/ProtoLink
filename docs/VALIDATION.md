@@ -61,6 +61,7 @@ uv build
 - `run_full_test_suite.py` 以逐文件方式聚合 full-suite 真值，是当前正式的 pytest 基线入口。
 - `audit-plugin-manifests` 会静态审计 `workspace/plugins/*/manifest.json`；任何 invalid manifest 都会进入 `--release-preflight` 阻断。
 - `list-extension-descriptors` 只列出通过静态校验的扩展描述清单；`plan-extension-loading`、`load-enabled-extensions` 与 `release-preflight` 共同解释可装载状态、显式 Class A runtime execution 与正式交付门禁。
+- `audit_gui_layout.py` 当前在目标分辨率下返回 `highest_severity=clean`，dashboard 与报文分析台的已知布局压缩警告已收敛。
 
 ## Extension boundary verification
 

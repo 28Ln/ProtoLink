@@ -8,6 +8,7 @@
 - added runtime-loading coverage for lazy sibling imports, duplicate module-name isolation, and high-risk plugin non-auto-load behavior
 - wired controlled Class A runtime loading into release-preflight and failure evidence recording
 - made headless summary expose runtime gate counts without implicitly executing plugin code
+- cleared formal GUI audit warnings for the dashboard and packet-console delivery layout at target resolutions
 
 ## 0.2.5 - 2026-04-15
 

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QTabWidget,
@@ -65,7 +66,7 @@ from protolink.ui.udp_panel import UdpPanel
 
 WINDOW_EDGE_MARGIN = 6
 CONTENT_SPLITTER_DETAIL_WIDTH = 200
-PACKET_DOCK_TARGET_HEIGHT = 100
+PACKET_DOCK_TARGET_HEIGHT = 150
 
 
 class WindowTitleBar(QFrame):
@@ -433,19 +434,31 @@ class ProtoLinkMainWindow(QMainWindow):
         overview.setObjectName("MetaLabel")
         overview.setWordWrap(True)
 
-        directories = QLabel(
-            "\n".join(
-                (
-                    f"当前项目：{self._format_workspace_name(self.workspace.root)}",
-                    f"项目位置：{self._format_sidebar_path(self.workspace.root, keep_segments=3)}",
-                    "日志、抓包与导出目录会随操作自动归档；悬停可查看完整路径。",
-                )
-            )
-        )
+        directory_card = QFrame()
+        directory_card.setObjectName("WorkspaceCard")
+        directory_layout = QVBoxLayout(directory_card)
+        directory_layout.setContentsMargins(12, 12, 12, 12)
+        directory_layout.setSpacing(4)
+
+        directory_eyebrow = QLabel("当前项目")
+        directory_eyebrow.setObjectName("WorkspaceEyebrow")
+        directory_name = QLabel(self._format_workspace_name(self.workspace.root))
+        directory_name.setObjectName("WorkspaceTitle")
+        directories = QLabel(f"项目位置：{self._format_sidebar_path(self.workspace.root, keep_segments=3)}")
         directories.setObjectName("PathLabel")
-        directories.setWordWrap(True)
+        directories.setWordWrap(False)
+        directories.setMinimumHeight(36)
+        directories.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         directories.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         directories.setToolTip(self._workspace_paths_tooltip())
+        directory_hint = QLabel("日志、抓包与导出目录会随操作自动归档；悬停可查看完整路径。")
+        directory_hint.setObjectName("MetaLabel")
+        directory_hint.setWordWrap(True)
+
+        directory_layout.addWidget(directory_eyebrow)
+        directory_layout.addWidget(directory_name)
+        directory_layout.addWidget(directories)
+        directory_layout.addWidget(directory_hint)
 
         checklist = QTextEdit()
         checklist.setReadOnly(True)
@@ -462,7 +475,7 @@ class ProtoLinkMainWindow(QMainWindow):
 
         layout.addWidget(title)
         layout.addWidget(overview)
-        layout.addWidget(directories)
+        layout.addWidget(directory_card)
         layout.addWidget(checklist, 1)
         return dashboard
 
@@ -588,12 +601,6 @@ class ProtoLinkMainWindow(QMainWindow):
             replay_service=self.packet_replay_service,
             workspace=self.workspace,
         )
-        self.packet_console_scroll = QScrollArea()
-        self.packet_console_scroll.setObjectName("PanelScrollArea")
-        self.packet_console_scroll.setWidgetResizable(True)
-        self.packet_console_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.packet_console_scroll.setWidget(self.packet_console)
-
         self.packet_console_dock = QDockWidget("报文分析台", self)
         self.packet_console_dock.setObjectName("PacketInspectorDock")
         self.packet_console_dock.setAllowedAreas(
@@ -605,8 +612,8 @@ class ProtoLinkMainWindow(QMainWindow):
             QDockWidget.DockWidgetFeature.DockWidgetMovable
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
-        self.packet_console_dock.setMinimumHeight(92)
-        self.packet_console_dock.setWidget(self.packet_console_scroll)
+        self.packet_console_dock.setMinimumHeight(132)
+        self.packet_console_dock.setWidget(self.packet_console)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.packet_console_dock)
 
     def _apply_initial_workspace_layout(self) -> None:
@@ -619,7 +626,7 @@ class ProtoLinkMainWindow(QMainWindow):
         self.content_splitter.setSizes([splitter_width - detail_width, detail_width])
         self.resizeDocks(
             [self.packet_console_dock],
-            [max(92, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.14)))],
+            [max(132, min(PACKET_DOCK_TARGET_HEIGHT, int(self.height() * 0.22)))],
             Qt.Orientation.Vertical,
         )
         if self.width() <= 1366 and self._module_context_visible:

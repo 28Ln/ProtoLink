@@ -24,6 +24,7 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 - 已具备基于 `registry.json` 的 controlled loading plan 与显式 Class A runtime loading CLI
 - `uv run protolink --release-preflight` 已纳入 enabled Class A runtime load gate，并在 load_failed 时写入 failure evidence
 - 当前 Class B 仍为 `review_required`，Class C 仍不进入自动执行范围
+- GUI formal audit 已在目标分辨率下达到 `highest_severity=clean`
 
 ## 当前验证快照
 

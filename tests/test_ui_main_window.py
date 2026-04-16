@@ -53,8 +53,7 @@ def test_main_window_exposes_packet_console_as_dock(qapp: QApplication, tmp_path
 
     assert dock is not None
     assert dock.windowTitle() == "报文分析台"
-    assert dock.widget() is window.packet_console_scroll
-    assert window.packet_console_scroll.widget() is window.packet_console
+    assert dock.widget() is window.packet_console
     labels = [label.text() for label in window.findChildren(QLabel)]
     hero_badges = [label.text() for label in window.findChildren(QLabel) if label.objectName() == "HeroBadge"]
     assert len(hero_badges) == 3

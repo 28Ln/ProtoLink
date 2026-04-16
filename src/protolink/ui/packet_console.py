@@ -63,7 +63,7 @@ class PacketConsoleWidget(QWidget):
 
     def _build_ui(self) -> None:
         self.setObjectName("PacketConsoleWidget")
-        self.setMinimumHeight(190)
+        self.setMinimumHeight(148)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         layout = QVBoxLayout(self)

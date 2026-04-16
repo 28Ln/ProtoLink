@@ -603,16 +603,18 @@ def _audit_packet_console(window, *, screenshot_dir: Path, resolution_label: str
     screenshot_file = screenshot_dir / resolution_label / "packet-console.png"
     _capture_widget_image(window.packet_console_dock, screenshot_file)
     root_widget = window.packet_console
-    overflow_summary = _collect_overflow_summary(root_widget, viewport_height=int(window.packet_console_scroll.viewport().height()))
-    overflow_summary = _merge_wrapper_scroll_metrics(
-        overflow_summary,
-        wrapper_descriptor=_widget_descriptor(window.packet_console_scroll),
-        viewport_descriptor=_rect_payload(window.packet_console_scroll.viewport().geometry()),
-        scrollbars={
-            "vertical_maximum": int(window.packet_console_scroll.verticalScrollBar().maximum()),
-            "horizontal_maximum": int(window.packet_console_scroll.horizontalScrollBar().maximum()),
-        },
-    )
+    overflow_summary = _collect_overflow_summary(root_widget)
+    wrapper_scroll = getattr(window, "packet_console_scroll", None)
+    if wrapper_scroll is not None:
+        overflow_summary = _merge_wrapper_scroll_metrics(
+            overflow_summary,
+            wrapper_descriptor=_widget_descriptor(wrapper_scroll),
+            viewport_descriptor=_rect_payload(wrapper_scroll.viewport().geometry()),
+            scrollbars={
+                "vertical_maximum": int(wrapper_scroll.verticalScrollBar().maximum()),
+                "horizontal_maximum": int(wrapper_scroll.horizontalScrollBar().maximum()),
+            },
+        )
     return {
         "screenshot_file": str(screenshot_file.resolve()),
         "widget": _widget_descriptor(window.packet_console_dock),
