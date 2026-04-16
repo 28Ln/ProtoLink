@@ -198,6 +198,22 @@ def _write_valid_plugin_manifest(workspace, *, plugin_dir_name: str = "bench-plu
     return manifest_file
 
 
+def _write_plugin_runtime_module(
+    workspace,
+    *,
+    plugin_dir_name: str = "bench-plugin",
+    package_name: str = "bench_plugin",
+    module_source: str,
+) -> Path:
+    plugin_dir = workspace.plugins / plugin_dir_name
+    package_dir = plugin_dir / package_name
+    package_dir.mkdir(parents=True, exist_ok=True)
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    module_file = package_dir / "plugin.py"
+    module_file.write_text(module_source, encoding="utf-8")
+    return module_file
+
+
 def _write_extension_registry_config(
     workspace,
     *,
@@ -610,14 +626,12 @@ def test_main_plans_extension_loading_blocks_enabled_plugins_when_registry_is_in
 def test_main_loads_enabled_extensions(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
-    plugin_dir = workspace.plugins / "bench-plugin"
-    package_dir = plugin_dir / "bench_plugin"
-    package_dir.mkdir(parents=True)
-    (package_dir / "__init__.py").write_text("", encoding="utf-8")
-    (package_dir / "plugin.py").write_text(
-        "def register(context):\n"
-        "    return {'plugin_id': context.plugin_id, 'workspace_root': str(context.workspace_root)}\n",
-        encoding="utf-8",
+    _write_plugin_runtime_module(
+        workspace,
+        module_source=(
+            "def register(context):\n"
+            "    return {'plugin_id': context.plugin_id, 'workspace_root': str(context.workspace_root)}\n"
+        ),
     )
     _write_valid_plugin_manifest(workspace)
     _write_extension_registry_config(workspace, enabled_plugin_ids=["bench-plugin"])
@@ -639,14 +653,44 @@ def test_main_loads_enabled_extensions(monkeypatch, tmp_path, capsys) -> None:
     assert payload["runtime_load_report"]["entries"][0]["returned_payload"]["workspace_root"] == str(workspace.root)
 
 
+def test_main_records_extension_runtime_failure_evidence_when_loading_extensions(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_plugin_runtime_module(
+        workspace,
+        module_source=(
+            "def register():\n"
+            "    raise RuntimeError('plugin boom')\n"
+        ),
+    )
+    _write_valid_plugin_manifest(workspace)
+    _write_extension_registry_config(workspace, enabled_plugin_ids=["bench-plugin"])
+
+    exit_code = main(["--load-enabled-extensions"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    evidence_file, evidence_entries, evidence_error = load_runtime_failure_evidence(workspace.logs)
+
+    assert exit_code == int(CliExitCode.USER_ERROR)
+    assert payload["runtime_load_report"]["ready"] is False
+    assert payload["runtime_load_report"]["failed_count"] == 1
+    assert payload["runtime_load_report"]["entries"][0]["effective_state"] == "load_failed"
+    assert evidence_error is None
+    assert evidence_file == default_runtime_failure_evidence_path(workspace.logs)
+    assert evidence_entries[-1]["code"] == "extension_runtime_load_failed"
+    assert evidence_entries[-1]["details"]["plugin_id"] == "bench-plugin"
+    assert "RuntimeError: plugin boom" in evidence_entries[-1]["details"]["reasons"]
+
+
 def test_main_rejects_loading_extensions_when_review_is_required(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
-    plugin_dir = workspace.plugins / "review-plugin"
-    package_dir = plugin_dir / "review_plugin"
-    package_dir.mkdir(parents=True)
-    (package_dir / "__init__.py").write_text("", encoding="utf-8")
-    (package_dir / "plugin.py").write_text("def register():\n    return None\n", encoding="utf-8")
+    _write_plugin_runtime_module(
+        workspace,
+        plugin_dir_name="review-plugin",
+        package_name="review_plugin",
+        module_source="def register():\n    return None\n",
+    )
     _write_valid_plugin_manifest(
         workspace,
         plugin_dir_name="review-plugin",
@@ -675,11 +719,10 @@ def test_main_rejects_loading_extensions_when_review_is_required(monkeypatch, tm
 def test_main_does_not_auto_load_high_risk_enabled_extensions(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
-    plugin_dir = workspace.plugins / "bench-plugin"
-    package_dir = plugin_dir / "bench_plugin"
-    package_dir.mkdir(parents=True)
-    (package_dir / "__init__.py").write_text("", encoding="utf-8")
-    (package_dir / "plugin.py").write_text("def register():\n    return None\n", encoding="utf-8")
+    _write_plugin_runtime_module(
+        workspace,
+        module_source="def register():\n    return None\n",
+    )
     _write_valid_plugin_manifest(workspace, capabilities=["ui_surface"])
     _write_extension_registry_config(
         workspace,
@@ -813,6 +856,135 @@ def test_main_release_preflight_rejects_blocked_extension_loading_policy(monkeyp
     assert payload["ready"] is False
 
 
+def test_main_release_preflight_executes_enabled_class_a_extensions(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    _write_plugin_runtime_module(
+        workspace,
+        module_source=(
+            "def register(context):\n"
+            "    return {'plugin_id': context.plugin_id, 'workspace_root': str(context.workspace_root)}\n"
+        ),
+    )
+    _write_valid_plugin_manifest(workspace)
+    _write_extension_registry_config(workspace, enabled_plugin_ids=["bench-plugin"])
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert payload["ready"] is True
+    assert payload["blocking_items"] == []
+    assert payload["extension_runtime_load_ready"] is True
+    assert payload["extension_runtime_loaded_count"] == 1
+    assert payload["extension_runtime_load_report"]["entries"][0]["effective_state"] == "loaded"
+    assert payload["extension_runtime_load_report"]["entries"][0]["returned_payload"]["plugin_id"] == "bench-plugin"
+
+
+def test_main_release_preflight_rejects_review_required_extension_runtime(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    _write_plugin_runtime_module(
+        workspace,
+        plugin_dir_name="review-plugin",
+        package_name="review_plugin",
+        module_source="def register():\n    return None\n",
+    )
+    _write_valid_plugin_manifest(
+        workspace,
+        plugin_dir_name="review-plugin",
+        plugin_id="review-plugin",
+        capabilities=["read_only_diagnostic"],
+        entrypoint="review_plugin.plugin:register",
+    )
+    _write_extension_registry_config(workspace, enabled_plugin_ids=["review-plugin"])
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "extension_runtime_review_required" in payload["blocking_items"]
+    assert payload["extension_runtime_load_ready"] is False
+    assert payload["extension_runtime_failed_count"] == 0
+    assert payload["extension_runtime_load_report"]["entries"][0]["effective_state"] == "review_required"
+    assert payload["ready"] is False
+
+
+def test_main_release_preflight_rejects_high_risk_enabled_extension_runtime(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    _write_plugin_runtime_module(
+        workspace,
+        module_source="def register():\n    return None\n",
+    )
+    _write_valid_plugin_manifest(workspace, capabilities=["ui_surface"])
+    _write_extension_registry_config(
+        workspace,
+        enabled_plugin_ids=["bench-plugin"],
+        allow_high_risk_plugins=True,
+    )
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "extension_runtime_high_risk_not_supported" in payload["blocking_items"]
+    assert payload["extension_runtime_load_ready"] is False
+    assert payload["extension_runtime_attempted_count"] == 0
+    assert payload["extension_runtime_load_report"]["entries"][0]["effective_state"] == "high_risk_enabled"
+    assert payload["ready"] is False
+
+
+def test_main_release_preflight_rejects_extension_runtime_load_failures(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_runtime_log(workspace)
+    _write_valid_capture(workspace)
+    _write_valid_serial_profile(workspace)
+    _write_plugin_runtime_module(
+        workspace,
+        module_source=(
+            "def register():\n"
+            "    raise RuntimeError('preflight boom')\n"
+        ),
+    )
+    _write_valid_plugin_manifest(workspace)
+    _write_extension_registry_config(workspace, enabled_plugin_ids=["bench-plugin"])
+    monkeypatch.setattr("protolink.app.run_ui_smoke_check", lambda: "smoke-check-ok")
+
+    exit_code = main(["--release-preflight"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    evidence_file, evidence_entries, evidence_error = load_runtime_failure_evidence(workspace.logs)
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "extension_runtime_load_failed" in payload["blocking_items"]
+    assert payload["extension_runtime_load_ready"] is False
+    assert payload["extension_runtime_failed_count"] == 1
+    assert payload["extension_runtime_load_report"]["entries"][0]["effective_state"] == "load_failed"
+    assert evidence_error is None
+    assert evidence_file == default_runtime_failure_evidence_path(workspace.logs)
+    assert evidence_entries[-1]["code"] == "extension_runtime_load_failed"
+    assert evidence_entries[-1]["details"]["plugin_id"] == "bench-plugin"
+    assert "RuntimeError: preflight boom" in evidence_entries[-1]["details"]["reasons"]
+    assert payload["ready"] is False
+
+
 def test_main_headless_summary_reports_extension_descriptor_count(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     workspace = ensure_workspace_layout(tmp_path / "workspace")
@@ -836,6 +1008,26 @@ def test_main_headless_summary_reports_extension_descriptor_count(monkeypatch, t
     assert "扩展描述：1" in captured.out
     assert "装载计划：1 requested / 0 blocked" in captured.out
     assert "装载评审：0 review" in captured.out
+    assert "运行门禁：1 eligible / 0 review / 0 high-risk" in captured.out
+
+
+def test_main_headless_summary_reports_high_risk_runtime_gate(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    workspace = ensure_workspace_layout(tmp_path / "workspace")
+    _write_valid_plugin_manifest(workspace, capabilities=["ui_surface"])
+    _write_extension_registry_config(
+        workspace,
+        enabled_plugin_ids=["bench-plugin"],
+        allow_high_risk_plugins=True,
+    )
+
+    exit_code = main(["--headless-summary"])
+    captured = capsys.readouterr()
+
+    assert exit_code == int(CliExitCode.OK)
+    assert "装载计划：1 requested / 0 blocked" in captured.out
+    assert "装载评审：0 review" in captured.out
+    assert "运行门禁：0 eligible / 0 review / 1 high-risk" in captured.out
 
 
 def test_main_release_preflight_rejects_junk_profile_and_capture_artifacts(monkeypatch, tmp_path, capsys) -> None:

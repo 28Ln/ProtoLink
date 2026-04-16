@@ -49,7 +49,7 @@ Last updated: 2026-04-15
 - Category: Extensibility
 - Trigger: 新增协议、插件或外部扩展需求进入主线
 - Impact: 扩展实现分叉，维护成本上升
-- Current control: 已具备正式 `EXTENSION_CONTRACT` 文档、workspace/plugins manifest discovery、静态校验、descriptor listing、loading plan 与显式 Class A runtime loading CLI
-- Evidence: 当前已进入 Class A 显式受控装载阶段，但 Class B / Class C runtime activation、自动激活、日志证据治理与 SDK 化仍未完成
-- Next action: 在 `PL-015` 中推进 runtime governance、Class B review workflow、failure evidence 与扩展生命周期治理
+- Current control: 已具备正式 `EXTENSION_CONTRACT` 文档、workspace/plugins manifest discovery、静态校验、descriptor listing、loading plan、显式 Class A runtime loading CLI 与 preflight runtime gate
+- Evidence: 当前已进入 Class A 显式受控装载阶段，并已纳入 release-preflight / failure evidence；但 Class B / Class C runtime activation、自动激活、生命周期治理与 SDK 化仍未完成
+- Next action: 在 `PL-015` 中推进 runtime governance、Class B review workflow、lifecycle model 与扩展生命周期治理
 - Residual risk: Medium

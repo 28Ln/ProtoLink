@@ -22,12 +22,13 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 - 已具备 `workspace/plugins/*/manifest.json` 的发现、静态校验、审计报告与 release-preflight 阻断
 - 已具备 valid manifest 到 extension descriptor registry 的受控列举边界
 - 已具备基于 `registry.json` 的 controlled loading plan 与显式 Class A runtime loading CLI
+- `uv run protolink --release-preflight` 已纳入 enabled Class A runtime load gate，并在 load_failed 时写入 failure evidence
 - 当前 Class B 仍为 `review_required`，Class C 仍不进入自动执行范围
 
 ## 当前验证快照
 
-- `uv run python scripts/run_full_test_suite.py` -> `350 passed`
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 350` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> `356 passed`
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 356` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
 - `python scripts/verify_dist_install.py --artifact-version 0.2.5` -> passed
@@ -42,7 +43,7 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 ### P1
 3. 定义签名与时间戳的受控发布流程
 4. 明确脚本与扩展边界，避免被误解为不受信执行环境
-5. 在显式 Class A runtime loading 基线之上推进日志证据、治理边界、Class B review workflow 与扩展契约
+5. 在 Class A runtime load 已进入 preflight gate 的基础上推进 lifecycle、Class B review workflow、Class C 执行边界与扩展契约
 6. 按 `docs/GUI_REFACTOR_TASKLIST.md` 完成 GUI 的最后一轮视觉收口、滚动层级收敛与产品化文案统一
 
 ### P2

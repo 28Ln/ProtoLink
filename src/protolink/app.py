@@ -533,6 +533,10 @@ def build_release_preflight_report(context) -> dict[str, object]:
     extension_registry_config = context.extension_registry_config
     extension_registry = context.extension_registry
     extension_loading_plan = context.extension_loading_plan
+    extension_runtime_load_report = _build_extension_runtime_load_report(
+        context,
+        record_failures=True,
+    )
     settings_invalid_backup_files = _invalid_config_backups(context.settings_layout.root, context.settings_layout.settings_file.name)
     workspace_invalid_backup_files = _invalid_config_backups(workspace.root, manifest_file.name)
     runtime_log_valid, runtime_log_line_count, runtime_log_parse_error = _inspect_workspace_log_jsonl(log_file)
@@ -607,6 +611,12 @@ def build_release_preflight_report(context) -> dict[str, object]:
         blocking_items.append("extension_registry_config_invalid")
     if extension_loading_plan.blocked_count > 0:
         blocking_items.append("extension_loading_policy_blocked")
+    if extension_runtime_load_report.failed_count > 0:
+        blocking_items.append("extension_runtime_load_failed")
+    if any(entry.effective_state == "review_required" for entry in extension_runtime_load_report.entries):
+        blocking_items.append("extension_runtime_review_required")
+    if any(entry.effective_state == "high_risk_enabled" for entry in extension_runtime_load_report.entries):
+        blocking_items.append("extension_runtime_high_risk_not_supported")
     return {
         "workspace": str(workspace.root),
         "manifest_file": str(manifest_file),
@@ -652,10 +662,60 @@ def build_release_preflight_report(context) -> dict[str, object]:
         "extension_descriptor_count": extension_registry.descriptor_count,
         "extension_loading_plan": extension_loading_plan.to_dict(),
         "extension_loading_blocked_count": extension_loading_plan.blocked_count,
+        "extension_runtime_load_report": extension_runtime_load_report.to_dict(),
+        "extension_runtime_load_ready": extension_runtime_load_report.ready,
+        "extension_runtime_attempted_count": extension_runtime_load_report.attempted_count,
+        "extension_runtime_loaded_count": extension_runtime_load_report.loaded_count,
+        "extension_runtime_failed_count": extension_runtime_load_report.failed_count,
         "smoke_check": smoke_result,
         "blocking_items": blocking_items,
         "ready": not blocking_items,
     }
+
+
+def _build_extension_runtime_load_report(
+    context: AppContext,
+    *,
+    record_failures: bool,
+):
+    report = load_enabled_extensions(
+        context.extension_registry,
+        context.extension_registry_config,
+        context.extension_loading_plan,
+        workspace_root=context.workspace.root,
+        app_version=__version__,
+    )
+    if record_failures:
+        _record_extension_runtime_load_failures(context, report)
+    return report
+
+
+def _record_extension_runtime_load_failures(context: AppContext, report) -> None:
+    for entry in report.entries:
+        if entry.effective_state != "load_failed":
+            continue
+        metadata = {
+            "plugin_id": entry.plugin_id,
+            "display_name": entry.display_name,
+            "effective_state": entry.effective_state,
+            "module_name": entry.module_name or "",
+            "callable_name": entry.callable_name or "",
+            "reasons": " | ".join(entry.reasons),
+        }
+        structured_entry = create_log_entry(
+            level=LogLevel.ERROR,
+            category="extension.runtime",
+            message=f"扩展 {entry.plugin_id} 受控装载失败",
+            metadata=metadata,
+        )
+        context.log_store.append(structured_entry)
+        context.event_bus.publish(structured_entry)
+        context.runtime_failure_evidence_recorder.append(
+            source="extension_runtime_loader",
+            code="extension_runtime_load_failed",
+            message=f"Extension '{entry.plugin_id}' failed to load during controlled runtime loading.",
+            details=metadata,
+        )
 
 
 def find_optional_latest_file(directory: Path) -> Path | None:
@@ -938,6 +998,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.headless_summary:
             modules = build_module_catalog()
             counts = Counter(module.status.value for module in modules)
+            extension_runtime_eligible_count = sum(
+                1
+                for entry in context.extension_loading_plan.entries
+                if entry.effective_state == "eligible_for_loading"
+            )
+            extension_runtime_high_risk_count = sum(
+                1
+                for entry in context.extension_loading_plan.entries
+                if entry.effective_state == "high_risk_enabled"
+            )
             print("ProtoLink")
             print(f"定位：{HEADLESS_GOAL}")
             print(f"工作区：{context.workspace.root}")
@@ -961,6 +1031,12 @@ def main(argv: list[str] | None = None) -> int:
                 f"{context.extension_loading_plan.blocked_count} blocked"
             )
             print(f"装载评审：{context.extension_loading_plan.review_required_count} review")
+            print(
+                "运行门禁："
+                f"{extension_runtime_eligible_count} eligible / "
+                f"{context.extension_loading_plan.review_required_count} review / "
+                f"{extension_runtime_high_risk_count} high-risk"
+            )
             return int(CliExitCode.OK)
 
         if args.audit_plugin_manifests:
@@ -988,12 +1064,9 @@ def main(argv: list[str] | None = None) -> int:
             return int(CliExitCode.OK)
 
         if args.load_enabled_extensions:
-            report = load_enabled_extensions(
-                context.extension_registry,
-                context.extension_registry_config,
-                context.extension_loading_plan,
-                workspace_root=context.workspace.root,
-                app_version=__version__,
+            report = _build_extension_runtime_load_report(
+                context,
+                record_failures=True,
             )
             print(
                 json.dumps(
