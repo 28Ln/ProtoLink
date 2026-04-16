@@ -1560,6 +1560,7 @@ def main(argv: list[str] | None = None) -> int:
                         "target_arch": result.target_arch,
                         "lifecycle_contract_ready": result.lifecycle_contract_ready,
                         "checked_contract_fields": list(result.checked_contract_fields),
+                        "integrity_checked_entries": list(result.integrity_checked_entries),
                     },
                     ensure_ascii=False,
                     indent=2,

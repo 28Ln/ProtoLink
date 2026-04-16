@@ -1008,6 +1008,9 @@ def test_materialize_native_installer_scaffold_creates_wix_sources_and_manifest(
     assert manifest["installer_package_file"] == "payload/installer-package.zip"
     assert manifest["wix_source_file"] == "ProtoLink.wxs"
     assert manifest["wix_include_file"] == "ProtoLink.Generated.wxi"
+    assert manifest["checksums"]["payload/installer-package.zip"] == hashlib.sha256(plan.installer_package_file.read_bytes()).hexdigest()
+    assert manifest["checksums"]["ProtoLink.wxs"] == hashlib.sha256(plan.wix_source_file.read_bytes()).hexdigest()
+    assert manifest["checksums"]["ProtoLink.Generated.wxi"] == hashlib.sha256(plan.wix_include_file.read_bytes()).hexdigest()
     assert "wix build ProtoLink.wxs -arch x64 -o ProtoLink.msi" in manifest["recommended_commands"]
     assert "ProtoLink.Generated.wxi" in plan.wix_source_file.read_text(encoding="utf-8")
     include_text = plan.wix_include_file.read_text(encoding="utf-8")
@@ -1040,6 +1043,7 @@ def test_verify_native_installer_scaffold_checks_required_files(tmp_path: Path) 
     assert result.lifecycle_contract_ready is True
     assert "install_scope" in result.checked_contract_fields
     assert "product_code_policy" in result.checked_contract_fields
+    assert result.integrity_checked_entries == ("payload/installer-package.zip", "ProtoLink.wxs", "ProtoLink.Generated.wxi")
 
 
 def test_verify_native_installer_scaffold_rejects_missing_lifecycle_contract_field(tmp_path: Path) -> None:
@@ -1083,6 +1087,9 @@ def test_verify_native_installer_scaffold_rejects_wix_contract_mismatch(tmp_path
         ),
         encoding="utf-8",
     )
+    manifest = json.loads(plan.manifest_file.read_text(encoding="utf-8"))
+    manifest["checksums"]["ProtoLink.wxs"] = hashlib.sha256(plan.wix_source_file.read_bytes()).hexdigest()
+    plan.manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
     try:
         verify_native_installer_scaffold(plan.package_dir)
@@ -1090,6 +1097,30 @@ def test_verify_native_installer_scaffold_rejects_wix_contract_mismatch(tmp_path
         assert "ProtoLinkInstallScope" in str(exc)
     else:
         raise AssertionError("Expected native installer scaffold WXS contract mismatch to be rejected.")
+
+
+def test_verify_native_installer_scaffold_rejects_tampered_include_checksum(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / "src" / "protolink").mkdir(parents=True)
+    (repo_root / "pyproject.toml").write_text("[project]\nname='protolink'\nversion='1.2.3'\n", encoding="utf-8")
+
+    context = bootstrap_app_context(tmp_path / "workspace-root", persist_settings=False)
+    installer_archive = context.workspace.exports / "installer-package.zip"
+    _write_installer_package_archive(installer_archive)
+    plan = build_native_installer_scaffold_plan(context.workspace, "native installer demo", installer_archive)
+    materialize_native_installer_scaffold(plan, repo_root)
+
+    plan.wix_include_file.write_text(
+        plan.wix_include_file.read_text(encoding="utf-8") + "\n  <!-- tampered -->\n",
+        encoding="utf-8",
+    )
+
+    try:
+        verify_native_installer_scaffold(plan.package_dir)
+    except ProtoLinkUserError as exc:
+        assert "checksum mismatch" in str(exc)
+    else:
+        raise AssertionError("Expected native installer scaffold include checksum mismatch to be rejected.")
 
 
 def test_verify_native_installer_toolchain_reports_missing_tools(monkeypatch) -> None:

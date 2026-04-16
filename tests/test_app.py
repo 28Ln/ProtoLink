@@ -1644,6 +1644,8 @@ def test_main_builds_native_installer_scaffold(monkeypatch, tmp_path, capsys) ->
     assert payload["native_installer_manifest"]["product_code_policy"] == "wix-auto-generated-at-build"
     assert payload["native_installer_manifest"]["wix_source_file"] == "ProtoLink.wxs"
     assert payload["native_installer_manifest"]["wix_include_file"] == "ProtoLink.Generated.wxi"
+    assert payload["native_installer_manifest"]["checksums"]["ProtoLink.wxs"]
+    assert payload["native_installer_manifest"]["checksums"]["ProtoLink.Generated.wxi"]
     assert payload["native_installer_manifest"]["installer_package_file"].startswith("payload/")
 
 
@@ -1672,6 +1674,7 @@ def test_main_verifies_native_installer_scaffold(monkeypatch, tmp_path, capsys) 
     assert payload["target_arch"] == "x64"
     assert payload["lifecycle_contract_ready"] is True
     assert "install_scope" in payload["checked_contract_fields"]
+    assert "ProtoLink.wxs" in payload["integrity_checked_entries"]
 
 
 def test_main_verifies_native_installer_toolchain_without_bootstrap(monkeypatch, capsys) -> None:

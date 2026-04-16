@@ -4,8 +4,8 @@ Last updated: 2026-04-16
 
 ## 当前验证基线
 
-- `uv run python scripts/run_full_test_suite.py` -> 364 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 364` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> 365 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 365` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest` -> passed
 - `uv run protolink --audit-plugin-manifests` -> passed
@@ -20,14 +20,14 @@ Last updated: 2026-04-16
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
 - `uv run protolink --smoke-check` -> `smoke-check-ok`
-- 当前 full-suite 快照：`364 passed`
+- 当前 full-suite 快照：`365 passed`
 
 ## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 364
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 365
 uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest
 uv run protolink --audit-plugin-manifests
 uv run protolink --list-extension-descriptors
@@ -61,6 +61,7 @@ uv build
 - 当前 `0.2.5` 正式发布门禁仍是 bundled-runtime 路线；`verify_native_installer_lane.py` 默认只输出 probe truth，不把 toolchain / signed MSI 作为当前 release blocker。
 - `verify_native_installer_lane.py` 默认会输出 `current_canonical_release_lane`、`native_installer_lane_phase`、`blocking_items`、`next_action`，用于解释 native installer 当前处于 probe、toolchain-ready、unsigned 或 signed-ready 的哪一阶段。
 - `uv run protolink --verify-native-installer-scaffold` 现在会校验 lifecycle contract，并要求 manifest / WiX source / WiX include 在 `install_scope`、`install_dir_name`、`upgrade_strategy`、`downgrade_error_message`、静默安装命令等字段上保持一致。
+- `uv run protolink --verify-native-installer-scaffold` 还会校验 manifest `checksums` 是否完整覆盖 `included_entries`，并验证 `ProtoLink.wxs`、`ProtoLink.Generated.wxi` 与 payload digest。
 - `verify_native_installer_lane.py` 现在会把 `lifecycle_contract_ready` 纳入 `stage_status`；contract 不完整时会输出 `contract-incomplete` phase 与 `repair_lifecycle_contract` next_action。
 - `verify_native_installer_lane.py` 现在支持 `--receipt-file <path>`，可把 lane truth 持久化为 JSON receipt。
 - `build_release_deliverables.py` 现在会在目标目录写出 `deliverables-manifest.json` 与 `native-installer-lane-receipt.json`。
@@ -118,6 +119,7 @@ python scripts/verify_native_installer_lane.py --require-signed
   4. `docs/RELEASE_CHECKLIST.md` 包含精确 flag 名称与发布前检查要求
   5. `scripts/verify_canonical_truth.py` 通过
   6. `--verify-native-installer-scaffold` 能校验 lifecycle / identity contract，而不只是 payload checksum
+  7. native installer scaffold manifest `checksums` 必须覆盖 `included_entries`
 
 ## 通过标准
 

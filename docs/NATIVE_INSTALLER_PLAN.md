@@ -140,6 +140,7 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
   - `downgrade_error_message`
   - `silent_install_command`
   - `silent_uninstall_command`
+  - `checksums` covering `ProtoLink.wxs` / `ProtoLink.Generated.wxi` / payload included entries
 
 ### Minimum acceptance
 
@@ -150,6 +151,7 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
 - 能被 canonical truth 检查
 - 不破坏当前 bundled-runtime 发布链
 - `--verify-native-installer-scaffold` 会校验 manifest、WiX source 与 WiX include 在 lifecycle / identity contract 上保持一致
+- `--verify-native-installer-scaffold` 会校验 included entries checksum，不接受仅凭文件存在通过
 
 ### Toolchain verification
 

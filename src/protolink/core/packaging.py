@@ -155,6 +155,7 @@ class NativeInstallerScaffoldVerificationResult:
     target_arch: str
     lifecycle_contract_ready: bool
     checked_contract_fields: tuple[str, ...]
+    integrity_checked_entries: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1920,6 +1921,11 @@ def materialize_native_installer_scaffold(
     )
 
     recommended_commands = _native_installer_recommended_commands()
+    checksums = {
+        installer_package_relative: _sha256_file(plan.installer_package_file),
+        plan.wix_source_file.name: _sha256_file(plan.wix_source_file),
+        plan.wix_include_file.name: _sha256_file(plan.wix_include_file),
+    }
     manifest = {
         "format_version": NATIVE_INSTALLER_SCAFFOLD_FORMAT_VERSION,
         "package_name": plan.package_name,
@@ -1940,10 +1946,11 @@ def materialize_native_installer_scaffold(
         "headless_summary_command": headless_summary_command,
         "installer_package_file": installer_package_relative,
         "installer_package_source": str(plan.installer_package_archive_file.resolve()),
-        "installer_package_checksum": _sha256_file(plan.installer_package_file),
+        "installer_package_checksum": checksums[installer_package_relative],
         "installer_package_manifest_file": installer_verification.installer_package_manifest_file,
         "wix_source_file": plan.wix_source_file.name,
         "wix_include_file": plan.wix_include_file.name,
+        "checksums": checksums,
         "recommended_commands": list(recommended_commands.values()),
         "verification_expectations": [
             silent_install_command,
@@ -2214,6 +2221,36 @@ def verify_native_installer_scaffold(scaffold_dir: Path) -> NativeInstallerScaff
         action=action,
         recovery=recovery,
     )
+    checksums = _require_manifest_checksums(
+        manifest,
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    included_entries_raw = manifest.get("included_entries")
+    if not isinstance(included_entries_raw, list) or not included_entries_raw:
+        raise ProtoLinkUserError(
+            "Native installer scaffold manifest is missing list field 'included_entries'.",
+            action=action,
+            recovery=recovery,
+        )
+    included_entries = tuple(
+        str(item).strip()
+        for item in included_entries_raw
+        if isinstance(item, str) and str(item).strip()
+    )
+    if len(included_entries) != len(included_entries_raw):
+        raise ProtoLinkUserError(
+            "Native installer scaffold manifest has invalid included_entries.",
+            action=action,
+            recovery=recovery,
+        )
+    if set(included_entries) != set(checksums):
+        raise ProtoLinkUserError(
+            "Native installer scaffold manifest checksums must exactly cover included_entries.",
+            action=action,
+            recovery=recovery,
+        )
 
     wix_source_path = _safe_receipt_member_path(
         scaffold_dir,
@@ -2261,6 +2298,33 @@ def verify_native_installer_scaffold(scaffold_dir: Path) -> NativeInstallerScaff
         artifact_label="Native installer scaffold manifest",
         recovery=recovery,
     )
+    _require_expected_checksum(
+        wix_source_path,
+        checksums.get(wix_source_file, ""),
+        action=action,
+        artifact_label="Native installer scaffold manifest",
+        recovery=recovery,
+    )
+    _require_expected_checksum(
+        wix_include_path,
+        checksums.get(wix_include_file, ""),
+        action=action,
+        artifact_label="Native installer scaffold manifest",
+        recovery=recovery,
+    )
+    _require_expected_checksum(
+        installer_package_path,
+        checksums.get(installer_package_file, ""),
+        action=action,
+        artifact_label="Native installer scaffold manifest",
+        recovery=recovery,
+    )
+    if checksums.get(installer_package_file) != installer_package_checksum:
+        raise ProtoLinkUserError(
+            "Native installer scaffold manifest installer_package_checksum does not match checksums entry.",
+            action=action,
+            recovery=recovery,
+        )
 
     wix_source_text = wix_source_path.read_text(encoding="utf-8")
     wix_include_text = wix_include_path.read_text(encoding="utf-8")
@@ -2296,6 +2360,7 @@ def verify_native_installer_scaffold(scaffold_dir: Path) -> NativeInstallerScaff
         target_arch=target_arch,
         lifecycle_contract_ready=True,
         checked_contract_fields=checked_contract_fields,
+        integrity_checked_entries=included_entries,
     )
 
 
