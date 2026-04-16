@@ -2,7 +2,7 @@
 
 ## Unreleased - 2026-04-16
 
-- raised full pytest baseline to `356 passed`
+- raised full pytest baseline to `358 passed`
 - formalized explicit Class A extension runtime loading via `--load-enabled-extensions`
 - tightened plugin manifest entrypoint validation to require `module:function` format
 - added runtime-loading coverage for lazy sibling imports, duplicate module-name isolation, and high-risk plugin non-auto-load behavior

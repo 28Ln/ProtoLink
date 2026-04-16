@@ -243,6 +243,13 @@ native installer 路线至少要具备以下验证：
 
 ### Release lane verification
 - 与现有 `verify_release_staging.py` 对齐，新增 native installer lane
+- native installer lane 脚本必须返回结构化门禁结果，至少包括：
+  - `lane_status`
+  - `blocking_items`
+  - `next_actions`
+  - `readiness.ready_for_build`
+  - `readiness.ready_for_signing`
+  - `readiness.ready_for_release`
 
 ## 9. Rollback boundary
 
