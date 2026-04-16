@@ -531,7 +531,7 @@ def test_execute_release_staging_reports_native_installer_lane(tmp_path: Path) -
             (install_dir / 'sp').mkdir(parents=True, exist_ok=True)
             (install_dir / '.protolink').mkdir(parents=True, exist_ok=True)
             (install_dir / 'workspace').mkdir(parents=True, exist_ok=True)
-            for file_name in ('INSTALL.ps1', 'Launch-ProtoLink.ps1', 'Launch-ProtoLink.bat'):
+            for file_name in ('INSTALL.ps1', 'Launch-ProtoLink.ps1', 'Launch-ProtoLink.bat', 'ProtoLink.exe'):
                 (install_dir / file_name).write_text(file_name, encoding='utf-8')
             (install_dir / 'runtime' / 'python.exe').write_text('runtime', encoding='utf-8')
             (install_dir / '.protolink' / 'app_settings.json').write_text('{}', encoding='utf-8')
@@ -595,6 +595,7 @@ def test_execute_release_staging_reports_native_installer_lane(tmp_path: Path) -
     result = execute(workspace=workspace, name='stage', include_native_installer_lane=True)
 
     assert result['verify_installer_package']['checksum_matches'] is True
+    assert result['launcher_exe_headless_summary']['workspace'].endswith('installer-install\\workspace')
     assert result['native_installer_lane']['lane_status'] == 'toolchain_missing'
     assert result['native_installer_lane']['readiness']['ready_for_release'] is False
     assert 'native_installer_wix_missing' in result['native_installer_lane']['blocking_items']

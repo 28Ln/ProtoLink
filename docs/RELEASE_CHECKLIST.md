@@ -60,4 +60,5 @@ uv build
 - `scripts/verify_canonical_truth.py` 必须通过
 - `verify_native_installer_lane.py` 的输出中，`lane_status`、`blocking_items`、`next_actions` 与 `readiness` 必须可解释当前 lane 所处阶段
 - `verify_release_staging.py` 的输出中应包含 `native_installer_lane`，用于并行记录 native 路线 readiness
+- 交付安装结果中必须存在 `ProtoLink.exe`，并能通过 `ProtoLink.exe --headless-summary`
 - scaffold / toolchain / build / signature verify 仅用于推进原生安装器路线，不替代现有 release-staging / dist-install / build 门禁

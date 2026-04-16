@@ -28,6 +28,7 @@ from protolink.core.packaging import (
     NativeInstallerToolchainVerificationResult,
     PORTABLE_MANIFEST_FILE,
     PORTABLE_PACKAGE_FORMAT_VERSION,
+    WINDOWS_LAUNCHER_EXE,
 )
 from protolink.core.plugin_manifests import (
     PLUGIN_MANIFEST_FILE,
@@ -48,6 +49,7 @@ def _write_portable_archive(archive_file: Path) -> None:
     file_payloads = {
         "README.md": b"# ProtoLink\n",
         "INSTALL.ps1": b"echo install\n",
+        WINDOWS_LAUNCHER_EXE: b"MZ-demo",
     }
     manifest = {
         "format_version": PORTABLE_PACKAGE_FORMAT_VERSION,
@@ -62,7 +64,7 @@ def _write_portable_archive(archive_file: Path) -> None:
                 "demo-release.zip": b"release-bytes",
             }.items()
         },
-        "included_entries": ["README.md", "INSTALL.ps1", "demo-release.zip"],
+        "included_entries": ["README.md", "INSTALL.ps1", WINDOWS_LAUNCHER_EXE, "demo-release.zip"],
     }
     with ZipFile(archive_file, "w", compression=ZIP_DEFLATED) as archive:
         for name, payload in file_payloads.items():
@@ -1369,6 +1371,7 @@ def test_main_portable_bundle_installs_bundled_runtime_and_launch_scripts(monkey
     assert runtime_python.exists()
     assert (install_dir / "runtime" / "pythonw.exe").exists()
     assert (install_dir / "sp").exists()
+    assert (install_dir / WINDOWS_LAUNCHER_EXE).exists()
     assert (install_dir / "Launch-ProtoLink.ps1").exists()
     assert (install_dir / "Launch-ProtoLink.bat").exists()
     install_script = (install_dir / "INSTALL.ps1").read_text(encoding="utf-8")
@@ -1404,6 +1407,7 @@ def test_main_installs_portable_package(monkeypatch, tmp_path, capsys) -> None:
     assert Path(payload["target_dir"]).exists()
     assert (target_dir / "README.md").exists()
     assert (target_dir / "INSTALL.ps1").exists()
+    assert (target_dir / WINDOWS_LAUNCHER_EXE).exists()
     assert Path(payload["receipt_file"]).exists()
 
 
@@ -1918,12 +1922,13 @@ def test_main_installs_installer_package_through_clean_release_staging(monkeypat
     assert (staging_dir / "installer-staging" / "distribution" / "distribution-manifest.json").exists()
     assert (install_dir / "README.md").exists()
     assert (install_dir / "INSTALL.ps1").exists()
+    assert (install_dir / WINDOWS_LAUNCHER_EXE).exists()
     receipt_file = Path(payload["portable_receipt_file"])
     assert receipt_file == install_dir / "install-receipt.json"
     assert receipt_file.exists()
     receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
     assert receipt["format_version"] == "protolink-install-receipt-v1"
-    assert {"README.md", "INSTALL.ps1", "demo-release.zip"} <= set(receipt["extracted_entries"])
+    assert {"README.md", "INSTALL.ps1", WINDOWS_LAUNCHER_EXE, "demo-release.zip"} <= set(receipt["extracted_entries"])
 
 
 def test_main_rejects_installer_package_with_checksum_mismatch(monkeypatch, tmp_path, capsys) -> None:

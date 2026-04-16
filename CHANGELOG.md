@@ -10,6 +10,7 @@
 - made headless summary expose runtime gate counts without implicitly executing plugin code
 - cleared formal GUI audit warnings for the dashboard and packet-console delivery layout at target resolutions
 - integrated `native_installer_lane` evidence into `verify_release_staging.py` without replacing the bundled release gate
+- added a standalone `ProtoLink.exe` launcher to portable / installer outputs and verified it via `--headless-summary`
 
 ## 0.2.5 - 2026-04-15
 

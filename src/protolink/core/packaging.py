@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import sysconfig
+import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -213,6 +214,7 @@ class _NativeInstallerToolSpec:
 
 
 PORTABLE_MANIFEST_FILE = "portable-manifest.json"
+WINDOWS_LAUNCHER_EXE = "ProtoLink.exe"
 PORTABLE_PACKAGE_FORMAT_VERSION = "protolink-portable-package-v1"
 DISTRIBUTION_PACKAGE_FORMAT_VERSION = "protolink-distribution-package-v1"
 INSTALLER_STAGING_FORMAT_VERSION = "protolink-installer-staging-v1"
@@ -225,6 +227,74 @@ BUNDLED_RUNTIME_DELIVERY_MODE = "bundled_python_runtime"
 _NONESSENTIAL_RUNTIME_METADATA_FILES = frozenset({"RECORD", "INSTALLER", "REQUESTED", "direct_url.json"})
 _NONESSENTIAL_RUNTIME_PACKAGES = frozenset({"pytest", "_pytest", "iniconfig", "pip", "wheel"})
 _NONESSENTIAL_RUNTIME_PACKAGE_PREFIXES = tuple(f"{package}-" for package in sorted(_NONESSENTIAL_RUNTIME_PACKAGES))
+_WINDOWS_LAUNCHER_SOURCE = r"""
+package main
+
+import (
+    "fmt"
+    "os"
+    "os/exec"
+    "path/filepath"
+    "strings"
+)
+
+func appendOrReplaceEnv(env []string, key string, value string) []string {
+    prefix := key + "="
+    upperPrefix := strings.ToUpper(prefix)
+    for index, item := range env {
+        if strings.HasPrefix(strings.ToUpper(item), upperPrefix) {
+            env[index] = prefix + value
+            return env
+        }
+    }
+    return append(env, prefix+value)
+}
+
+func main() {
+    exePath, err := os.Executable()
+    if err != nil {
+        fmt.Fprintln(os.Stderr, "Unable to resolve the ProtoLink launcher path.")
+        os.Exit(1)
+    }
+    root := filepath.Dir(exePath)
+    hasArgs := len(os.Args) > 1
+    runtimeName := "pythonw.exe"
+    if hasArgs {
+        runtimeName = "python.exe"
+    }
+
+    runtime := filepath.Join(root, "runtime", runtimeName)
+    if _, err := os.Stat(runtime); err != nil {
+        fmt.Fprintln(os.Stderr, "Bundled runtime is missing.")
+        os.Exit(1)
+    }
+
+    env := os.Environ()
+    env = appendOrReplaceEnv(env, "PYTHONPATH", filepath.Join(root, "sp"))
+    env = appendOrReplaceEnv(env, "PROTOLINK_BASE_DIR", root)
+    args := append([]string{"-m", "protolink"}, os.Args[1:]...)
+    cmd := exec.Command(runtime, args...)
+    cmd.Env = env
+    if hasArgs {
+        cmd.Stdin = os.Stdin
+        cmd.Stdout = os.Stdout
+        cmd.Stderr = os.Stderr
+    } else {
+        if err := cmd.Start(); err != nil {
+            fmt.Fprintln(os.Stderr, err.Error())
+            os.Exit(1)
+        }
+        os.Exit(0)
+    }
+    if err := cmd.Run(); err != nil {
+        if exitError, ok := err.(*exec.ExitError); ok {
+            os.Exit(exitError.ExitCode())
+        }
+        fmt.Fprintln(os.Stderr, err.Error())
+        os.Exit(1)
+    }
+}
+""".strip()
 _NATIVE_INSTALLER_TOOL_SPECS = (
     _NativeInstallerToolSpec(
         tool_key="wix",
@@ -380,6 +450,67 @@ def _materialize_bundled_runtime(
     return copied
 
 
+def _resolve_go_executable() -> Path | None:
+    override = os.environ.get("PROTOLINK_GO")
+    if override:
+        candidate = Path(override)
+        return candidate if candidate.exists() else None
+    for executable in ("go.exe", "go"):
+        resolved = shutil.which(executable)
+        if resolved:
+            return Path(resolved)
+    return None
+
+
+def _launcher_cache_dir() -> Path:
+    return Path(tempfile.gettempdir()) / "protolink-launcher-cache"
+
+
+def _build_windows_launcher_binary() -> Path:
+    go_executable = _resolve_go_executable()
+    if go_executable is None:
+        raise ProtoLinkUserError(
+            "Go toolchain is required to build ProtoLink.exe launcher but was not found.",
+            action="build portable package",
+            recovery="Install Go and ensure `go.exe` is on PATH, or set PROTOLINK_GO.",
+        )
+
+    launcher_digest = hashlib.sha256(_WINDOWS_LAUNCHER_SOURCE.encode("utf-8")).hexdigest()[:12]
+    cache_dir = _launcher_cache_dir()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    launcher_file = cache_dir / f"ProtoLink-{launcher_digest}.exe"
+    if launcher_file.exists():
+        return launcher_file
+
+    build_dir = cache_dir / f"build-{launcher_digest}"
+    if build_dir.exists():
+        shutil.rmtree(build_dir, ignore_errors=True)
+    build_dir.mkdir(parents=True, exist_ok=True)
+    source_file = build_dir / "main.go"
+    source_file.write_text(_WINDOWS_LAUNCHER_SOURCE + "\n", encoding="utf-8")
+    completed = subprocess.run(
+        [
+            str(go_executable),
+            "build",
+            "-o",
+            str(launcher_file),
+            str(source_file),
+        ],
+        cwd=build_dir,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    shutil.rmtree(build_dir, ignore_errors=True)
+    if completed.returncode != 0 or not launcher_file.exists():
+        raise ProtoLinkUserError(
+            f"Failed to build ProtoLink.exe launcher.\nstdout:\n{completed.stdout}\n\nstderr:\n{completed.stderr}",
+            action="build portable package",
+            recovery="Verify the local Go toolchain can compile Windows executables and retry.",
+        )
+    return launcher_file
+
+
 def build_portable_package_plan(
     repo_root: Path,
     workspace: WorkspaceLayout,
@@ -496,6 +627,10 @@ def materialize_portable_package(
         encoding="utf-8",
     )
     copied.append("Launch-ProtoLink.bat")
+
+    launcher_exe = plan.package_dir / WINDOWS_LAUNCHER_EXE
+    shutil.copy2(_build_windows_launcher_binary(), launcher_exe)
+    copied.append(WINDOWS_LAUNCHER_EXE)
 
     manifest_file = plan.package_dir / PORTABLE_MANIFEST_FILE
     manifest = _build_portable_package_manifest(plan, copied, manifest_file)

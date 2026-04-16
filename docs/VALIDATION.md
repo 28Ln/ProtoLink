@@ -58,6 +58,7 @@ uv build
 
 - `verify_native_installer_lane.py` 默认输出 readiness probe，并返回 `lane_status`、`blocking_items`、`next_actions`、`readiness` 等结构化门禁结果；若要作为发布门禁，必须显式加 `--require-toolchain` 或 `--require-signed`。
 - `verify_release_staging.py` 现在会附带 `native_installer_lane` 结果，作为 non-blocking 的原生安装器路线证据；当前 bundled-runtime release gate 仍是正式基线。
+- `verify_release_staging.py` 与 deliverables install smoke 现在会验证 `ProtoLink.exe --headless-summary`，确保单独 exe 启动器真实可用。
 - `run_soak_validation.py` 在使用 `--require-all-ready` 时会把非 ready 循环转为非零退出码，并输出 `cycle_ready`、`failing_cycles`、`total_duration_ms`。
 - `run_full_test_suite.py` 以逐文件方式聚合 full-suite 真值，是当前正式的 pytest 基线入口。
 - `audit-plugin-manifests` 会静态审计 `workspace/plugins/*/manifest.json`；任何 invalid manifest 都会进入 `--release-preflight` 阻断。
