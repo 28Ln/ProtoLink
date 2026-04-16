@@ -169,7 +169,7 @@ def test_execute_native_installer_lane_handles_missing_toolchain_with_structured
         if '--build-native-installer-scaffold' in command:
             return {'native_installer_scaffold_dir': str(tmp_path / 'scaffold')}
         if '--verify-native-installer-scaffold' in command:
-            return {'checksum_matches': True}
+            return {'checksum_matches': True, 'lifecycle_contract_ready': True}
         raise AssertionError(command)
 
     execute = ns['execute_native_installer_lane']
@@ -182,6 +182,7 @@ def test_execute_native_installer_lane_handles_missing_toolchain_with_structured
     assert result['scaffold_build']['native_installer_scaffold_dir'].endswith('scaffold')
     assert result['stage_status']['scaffold_built'] is True
     assert result['stage_status']['scaffold_verified'] is True
+    assert result['stage_status']['lifecycle_contract_ready'] is True
     assert result['stage_status']['toolchain_ready'] is False
     assert 'native_installer_manifest' not in result['scaffold_build']
     assert result['ready_for_release'] is False
@@ -209,7 +210,7 @@ def test_execute_native_installer_lane_raises_when_toolchain_is_required(tmp_pat
         if '--build-native-installer-scaffold' in command:
             return {'native_installer_scaffold_dir': str(tmp_path / 'scaffold')}
         if '--verify-native-installer-scaffold' in command:
-            return {'checksum_matches': True}
+            return {'checksum_matches': True, 'lifecycle_contract_ready': True}
         raise AssertionError(command)
 
     execute = ns['execute_native_installer_lane']
@@ -218,6 +219,37 @@ def test_execute_native_installer_lane_raises_when_toolchain_is_required(tmp_pat
 
     with pytest.raises(ns['VerificationError'], match='toolchain'):
         execute(workspace=tmp_path / 'workspace', name='lane', require_toolchain=True)
+
+
+def test_execute_native_installer_lane_reports_contract_blocker_before_toolchain(tmp_path: Path) -> None:
+    ns = _load_script('verify_native_installer_lane.py')
+
+    def fake_run_json(command, *, cwd=None):
+        if '--verify-native-installer-toolchain' in command:
+            return {
+                'ready': False,
+                'tools': {
+                    'wix': {'available': False},
+                    'signtool': {'available': False},
+                },
+            }
+        if '--build-native-installer-scaffold' in command:
+            return {'native_installer_scaffold_dir': str(tmp_path / 'scaffold')}
+        if '--verify-native-installer-scaffold' in command:
+            return {'checksum_matches': True, 'lifecycle_contract_ready': False}
+        raise AssertionError(command)
+
+    execute = ns['execute_native_installer_lane']
+    execute.__globals__['_run_json'] = fake_run_json
+    execute.__globals__['_run_optional_json'] = lambda *args, **kwargs: {'ok': False, 'returncode': 2, 'stdout': '', 'stderr': '', 'payload': None}
+
+    result = execute(workspace=tmp_path / 'workspace', name='lane')
+
+    assert result['stage_status']['scaffold_verified'] is True
+    assert result['stage_status']['lifecycle_contract_ready'] is False
+    assert result['cutover_policy']['native_installer_lane_phase'] == 'contract-incomplete'
+    assert result['cutover_policy']['blocking_items'] == ['lifecycle_contract_incomplete', 'missing_wix', 'missing_signtool']
+    assert result['cutover_policy']['next_action'] == 'repair_lifecycle_contract'
 
 
 def test_execute_native_installer_lane_reports_unsigned_msi_cutover_blocker(tmp_path: Path) -> None:
@@ -235,7 +267,7 @@ def test_execute_native_installer_lane_reports_unsigned_msi_cutover_blocker(tmp_
         if '--build-native-installer-scaffold' in command:
             return {'native_installer_scaffold_dir': str(tmp_path / 'scaffold')}
         if '--verify-native-installer-scaffold' in command:
-            return {'checksum_matches': True}
+            return {'checksum_matches': True, 'lifecycle_contract_ready': True}
         raise AssertionError(command)
 
     def fake_run_optional_json(command, *, cwd=None):
@@ -258,6 +290,7 @@ def test_execute_native_installer_lane_reports_unsigned_msi_cutover_blocker(tmp_
     result = execute(workspace=tmp_path / 'workspace', name='lane')
 
     assert result['stage_status']['msi_built'] is True
+    assert result['stage_status']['lifecycle_contract_ready'] is True
     assert result['stage_status']['signature_verified'] is False
     assert result['cutover_policy']['native_installer_lane_phase'] == 'unsigned-msi'
     assert result['cutover_policy']['blocking_items'] == ['signature_not_verified']
@@ -279,7 +312,7 @@ def test_execute_native_installer_lane_raises_when_signature_is_required(tmp_pat
         if '--build-native-installer-scaffold' in command:
             return {'native_installer_scaffold_dir': str(tmp_path / 'scaffold')}
         if '--verify-native-installer-scaffold' in command:
-            return {'checksum_matches': True}
+            return {'checksum_matches': True, 'lifecycle_contract_ready': True}
         raise AssertionError(command)
 
     def fake_run_optional_json(command, *, cwd=None):

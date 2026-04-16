@@ -152,6 +152,9 @@ class NativeInstallerScaffoldVerificationResult:
     wix_include_file: str
     installer_package_file: str
     checksum_matches: bool
+    target_arch: str
+    lifecycle_contract_ready: bool
+    checked_contract_fields: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,6 +224,13 @@ NATIVE_INSTALLER_SCAFFOLD_FORMAT_VERSION = "protolink-native-installer-scaffold-
 NATIVE_INSTALLER_MANIFEST_FILE = "manifest.json"
 NATIVE_INSTALLER_WIX_SOURCE_FILE = "ProtoLink.wxs"
 NATIVE_INSTALLER_WIX_INCLUDE_FILE = "ProtoLink.Generated.wxi"
+NATIVE_INSTALLER_TARGET_ARCH = "x64"
+NATIVE_INSTALLER_INSTALL_SCOPE = "perMachine"
+NATIVE_INSTALLER_INSTALL_DIR_NAME = "ProtoLink"
+NATIVE_INSTALLER_PAYLOAD_DIR_NAME = "payload"
+NATIVE_INSTALLER_PRODUCT_CODE_POLICY = "wix-auto-generated-at-build"
+NATIVE_INSTALLER_UPGRADE_STRATEGY = "major-upgrade"
+NATIVE_INSTALLER_DOWNGRADE_ERROR_MESSAGE = "A newer version of ProtoLink is already installed."
 BUNDLED_RUNTIME_DELIVERY_MODE = "bundled_python_runtime"
 _NONESSENTIAL_RUNTIME_METADATA_FILES = frozenset({"RECORD", "INSTALLER", "REQUESTED", "direct_url.json"})
 _NONESSENTIAL_RUNTIME_PACKAGES = frozenset({"pytest", "_pytest", "iniconfig", "pip", "wheel"})
@@ -1840,6 +1850,9 @@ def materialize_native_installer_scaffold(
     upgrade_code = str(uuid5(NAMESPACE_URL, "ProtoLink.NativeInstaller.UpgradeCode")).upper()
     installer_package_relative = str(plan.installer_package_file.relative_to(plan.package_dir)).replace("\\", "/")
     installer_package_wix_source = installer_package_relative.replace("/", "\\")
+    silent_install_command = "msiexec /i ProtoLink.msi /qn /l*v install.log"
+    silent_uninstall_command = "msiexec /x ProtoLink.msi /qn /l*v uninstall.log"
+    headless_summary_command = "protolink --headless-summary"
 
     plan.wix_include_file.write_text(
         "\n".join(
@@ -1849,7 +1862,10 @@ def materialize_native_installer_scaffold(
                 f"  <?define ProtoLinkVersion = \"{wix_product_version}\" ?>",
                 "  <?define ProtoLinkManufacturer = \"ProtoLink\" ?>",
                 f"  <?define ProtoLinkUpgradeCode = \"{{{upgrade_code}}}\" ?>",
-                "  <?define ProtoLinkInstallDirName = \"ProtoLink\" ?>",
+                f"  <?define ProtoLinkInstallScope = \"{NATIVE_INSTALLER_INSTALL_SCOPE}\" ?>",
+                f"  <?define ProtoLinkInstallDirName = \"{NATIVE_INSTALLER_INSTALL_DIR_NAME}\" ?>",
+                f"  <?define ProtoLinkPayloadDirName = \"{NATIVE_INSTALLER_PAYLOAD_DIR_NAME}\" ?>",
+                f"  <?define ProtoLinkDowngradeErrorMessage = \"{NATIVE_INSTALLER_DOWNGRADE_ERROR_MESSAGE}\" ?>",
                 f"  <?define ProtoLinkInstallerPackageName = \"{plan.installer_package_file.name}\" ?>",
                 f"  <?define ProtoLinkInstallerPackageSource = \"{installer_package_wix_source}\" ?>",
                 "</Include>",
@@ -1872,14 +1888,14 @@ def materialize_native_installer_scaffold(
                 "    Manufacturer=\"$(var.ProtoLinkManufacturer)\"",
                 "    UpgradeCode=\"$(var.ProtoLinkUpgradeCode)\"",
                 "    InstallerVersion=\"500\"",
-                "    Scope=\"perMachine\"",
+                "    Scope=\"$(var.ProtoLinkInstallScope)\"",
                 "    Compressed=\"yes\">",
                 "    <SummaryInformation Description=\"ProtoLink WiX v4 MSI scaffold\" />",
                 "    <MediaTemplate EmbedCab=\"yes\" />",
-                "    <MajorUpgrade DowngradeErrorMessage=\"A newer version of ProtoLink is already installed.\" />",
+                "    <MajorUpgrade DowngradeErrorMessage=\"$(var.ProtoLinkDowngradeErrorMessage)\" />",
                 "    <StandardDirectory Id=\"ProgramFiles64Folder\">",
                 "      <Directory Id=\"INSTALLDIR\" Name=\"$(var.ProtoLinkInstallDirName)\">",
-                "        <Directory Id=\"PAYLOADDIR\" Name=\"payload\" />",
+                "        <Directory Id=\"PAYLOADDIR\" Name=\"$(var.ProtoLinkPayloadDirName)\" />",
                 "      </Directory>",
                 "    </StandardDirectory>",
                 "    <Feature Id=\"MainFeature\" Title=\"ProtoLink\" Level=\"1\">",
@@ -1911,7 +1927,17 @@ def materialize_native_installer_scaffold(
         "application_version": application_version,
         "wix_product_version": wix_product_version,
         "manufacturer": "ProtoLink",
+        "target_arch": NATIVE_INSTALLER_TARGET_ARCH,
+        "install_scope": NATIVE_INSTALLER_INSTALL_SCOPE,
+        "install_dir_name": NATIVE_INSTALLER_INSTALL_DIR_NAME,
+        "payload_dir_name": NATIVE_INSTALLER_PAYLOAD_DIR_NAME,
         "upgrade_code": f"{{{upgrade_code}}}",
+        "product_code_policy": NATIVE_INSTALLER_PRODUCT_CODE_POLICY,
+        "upgrade_strategy": NATIVE_INSTALLER_UPGRADE_STRATEGY,
+        "downgrade_error_message": NATIVE_INSTALLER_DOWNGRADE_ERROR_MESSAGE,
+        "silent_install_command": silent_install_command,
+        "silent_uninstall_command": silent_uninstall_command,
+        "headless_summary_command": headless_summary_command,
         "installer_package_file": installer_package_relative,
         "installer_package_source": str(plan.installer_package_archive_file.resolve()),
         "installer_package_checksum": _sha256_file(plan.installer_package_file),
@@ -1920,9 +1946,9 @@ def materialize_native_installer_scaffold(
         "wix_include_file": plan.wix_include_file.name,
         "recommended_commands": list(recommended_commands.values()),
         "verification_expectations": [
-            "msiexec /i ProtoLink.msi /qn /l*v install.log",
-            "protolink --headless-summary",
-            "msiexec /x ProtoLink.msi /qn /l*v uninstall.log",
+            silent_install_command,
+            headless_summary_command,
+            silent_uninstall_command,
         ],
         "included_entries": [
             str(plan.installer_package_file.relative_to(plan.package_dir)).replace("\\", "/"),
@@ -1932,6 +1958,208 @@ def materialize_native_installer_scaffold(
     }
     plan.manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return manifest
+
+
+def _require_native_installer_scaffold_contract(
+    manifest: dict[str, object],
+    *,
+    wix_source_text: str,
+    wix_include_text: str,
+    action: str,
+    recovery: str,
+) -> tuple[str, tuple[str, ...]]:
+    application_version = _require_manifest_string(
+        manifest,
+        "application_version",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    wix_product_version = _require_manifest_string(
+        manifest,
+        "wix_product_version",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    manufacturer = _require_manifest_string(
+        manifest,
+        "manufacturer",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    target_arch = _require_manifest_string(
+        manifest,
+        "target_arch",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    install_scope = _require_manifest_string(
+        manifest,
+        "install_scope",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    install_dir_name = _require_manifest_string(
+        manifest,
+        "install_dir_name",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    payload_dir_name = _require_manifest_string(
+        manifest,
+        "payload_dir_name",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    upgrade_code = _require_manifest_string(
+        manifest,
+        "upgrade_code",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    product_code_policy = _require_manifest_string(
+        manifest,
+        "product_code_policy",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    upgrade_strategy = _require_manifest_string(
+        manifest,
+        "upgrade_strategy",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    downgrade_error_message = _require_manifest_string(
+        manifest,
+        "downgrade_error_message",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    silent_install_command = _require_manifest_string(
+        manifest,
+        "silent_install_command",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    silent_uninstall_command = _require_manifest_string(
+        manifest,
+        "silent_uninstall_command",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+    headless_summary_command = _require_manifest_string(
+        manifest,
+        "headless_summary_command",
+        manifest_label="Native installer scaffold manifest",
+        action=action,
+        recovery=recovery,
+    )
+
+    verification_expectations = manifest.get("verification_expectations", [])
+    if not isinstance(verification_expectations, list):
+        raise ProtoLinkUserError(
+            "Native installer scaffold manifest must provide a list of verification_expectations.",
+            action=action,
+            recovery=recovery,
+        )
+    expectation_set = {str(item) for item in verification_expectations}
+    for command in (silent_install_command, headless_summary_command, silent_uninstall_command):
+        if command not in expectation_set:
+            raise ProtoLinkUserError(
+                f"Native installer scaffold manifest is missing verification expectation '{command}'.",
+                action=action,
+                recovery=recovery,
+            )
+
+    required_include_lines = (
+        f"<?define ProtoLinkVersion = \"{wix_product_version}\" ?>",
+        f"<?define ProtoLinkManufacturer = \"{manufacturer}\" ?>",
+        f"<?define ProtoLinkUpgradeCode = \"{upgrade_code}\" ?>",
+        f"<?define ProtoLinkInstallScope = \"{install_scope}\" ?>",
+        f"<?define ProtoLinkInstallDirName = \"{install_dir_name}\" ?>",
+        f"<?define ProtoLinkPayloadDirName = \"{payload_dir_name}\" ?>",
+        f"<?define ProtoLinkDowngradeErrorMessage = \"{downgrade_error_message}\" ?>",
+    )
+    for line in required_include_lines:
+        if line not in wix_include_text:
+            raise ProtoLinkUserError(
+                f"Native installer scaffold include is missing contract line: {line}",
+                action=action,
+                recovery=recovery,
+            )
+
+    required_source_lines = (
+        "Version=\"$(var.ProtoLinkVersion)\"",
+        "Manufacturer=\"$(var.ProtoLinkManufacturer)\"",
+        "UpgradeCode=\"$(var.ProtoLinkUpgradeCode)\"",
+        "Scope=\"$(var.ProtoLinkInstallScope)\"",
+        "Name=\"$(var.ProtoLinkInstallDirName)\"",
+        "Name=\"$(var.ProtoLinkPayloadDirName)\"",
+        "DowngradeErrorMessage=\"$(var.ProtoLinkDowngradeErrorMessage)\"",
+    )
+    for line in required_source_lines:
+        if line not in wix_source_text:
+            raise ProtoLinkUserError(
+                f"Native installer scaffold source is missing contract line: {line}",
+                action=action,
+                recovery=recovery,
+            )
+
+    if target_arch != NATIVE_INSTALLER_TARGET_ARCH:
+        raise ProtoLinkUserError(
+            f"Native installer scaffold manifest target_arch must be '{NATIVE_INSTALLER_TARGET_ARCH}', got '{target_arch}'.",
+            action=action,
+            recovery=recovery,
+        )
+    if product_code_policy != NATIVE_INSTALLER_PRODUCT_CODE_POLICY:
+        raise ProtoLinkUserError(
+            f"Native installer scaffold manifest product_code_policy must be '{NATIVE_INSTALLER_PRODUCT_CODE_POLICY}', got '{product_code_policy}'.",
+            action=action,
+            recovery=recovery,
+        )
+    if upgrade_strategy != NATIVE_INSTALLER_UPGRADE_STRATEGY:
+        raise ProtoLinkUserError(
+            f"Native installer scaffold manifest upgrade_strategy must be '{NATIVE_INSTALLER_UPGRADE_STRATEGY}', got '{upgrade_strategy}'.",
+            action=action,
+            recovery=recovery,
+        )
+    if "ProductCode=" in wix_source_text:
+        raise ProtoLinkUserError(
+            "Native installer scaffold source must not pin ProductCode when product_code_policy is auto-generated.",
+            action=action,
+            recovery=recovery,
+        )
+
+    checked_fields = (
+        "application_version",
+        "wix_product_version",
+        "manufacturer",
+        "target_arch",
+        "install_scope",
+        "install_dir_name",
+        "payload_dir_name",
+        "upgrade_code",
+        "product_code_policy",
+        "upgrade_strategy",
+        "downgrade_error_message",
+        "silent_install_command",
+        "silent_uninstall_command",
+        "headless_summary_command",
+        "verification_expectations",
+    )
+    return target_arch, checked_fields
 
 
 def verify_native_installer_scaffold(scaffold_dir: Path) -> NativeInstallerScaffoldVerificationResult:
@@ -2050,6 +2278,13 @@ def verify_native_installer_scaffold(scaffold_dir: Path) -> NativeInstallerScaff
             action=action,
             recovery=recovery,
         )
+    target_arch, checked_contract_fields = _require_native_installer_scaffold_contract(
+        manifest,
+        wix_source_text=wix_source_text,
+        wix_include_text=wix_include_text,
+        action=action,
+        recovery=recovery,
+    )
 
     return NativeInstallerScaffoldVerificationResult(
         scaffold_dir=scaffold_dir,
@@ -2058,6 +2293,9 @@ def verify_native_installer_scaffold(scaffold_dir: Path) -> NativeInstallerScaff
         wix_include_file=wix_include_file,
         installer_package_file=installer_package_file,
         checksum_matches=True,
+        target_arch=target_arch,
+        lifecycle_contract_ready=True,
+        checked_contract_fields=checked_contract_fields,
     )
 
 
@@ -2233,7 +2471,7 @@ def build_native_installer_msi(
         "build",
         scaffold.wix_source_file,
         "-arch",
-        "x64",
+        scaffold.target_arch,
         "-o",
         str(output_path),
     )

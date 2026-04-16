@@ -120,6 +120,12 @@ def _native_installer_lane_phase(stage_status: dict[str, bool]) -> str:
         return "signed-release-candidate"
     if stage_status.get("msi_built", False):
         return "unsigned-msi"
+    if (
+        stage_status.get("scaffold_built", False)
+        and stage_status.get("scaffold_verified", False)
+        and not stage_status.get("lifecycle_contract_ready", False)
+    ):
+        return "contract-incomplete"
     if stage_status.get("toolchain_ready", False):
         return "toolchain-ready"
     if stage_status.get("scaffold_built", False) and stage_status.get("scaffold_verified", False):
@@ -140,6 +146,8 @@ def _build_cutover_policy(
         blocking_items.append("scaffold_not_built")
     if not stage_status.get("scaffold_verified", False):
         blocking_items.append("scaffold_not_verified")
+    if stage_status.get("scaffold_verified", False) and not stage_status.get("lifecycle_contract_ready", False):
+        blocking_items.append("lifecycle_contract_incomplete")
     if not _tool_available(toolchain, "wix"):
         blocking_items.append("missing_wix")
     if not _tool_available(toolchain, "signtool"):
@@ -151,6 +159,8 @@ def _build_cutover_policy(
 
     if not probe_ready:
         next_action = "stabilize_scaffold_probe"
+    elif not stage_status.get("lifecycle_contract_ready", False):
+        next_action = "repair_lifecycle_contract"
     elif not stage_status.get("toolchain_ready", False):
         next_action = "install_wix_and_signtool"
     elif not stage_status.get("msi_built", False):
@@ -213,6 +223,7 @@ def execute_native_installer_lane(
         "toolchain_ready": bool(toolchain.get("ready", False)),
         "scaffold_built": bool(scaffold_build.get("native_installer_scaffold_dir")),
         "scaffold_verified": bool(scaffold_verify.get("checksum_matches", False)),
+        "lifecycle_contract_ready": bool(scaffold_verify.get("lifecycle_contract_ready", False)),
         "msi_built": bool(msi_build and msi_build.get("ok")),
         "signature_verified": bool(signature_verify and signature_verify.get("ok")),
     }

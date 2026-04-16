@@ -131,6 +131,15 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
 - payload 到安装目录的映射说明
 - 版本、产品标识、升级策略的占位参数
 - 生成记录或 manifest（用于后续 review / verify）
+- lifecycle / identity contract，至少覆盖：
+  - `target_arch`
+  - `install_scope`
+  - `install_dir_name`
+  - `product_code_policy`
+  - `upgrade_strategy`
+  - `downgrade_error_message`
+  - `silent_install_command`
+  - `silent_uninstall_command`
 
 ### Minimum acceptance
 
@@ -140,6 +149,7 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
 - 能被正式文档引用
 - 能被 canonical truth 检查
 - 不破坏当前 bundled-runtime 发布链
+- `--verify-native-installer-scaffold` 会校验 manifest、WiX source 与 WiX include 在 lifecycle / identity contract 上保持一致
 
 ### Toolchain verification
 
@@ -244,6 +254,7 @@ native installer 路线至少要具备以下验证：
 ### Build verification
 - native installer scaffold 命令已纳入 CLI help、README、validation 与 release checklist
 - `--verify-native-installer-toolchain` 可输出结构化结果
+- `--verify-native-installer-scaffold` 可校验 lifecycle / identity contract，而不只是文件存在与 checksum
 - WiX source generation 成功
 - MSI build 成功
 - 签名前产物结构正确

@@ -18,7 +18,7 @@ Last updated: 2026-04-16
 ```powershell
 uv sync --python 3.11 --extra dev --extra ui
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 357
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 360
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local
@@ -43,6 +43,7 @@ python scripts/verify_native_installer_lane.py --require-signed
 
 - 本节只在评估 signed native installer cutover 时启用，不属于当前 bundled-runtime 正式发布前命令。
 - `verify_native_installer_lane.py` 默认输出 probe truth；只有显式加 `--require-toolchain` 或 `--require-signed` 时，才把 native installer readiness 变成非零退出码。
+- native installer scaffold 在进入 cutover 讨论前，必须先通过 lifecycle / identity contract 校验。
 
 ## 签名、审批与回退要求
 
@@ -72,6 +73,7 @@ python scripts/verify_native_installer_lane.py --require-signed
   - `--verify-native-installer-toolchain`
   - `--build-native-installer-msi`
   - `--verify-native-installer-signature`
+- `--verify-native-installer-scaffold` 必须能校验 `target_arch`、`install_scope`、`install_dir_name`、`product_code_policy`、`upgrade_strategy` 与静默安装命令
 - `uv run protolink --help` 中必须能看到这些命令
 - `README.md`、`docs/NATIVE_INSTALLER_PLAN.md`、`docs/VALIDATION.md`、本文件必须包含**精确 flag 名称**
 - `--load-enabled-extensions` 作为正式 CLI surface 时，README、`docs/VALIDATION.md`、`docs/EXTENSION_CONTRACT.md` 与本文件必须保持同一口径

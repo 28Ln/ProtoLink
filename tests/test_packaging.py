@@ -996,12 +996,23 @@ def test_materialize_native_installer_scaffold_creates_wix_sources_and_manifest(
     assert manifest["format_version"] == NATIVE_INSTALLER_SCAFFOLD_FORMAT_VERSION
     assert manifest["application_version"] == "9.9.9"
     assert manifest["wix_product_version"] == "9.9.9"
+    assert manifest["target_arch"] == "x64"
+    assert manifest["install_scope"] == "perMachine"
+    assert manifest["install_dir_name"] == "ProtoLink"
+    assert manifest["payload_dir_name"] == "payload"
+    assert manifest["product_code_policy"] == "wix-auto-generated-at-build"
+    assert manifest["upgrade_strategy"] == "major-upgrade"
+    assert manifest["silent_install_command"] == "msiexec /i ProtoLink.msi /qn /l*v install.log"
+    assert manifest["silent_uninstall_command"] == "msiexec /x ProtoLink.msi /qn /l*v uninstall.log"
+    assert manifest["headless_summary_command"] == "protolink --headless-summary"
     assert manifest["installer_package_file"] == "payload/installer-package.zip"
     assert manifest["wix_source_file"] == "ProtoLink.wxs"
     assert manifest["wix_include_file"] == "ProtoLink.Generated.wxi"
     assert "wix build ProtoLink.wxs -arch x64 -o ProtoLink.msi" in manifest["recommended_commands"]
     assert "ProtoLink.Generated.wxi" in plan.wix_source_file.read_text(encoding="utf-8")
     include_text = plan.wix_include_file.read_text(encoding="utf-8")
+    assert 'ProtoLinkInstallScope = "perMachine"' in include_text
+    assert 'ProtoLinkPayloadDirName = "payload"' in include_text
     assert "payload\\installer-package.zip" in include_text
     assert "installer-package.zip" in include_text
 
@@ -1025,6 +1036,60 @@ def test_verify_native_installer_scaffold_checks_required_files(tmp_path: Path) 
     assert result.wix_include_file == "ProtoLink.Generated.wxi"
     assert result.installer_package_file == "payload/installer-package.zip"
     assert result.checksum_matches is True
+    assert result.target_arch == "x64"
+    assert result.lifecycle_contract_ready is True
+    assert "install_scope" in result.checked_contract_fields
+    assert "product_code_policy" in result.checked_contract_fields
+
+
+def test_verify_native_installer_scaffold_rejects_missing_lifecycle_contract_field(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / "src" / "protolink").mkdir(parents=True)
+    (repo_root / "pyproject.toml").write_text("[project]\nname='protolink'\nversion='1.2.3'\n", encoding="utf-8")
+
+    context = bootstrap_app_context(tmp_path / "workspace-root", persist_settings=False)
+    installer_archive = context.workspace.exports / "installer-package.zip"
+    _write_installer_package_archive(installer_archive)
+    plan = build_native_installer_scaffold_plan(context.workspace, "native installer demo", installer_archive)
+    materialize_native_installer_scaffold(plan, repo_root)
+
+    manifest = json.loads(plan.manifest_file.read_text(encoding="utf-8"))
+    manifest.pop("install_scope")
+    plan.manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    try:
+        verify_native_installer_scaffold(plan.package_dir)
+    except ProtoLinkUserError as exc:
+        assert "install_scope" in str(exc)
+    else:
+        raise AssertionError("Expected missing native installer lifecycle contract field to be rejected.")
+
+
+def test_verify_native_installer_scaffold_rejects_wix_contract_mismatch(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / "src" / "protolink").mkdir(parents=True)
+    (repo_root / "pyproject.toml").write_text("[project]\nname='protolink'\nversion='1.2.3'\n", encoding="utf-8")
+
+    context = bootstrap_app_context(tmp_path / "workspace-root", persist_settings=False)
+    installer_archive = context.workspace.exports / "installer-package.zip"
+    _write_installer_package_archive(installer_archive)
+    plan = build_native_installer_scaffold_plan(context.workspace, "native installer demo", installer_archive)
+    materialize_native_installer_scaffold(plan, repo_root)
+
+    plan.wix_source_file.write_text(
+        plan.wix_source_file.read_text(encoding="utf-8").replace(
+            'Scope="$(var.ProtoLinkInstallScope)"',
+            'Scope="perUser"',
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        verify_native_installer_scaffold(plan.package_dir)
+    except ProtoLinkUserError as exc:
+        assert "ProtoLinkInstallScope" in str(exc)
+    else:
+        raise AssertionError("Expected native installer scaffold WXS contract mismatch to be rejected.")
 
 
 def test_verify_native_installer_toolchain_reports_missing_tools(monkeypatch) -> None:

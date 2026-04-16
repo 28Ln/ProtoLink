@@ -27,7 +27,7 @@ Last updated: 2026-04-16
 
 当前已经具备：
 
-- `357 passed`
+- `360 passed`
 - `release-staging passed`
 - `dist fresh-install passed`
 - `soak ready gate passed`
