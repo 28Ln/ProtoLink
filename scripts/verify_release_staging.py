@@ -183,9 +183,6 @@ def execute_release_staging(
         raise SystemExit(f"Bundled runtime executable was not installed: {runtime_python}")
     if not site_packages.exists():
         raise SystemExit(f"Bundled site-packages directory was not installed: {site_packages}")
-    launcher_exe = install_dir / "ProtoLink.exe"
-    if not launcher_exe.exists():
-        raise SystemExit(f"Native launcher executable was not installed: {launcher_exe}")
 
     runtime_env = _sanitized_environment(python_path=site_packages)
     installed_summary = _run_command(
@@ -198,12 +195,6 @@ def execute_release_staging(
         installed_summary,
         install_dir,
     )
-    launcher_exe_summary = _run_command(
-        [str(launcher_exe), "--headless-summary"],
-        env=_sanitized_environment(),
-        cwd=temp_root,
-    ).stdout
-    launcher_exe_details = _parse_headless_summary("ProtoLink.exe", launcher_exe_summary, install_dir)
 
     launcher_env = _sanitized_environment()
     install_script_summary = _run_command(
@@ -280,11 +271,10 @@ def execute_release_staging(
             "install_dir": install_payload["install_dir"],
             "portable_receipt_file": install_payload["portable_receipt_file"],
         },
-            "installed_headless_summary": installed_summary_details,
-            "launcher_exe_headless_summary": launcher_exe_details,
-            "install_script_headless_summary": install_script_details,
-            "launch_ps1_headless_summary": launch_ps1_details,
-            "launch_bat_headless_summary": launch_bat_details,
+        "installed_headless_summary": installed_summary_details,
+        "install_script_headless_summary": install_script_details,
+        "launch_ps1_headless_summary": launch_ps1_details,
+        "launch_bat_headless_summary": launch_bat_details,
         "uninstall_portable_package": {
             "target_dir": uninstall_payload["target_dir"],
             "removed_receipt": uninstall_payload["removed_receipt"],

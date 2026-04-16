@@ -99,7 +99,6 @@ uv build
 
 - `verify_native_installer_lane.py` 默认是 readiness probe；它会输出 `lane_status`、`blocking_items`、`next_actions` 与 `readiness`。发布线需要显式加 `--require-toolchain` 或 `--require-signed`。
 - `verify_release_staging.py` 现在会附带 `native_installer_lane` 结果，便于在同一次交付验证中看到 bundled 基线与 native 路线 readiness。
-- 当前便携包 / 安装结果已包含单独的 `ProtoLink.exe` 启动器；`ProtoLink.exe --headless-summary` 已进入验证口径。
 - `run_soak_validation.py` 在加 `--require-all-ready` 后才作为长稳门禁，并沉淀 `cycle_ready` / `failing_cycles` / `total_duration_ms` 证据。
 - `run_full_test_suite.py` 是当前正式 full-suite 入口，用逐文件方式收敛 pytest 真值。
 - `list-extension-descriptors` 会输出当前工作区通过静态校验的扩展 descriptor registry。

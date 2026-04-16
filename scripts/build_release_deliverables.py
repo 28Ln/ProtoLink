@@ -79,19 +79,15 @@ def _run_install_smoke(installer_archive: Path, *, target_dir: Path) -> dict[str
     install_payload = _run_json(
         _uv("protolink", "--install-installer-package", str(installer_archive), str(staging_dir), str(install_dir))
     )
-    launcher_exe = install_dir / "ProtoLink.exe"
     launch_script = install_dir / "Launch-ProtoLink.ps1"
-    if launcher_exe.exists():
-        command = [str(launcher_exe), "--headless-summary"]
-    else:
-        command = [
-            "powershell",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; & '{launch_script}' --headless-summary",
-        ]
+    command = [
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; & '{launch_script}' --headless-summary",
+    ]
     completed = _run(command, cwd=ROOT)
     if completed.returncode != 0:
         raise DeliveryBuildError(
@@ -103,7 +99,6 @@ def _run_install_smoke(installer_archive: Path, *, target_dir: Path) -> dict[str
     return {
         "install_payload": install_payload,
         "launch_script": str(launch_script),
-        "launcher_exe": str(launcher_exe) if launcher_exe.exists() else None,
         "headless_summary": completed.stdout.strip().splitlines(),
     }
 

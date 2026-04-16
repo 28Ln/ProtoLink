@@ -20,7 +20,6 @@ from protolink.core.packaging import (
     NativeInstallerToolchainVerificationResult,
     PORTABLE_MANIFEST_FILE,
     PORTABLE_PACKAGE_FORMAT_VERSION,
-    WINDOWS_LAUNCHER_EXE,
     build_native_installer_msi,
     build_native_installer_scaffold_plan,
     build_installer_staging_plan,
@@ -60,7 +59,6 @@ def _write_portable_archive(archive_file: Path) -> None:
     file_payloads = {
         "README.md": b"# ProtoLink\n",
         "INSTALL.ps1": b"echo install\n",
-        WINDOWS_LAUNCHER_EXE: b"MZ-demo",
     }
     manifest = {
         "format_version": PORTABLE_PACKAGE_FORMAT_VERSION,
@@ -75,7 +73,7 @@ def _write_portable_archive(archive_file: Path) -> None:
                 "demo-release.zip": b"release-bytes",
             }.items()
         },
-        "included_entries": ["README.md", "INSTALL.ps1", WINDOWS_LAUNCHER_EXE, "demo-release.zip"],
+        "included_entries": ["README.md", "INSTALL.ps1", "demo-release.zip"],
     }
     with ZipFile(archive_file, "w", compression=ZIP_DEFLATED) as archive:
         for name, payload in file_payloads.items():
@@ -256,7 +254,6 @@ def test_materialize_portable_package_copies_release_archive_and_metadata(tmp_pa
     assert "INSTALL.ps1" in names
     assert "Launch-ProtoLink.ps1" in names
     assert "Launch-ProtoLink.bat" in names
-    assert WINDOWS_LAUNCHER_EXE in names
     assert "demo-release.zip" in names
     assert PORTABLE_MANIFEST_FILE in names
     assert "src/protolink/__pycache__/demo.cpython-311.pyc" not in names
@@ -264,7 +261,6 @@ def test_materialize_portable_package_copies_release_archive_and_metadata(tmp_pa
     install_script = (plan.package_dir / "INSTALL.ps1").read_text(encoding="utf-8")
     launch_ps1 = (plan.package_dir / "Launch-ProtoLink.ps1").read_text(encoding="utf-8")
     launch_bat = (plan.package_dir / "Launch-ProtoLink.bat").read_text(encoding="utf-8")
-    assert (plan.package_dir / WINDOWS_LAUNCHER_EXE).exists()
     assert "PROTOLINK_BASE_DIR" in install_script
     assert "ProtoLinkArgs" in launch_ps1
     assert "python.exe" in launch_ps1
@@ -291,7 +287,6 @@ def test_install_portable_package_extracts_archive(tmp_path: Path) -> None:
     assert result.target_dir == target_dir
     assert (target_dir / "README.md").exists()
     assert (target_dir / "INSTALL.ps1").exists()
-    assert (target_dir / WINDOWS_LAUNCHER_EXE).exists()
     assert result.receipt_file.exists()
 
 
@@ -334,7 +329,7 @@ def test_uninstall_portable_package_removes_installed_files_from_receipt(tmp_pat
     result = uninstall_portable_package(target_dir)
 
     assert result.removed_receipt is True
-    assert set(result.removed_entries) == {"README.md", "INSTALL.ps1", WINDOWS_LAUNCHER_EXE, "demo-release.zip", PORTABLE_MANIFEST_FILE}
+    assert set(result.removed_entries) == {"README.md", "INSTALL.ps1", "demo-release.zip", PORTABLE_MANIFEST_FILE}
     assert not (target_dir / "README.md").exists()
     assert not (target_dir / "INSTALL.ps1").exists()
 
@@ -671,7 +666,6 @@ def test_install_installer_package_extracts_staging_distribution_and_portable(tm
     assert result.installer_package_manifest_file.exists()
     assert (install_dir / "README.md").exists()
     assert (install_dir / "INSTALL.ps1").exists()
-    assert (install_dir / WINDOWS_LAUNCHER_EXE).exists()
 
 
 def test_install_installer_staging_package_extracts_distribution_and_portable(tmp_path: Path) -> None:
@@ -734,7 +728,6 @@ def test_install_installer_staging_package_extracts_distribution_and_portable(tm
     assert result.installer_manifest_file.exists()
     assert (install_dir / "README.md").exists()
     assert (install_dir / "INSTALL.ps1").exists()
-    assert (install_dir / WINDOWS_LAUNCHER_EXE).exists()
     assert result.distribution_install.portable_install.receipt_file.exists()
 
 
