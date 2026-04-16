@@ -4,8 +4,8 @@ Last updated: 2026-04-16
 
 ## 当前验证基线
 
-- `uv run python scripts/run_full_test_suite.py` -> 356 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 356` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> 357 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 357` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest` -> passed
 - `uv run protolink --audit-plugin-manifests` -> passed
@@ -18,14 +18,14 @@ Last updated: 2026-04-16
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
 - `uv run protolink --smoke-check` -> `smoke-check-ok`
-- 当前 full-suite 快照：`356 passed`
+- 当前 full-suite 快照：`357 passed`
 
 ## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 356
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 357
 uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest
 uv run protolink --audit-plugin-manifests
 uv run protolink --list-extension-descriptors
@@ -41,7 +41,7 @@ uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 ```
 
-## 交付链验证
+## 当前 bundled release 验证
 
 ```powershell
 uv run python scripts/verify_release_staging.py --name local
@@ -49,20 +49,32 @@ python scripts/verify_dist_install.py --artifact-version 0.2.5
 uv run protolink --build-native-installer-scaffold proto-stage
 uv run protolink --verify-native-installer-scaffold <scaffold-dir>
 uv run protolink --verify-native-installer-toolchain
-uv run protolink --build-native-installer-msi <scaffold-dir>
-uv run protolink --verify-native-installer-signature <msi-file>
 python scripts/verify_native_installer_lane.py
 python scripts/run_soak_validation.py --cycles 2 --sleep-ms 0 --require-all-ready
 uv build
 ```
 
-- `verify_native_installer_lane.py` 默认输出 readiness probe；若要作为发布门禁，必须显式加 `--require-toolchain` 或 `--require-signed`。
+- 当前 `0.2.5` 正式发布门禁仍是 bundled-runtime 路线；`verify_native_installer_lane.py` 默认只输出 probe truth，不把 toolchain / signed MSI 作为当前 release blocker。
+- `verify_native_installer_lane.py` 默认会输出 `current_canonical_release_lane`、`native_installer_lane_phase`、`blocking_items`、`next_action`，用于解释 native installer 当前处于 probe、toolchain-ready、unsigned 或 signed-ready 的哪一阶段。
 - `run_soak_validation.py` 在使用 `--require-all-ready` 时会把非 ready 循环转为非零退出码，并输出 `cycle_ready`、`failing_cycles`、`total_duration_ms`。
 - `run_full_test_suite.py` 以逐文件方式聚合 full-suite 真值，是当前正式的 pytest 基线入口。
 - `audit-plugin-manifests` 会静态审计 `workspace/plugins/*/manifest.json`；任何 invalid manifest 都会进入 `--release-preflight` 阻断。
 - `list-extension-descriptors` 只列出通过静态校验的扩展描述清单；`plan-extension-loading`、`load-enabled-extensions` 与 `release-preflight` 共同解释可装载状态、显式 Class A runtime execution 与正式交付门禁。
 - `audit_gui_layout.py` 当前在目标分辨率下返回 `highest_severity=clean`，dashboard 与报文分析台的已知布局压缩警告已收敛。
 - 2.0 收尾文档应与本文件保持同一真值口径，尤其是 `HANDOFF_2_0` / `PROJECT_FLOW_2_0` / `ISSUE_REGISTER_2_0`。
+
+## Native installer cutover evaluation
+
+```powershell
+uv run protolink --build-native-installer-msi <scaffold-dir>
+uv run protolink --verify-native-installer-signature <msi-file>
+python scripts/verify_native_installer_lane.py --require-toolchain
+python scripts/verify_native_installer_lane.py --require-signed
+```
+
+- 这些命令只用于 future signed native installer cutover 评估，不属于当前 bundled-runtime 正式发布 gate。
+- `--require-toolchain` 只在评估 WiX / SignTool 已就绪时启用。
+- `--require-signed` 只在 MSI 已完成签名与签名校验后启用。
 
 ## Extension boundary verification
 

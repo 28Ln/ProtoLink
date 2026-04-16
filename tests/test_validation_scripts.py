@@ -185,6 +185,13 @@ def test_execute_native_installer_lane_handles_missing_toolchain_with_structured
     assert result['stage_status']['toolchain_ready'] is False
     assert 'native_installer_manifest' not in result['scaffold_build']
     assert result['ready_for_release'] is False
+    assert result['cutover_policy']['current_canonical_release_lane'] == 'bundled-runtime-installer-package'
+    assert result['cutover_policy']['native_installer_lane_phase'] == 'probe-only'
+    assert result['cutover_policy']['probe_ready'] is True
+    assert result['cutover_policy']['cutover_ready'] is False
+    assert result['cutover_policy']['blocking_items'] == ['missing_wix', 'missing_signtool']
+    assert result['cutover_policy']['next_action'] == 'install_wix_and_signtool'
+    assert 'documented_release_approval' in result['cutover_policy']['manual_cutover_requirements']
 
 
 def test_execute_native_installer_lane_raises_when_toolchain_is_required(tmp_path: Path) -> None:
@@ -211,6 +218,50 @@ def test_execute_native_installer_lane_raises_when_toolchain_is_required(tmp_pat
 
     with pytest.raises(ns['VerificationError'], match='toolchain'):
         execute(workspace=tmp_path / 'workspace', name='lane', require_toolchain=True)
+
+
+def test_execute_native_installer_lane_reports_unsigned_msi_cutover_blocker(tmp_path: Path) -> None:
+    ns = _load_script('verify_native_installer_lane.py')
+
+    def fake_run_json(command, *, cwd=None):
+        if '--verify-native-installer-toolchain' in command:
+            return {
+                'ready': True,
+                'tools': {
+                    'wix': {'available': True},
+                    'signtool': {'available': True},
+                },
+            }
+        if '--build-native-installer-scaffold' in command:
+            return {'native_installer_scaffold_dir': str(tmp_path / 'scaffold')}
+        if '--verify-native-installer-scaffold' in command:
+            return {'checksum_matches': True}
+        raise AssertionError(command)
+
+    def fake_run_optional_json(command, *, cwd=None):
+        if '--build-native-installer-msi' in command:
+            return {
+                'ok': True,
+                'returncode': 0,
+                'stdout': '',
+                'stderr': '',
+                'payload': {'output_file': str(tmp_path / 'ProtoLink.msi')},
+            }
+        if '--verify-native-installer-signature' in command:
+            return {'ok': False, 'returncode': 1, 'stdout': '', 'stderr': 'unsigned', 'payload': None}
+        raise AssertionError(command)
+
+    execute = ns['execute_native_installer_lane']
+    execute.__globals__['_run_json'] = fake_run_json
+    execute.__globals__['_run_optional_json'] = fake_run_optional_json
+
+    result = execute(workspace=tmp_path / 'workspace', name='lane')
+
+    assert result['stage_status']['msi_built'] is True
+    assert result['stage_status']['signature_verified'] is False
+    assert result['cutover_policy']['native_installer_lane_phase'] == 'unsigned-msi'
+    assert result['cutover_policy']['blocking_items'] == ['signature_not_verified']
+    assert result['cutover_policy']['next_action'] == 'sign_and_verify_msi'
 
 
 def test_execute_native_installer_lane_raises_when_signature_is_required(tmp_path: Path) -> None:

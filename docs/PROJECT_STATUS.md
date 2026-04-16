@@ -9,7 +9,7 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 ## 当前真实进展
 
 - 工程代码入口、工作区、日志、配置、打包链路已统一
-- 356 个 pytest 用例通过
+- 357 个 pytest 用例通过
 - targeted regression 全绿
 - release-staging 验证全链通过
 - wheel / sdist fresh-install 验证通过
@@ -30,8 +30,8 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 
 ## 当前验证快照
 
-- `uv run python scripts/run_full_test_suite.py` -> `356 passed`
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 356` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> `357 passed`
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 357` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed

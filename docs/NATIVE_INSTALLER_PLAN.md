@@ -1,6 +1,6 @@
 # ProtoLink Native Installer and Signing Plan
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## 1. Purpose
 
@@ -194,6 +194,17 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
 - 不切换默认发布路线
 - 继续以 `0.2.x` bundled-runtime installer package 作为正式交付基线
 
+### Current gate split
+
+- 当前 bundled-runtime release gate 仍以 `verify_release_staging.py`、`verify_dist_install.py`、`run_soak_validation.py`、`uv build` 为正式门禁。
+- `python scripts/verify_native_installer_lane.py` 在当前阶段只承担 probe truth，不把缺失 WiX / SignTool 直接升级为 bundled release blocker。
+- 只有在显式启用 `--require-toolchain` 或 `--require-signed` 时，native installer lane 才进入 cutover gate 语义。
+- `verify_native_installer_lane.py` 的结构化输出必须持续说明：
+  - `current_canonical_release_lane`
+  - `native_installer_lane_phase`
+  - `blocking_items`
+  - `next_action`
+
 ## 7. Cutover conditions
 
 ProtoLink 只有在以下条件全部满足时，才允许从当前 installer package 路线切到 native installer 路线：
@@ -215,6 +226,16 @@ ProtoLink 只有在以下条件全部满足时，才允许从当前 installer pa
 
 6. **Rollback path is preserved**
    - 现有 installer package 仍保留为回退基线。
+
+### Controlled approval flow
+
+进入 native installer cutover 决策前，至少执行以下顺序：
+
+1. 先跑完 bundled-runtime 正式发布门禁，并保留当前 installer package 作为回退产物。
+2. 运行 scaffold / toolchain / MSI build / signature verify，确认 native installer lane 已达到 signed-ready。
+3. 使用已批准的代码签名证书与已批准的 RFC3161 时间戳服务完成签名。
+4. 记录 release owner 审批与签名操作审批，确保签名来源、证书使用人与时间戳服务可追溯。
+5. 在 clean-machine 或 clean-VM 上完成 install / uninstall / `protolink --headless-summary` 验证后，才允许进入 cutover。
 
 ## 8. Verification strategy
 

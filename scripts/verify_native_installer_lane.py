@@ -115,6 +115,67 @@ def _summarize_scaffold_build(scaffold_build: dict[str, object]) -> dict[str, ob
     }
 
 
+def _native_installer_lane_phase(stage_status: dict[str, bool]) -> str:
+    if stage_status.get("signature_verified", False):
+        return "signed-release-candidate"
+    if stage_status.get("msi_built", False):
+        return "unsigned-msi"
+    if stage_status.get("toolchain_ready", False):
+        return "toolchain-ready"
+    if stage_status.get("scaffold_built", False) and stage_status.get("scaffold_verified", False):
+        return "probe-only"
+    return "probe-failed"
+
+
+def _build_cutover_policy(
+    *,
+    toolchain: dict[str, object],
+    stage_status: dict[str, bool],
+    ready_for_release: bool,
+) -> dict[str, object]:
+    probe_ready = bool(stage_status.get("scaffold_built", False) and stage_status.get("scaffold_verified", False))
+    blocking_items: list[str] = []
+
+    if not stage_status.get("scaffold_built", False):
+        blocking_items.append("scaffold_not_built")
+    if not stage_status.get("scaffold_verified", False):
+        blocking_items.append("scaffold_not_verified")
+    if not _tool_available(toolchain, "wix"):
+        blocking_items.append("missing_wix")
+    if not _tool_available(toolchain, "signtool"):
+        blocking_items.append("missing_signtool")
+    if probe_ready and _tool_available(toolchain, "wix") and not stage_status.get("msi_built", False):
+        blocking_items.append("msi_not_built")
+    if stage_status.get("msi_built", False) and not stage_status.get("signature_verified", False):
+        blocking_items.append("signature_not_verified")
+
+    if not probe_ready:
+        next_action = "stabilize_scaffold_probe"
+    elif not stage_status.get("toolchain_ready", False):
+        next_action = "install_wix_and_signtool"
+    elif not stage_status.get("msi_built", False):
+        next_action = "build_unsigned_msi"
+    elif not stage_status.get("signature_verified", False):
+        next_action = "sign_and_verify_msi"
+    else:
+        next_action = "run_cutover_install_validation"
+
+    return {
+        "current_canonical_release_lane": "bundled-runtime-installer-package",
+        "native_installer_lane_phase": _native_installer_lane_phase(stage_status),
+        "probe_ready": probe_ready,
+        "cutover_ready": ready_for_release,
+        "blocking_items": blocking_items,
+        "next_action": next_action,
+        "manual_cutover_requirements": [
+            "approved_code_signing_certificate",
+            "approved_rfc3161_timestamp_service",
+            "documented_release_approval",
+            "bundled_runtime_rollback_artifact_retained",
+        ],
+    }
+
+
 def execute_native_installer_lane(
     *,
     workspace: Path | None = None,
@@ -156,12 +217,18 @@ def execute_native_installer_lane(
         "signature_verified": bool(signature_verify and signature_verify.get("ok")),
     }
     ready_for_release = all(stage_status.values())
+    cutover_policy = _build_cutover_policy(
+        toolchain=toolchain,
+        stage_status=stage_status,
+        ready_for_release=ready_for_release,
+    )
 
     result = {
         "workspace": str(workspace),
         "temporary_root": str(temp_root) if temp_root is not None else None,
         "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
         "stage_status": stage_status,
+        "cutover_policy": cutover_policy,
         "toolchain": toolchain,
         "scaffold_build": scaffold_build,
         "scaffold_verify": scaffold_verify,

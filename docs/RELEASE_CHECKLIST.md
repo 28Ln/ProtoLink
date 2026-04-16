@@ -13,12 +13,12 @@ Last updated: 2026-04-16
 - 工作区与设置路径明确
 - 本地仓库处于可交接状态
 
-## 最小发布前命令
+## 当前 bundled-runtime 发布前命令
 
 ```powershell
 uv sync --python 3.11 --extra dev --extra ui
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 356
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 357
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local
@@ -27,12 +27,30 @@ python scripts/verify_dist_install.py --artifact-version 0.2.5
 uv run protolink --build-native-installer-scaffold proto-stage
 uv run protolink --verify-native-installer-scaffold <scaffold-dir>
 uv run protolink --verify-native-installer-toolchain
-uv run protolink --build-native-installer-msi <scaffold-dir>
-uv run protolink --verify-native-installer-signature <msi-file>
-python scripts/verify_native_installer_lane.py --require-toolchain
+python scripts/verify_native_installer_lane.py
 python scripts/run_soak_validation.py --cycles 2 --sleep-ms 0 --require-all-ready
 uv build
 ```
+
+## Native installer cutover additional gate
+
+```powershell
+uv run protolink --build-native-installer-msi <scaffold-dir>
+uv run protolink --verify-native-installer-signature <msi-file>
+python scripts/verify_native_installer_lane.py --require-toolchain
+python scripts/verify_native_installer_lane.py --require-signed
+```
+
+- 本节只在评估 signed native installer cutover 时启用，不属于当前 bundled-runtime 正式发布前命令。
+- `verify_native_installer_lane.py` 默认输出 probe truth；只有显式加 `--require-toolchain` 或 `--require-signed` 时，才把 native installer readiness 变成非零退出码。
+
+## 签名、审批与回退要求
+
+- 必须使用已批准的代码签名证书对 MSI 做 Authenticode 签名。
+- 必须使用已批准的 RFC3161 时间戳服务；没有时间戳的签名不允许进入 cutover 决策。
+- 切换 native installer release lane 前，至少保留一份已验证的 bundled-runtime installer package 作为回退产物。
+- 切换前必须记录 release owner 审批与签名操作审批；审批证据应与签名产物一同归档。
+- 只有在 clean-machine install / uninstall / `protolink --headless-summary` 全部通过后，native installer 才允许进入 cutover 决策。
 
 ## 工作区与交付检查
 
@@ -59,3 +77,4 @@ uv build
 - `--load-enabled-extensions` 作为正式 CLI surface 时，README、`docs/VALIDATION.md`、`docs/EXTENSION_CONTRACT.md` 与本文件必须保持同一口径
 - `scripts/verify_canonical_truth.py` 必须通过
 - scaffold / toolchain / build / signature verify 仅用于推进原生安装器路线，不替代现有 release-staging / dist-install / build 门禁
+- 当前 bundled-runtime 发布不以 native installer toolchain readiness 为 blocker；native cutover 才启用 `--require-toolchain` / `--require-signed`
