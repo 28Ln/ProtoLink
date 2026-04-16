@@ -18,6 +18,7 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 - `PL-012` 与 `PL-013` 已关闭，当前正式主线已切换为 `PL-014`
 - `PL-014` 已具备 WiX scaffold 构建/校验、toolchain 检测、MSI build 与签名校验 CLI
 - 已具备 `verify_native_installer_lane.py` 原生安装器 lane 脚本
+- `verify_release_staging.py` 已附带 native installer lane 结构化结果，便于统一查看 bundled 基线与 native readiness
 - 已具备 `run_soak_validation.py` 本地长稳/soak 验证脚本与 strict ready gate
 - 已具备 `workspace/plugins/*/manifest.json` 的发现、静态校验、审计报告与 release-preflight 阻断
 - 已具备 valid manifest 到 extension descriptor registry 的受控列举边界

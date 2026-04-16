@@ -74,6 +74,7 @@ uv build
 ```
 
 - `python scripts/verify_native_installer_lane.py` 默认输出 readiness probe，并返回 `lane_status`、`blocking_items`、`next_actions`、`readiness` 等结构化门禁结果；切换为发布门禁时使用 `--require-toolchain` 或 `--require-signed`。
+- `uv run python scripts/verify_release_staging.py --name local` 现在会附带 `native_installer_lane` 结果，作为 non-blocking 的原生安装器路线证据，不替代现有 bundled gate。
 - `python scripts/run_soak_validation.py` 在使用 `--require-all-ready` 时才作为长稳 gate，并输出 `cycle_ready`、`failing_cycles`、`total_duration_ms` 证据。
 - `uv run python scripts/run_full_test_suite.py` 是当前正式 full-suite 真值入口；避免直接依赖单次 `pytest -q` 进程退出码。
 - `uv run protolink --audit-plugin-manifests` 会审计 `workspace/plugins/*/manifest.json`，并把 invalid manifest 进入 release-preflight 阻断。

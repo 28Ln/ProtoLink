@@ -500,6 +500,106 @@ def test_execute_soak_validation_raises_when_all_ready_is_required(tmp_path: Pat
         execute(workspace=tmp_path / 'workspace', cycles=1, sleep_ms=0, require_all_ready=True)
 
 
+def test_execute_release_staging_reports_native_installer_lane(tmp_path: Path) -> None:
+    ns = _load_script('verify_release_staging.py')
+    workspace = tmp_path / 'workspace'
+    temp_root = workspace.parent
+    install_dir = temp_root / 'installer-install'
+    staging_dir = temp_root / 'installer-staging'
+    install_dir.mkdir(parents=True, exist_ok=True)
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
+    def fake_run_json(command, *, cwd=None):
+        command_text = ' '.join(str(part) for part in command)
+        if '--generate-smoke-artifacts' in command_text:
+            return {'log_file': 'log', 'capture_file': 'capture', 'replay_step_count': 2}
+        if '--build-installer-package' in command_text:
+            return {
+                'release_archive_file': str(tmp_path / 'release.zip'),
+                'portable_archive_file': str(tmp_path / 'portable.zip'),
+                'distribution_archive_file': str(tmp_path / 'distribution.zip'),
+                'installer_archive_file': str(tmp_path / 'installer.zip'),
+            }
+        if '--verify-portable-package' in command_text:
+            return {'archive_file': 'portable.zip', 'checksum_matches': True}
+        if '--verify-distribution-package' in command_text:
+            return {'archive_file': 'distribution.zip', 'checksum_matches': True}
+        if '--verify-installer-package' in command_text:
+            return {'archive_file': 'installer.zip', 'checksum_matches': True}
+        if '--install-installer-package' in command_text:
+            (install_dir / 'runtime').mkdir(parents=True, exist_ok=True)
+            (install_dir / 'sp').mkdir(parents=True, exist_ok=True)
+            (install_dir / '.protolink').mkdir(parents=True, exist_ok=True)
+            (install_dir / 'workspace').mkdir(parents=True, exist_ok=True)
+            for file_name in ('INSTALL.ps1', 'Launch-ProtoLink.ps1', 'Launch-ProtoLink.bat'):
+                (install_dir / file_name).write_text(file_name, encoding='utf-8')
+            (install_dir / 'runtime' / 'python.exe').write_text('runtime', encoding='utf-8')
+            (install_dir / '.protolink' / 'app_settings.json').write_text('{}', encoding='utf-8')
+            manifest_files = {
+                'installer_package_manifest_file': staging_dir / 'installer-package-manifest.json',
+                'installer_manifest_file': staging_dir / 'installer-manifest.json',
+                'distribution_manifest_file': staging_dir / 'distribution-manifest.json',
+                'portable_receipt_file': install_dir / 'install-receipt.json',
+            }
+            for path in manifest_files.values():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('{}', encoding='utf-8')
+            return {
+                'archive_file': str(tmp_path / 'installer.zip'),
+                'install_dir': str(install_dir),
+                'portable_receipt_file': str(manifest_files['portable_receipt_file']),
+                **{key: str(value) for key, value in manifest_files.items()},
+            }
+        if '--uninstall-portable-package' in command_text:
+            return {'target_dir': str(install_dir), 'removed_receipt': True}
+        if 'verify_native_installer_lane.py' in command_text:
+            return {
+                'lane_status': 'toolchain_missing',
+                'blocking_items': ['native_installer_wix_missing'],
+                'next_actions': ['Install WiX Toolset v4 or set PROTOLINK_WIX before attempting MSI builds.'],
+                'readiness': {
+                    'ready_for_build': False,
+                    'ready_for_install_verification': False,
+                    'ready_for_signing': False,
+                    'ready_for_release': False,
+                },
+            }
+        raise AssertionError(command)
+
+    def fake_run_command(command, *, cwd=None, env=None):
+        rendered = ' '.join(str(part) for part in command)
+        if (
+            '--headless-summary' in rendered
+            or 'INSTALL.ps1' in rendered
+            or 'Launch-ProtoLink.ps1' in rendered
+            or 'Launch-ProtoLink.bat' in rendered
+        ):
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=(
+                    'ProtoLink\n'
+                    f'工作区：{install_dir / "workspace"}\n'
+                    f'设置：{install_dir / ".protolink" / "app_settings.json"}\n'
+                    '已注册传输：6\n'
+                    '模块数：15\n'
+                ),
+                stderr='',
+            )
+        raise AssertionError(command)
+
+    execute = ns['execute_release_staging']
+    execute.__globals__['_run_json'] = fake_run_json
+    execute.__globals__['_run_command'] = fake_run_command
+
+    result = execute(workspace=workspace, name='stage', include_native_installer_lane=True)
+
+    assert result['verify_installer_package']['checksum_matches'] is True
+    assert result['native_installer_lane']['lane_status'] == 'toolchain_missing'
+    assert result['native_installer_lane']['readiness']['ready_for_release'] is False
+    assert 'native_installer_wix_missing' in result['native_installer_lane']['blocking_items']
+
+
 def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Path) -> None:
     ns = _load_script('build_release_deliverables.py')
     workspace = tmp_path / 'workspace'

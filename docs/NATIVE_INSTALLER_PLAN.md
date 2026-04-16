@@ -250,6 +250,7 @@ native installer 路线至少要具备以下验证：
   - `readiness.ready_for_build`
   - `readiness.ready_for_signing`
   - `readiness.ready_for_release`
+- `verify_release_staging.py` 应在不破坏当前 bundled gate 的前提下，附带 `native_installer_lane` 结果作为并行证据
 
 ## 9. Rollback boundary
 
