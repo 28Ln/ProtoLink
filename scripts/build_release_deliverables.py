@@ -11,6 +11,10 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+from protolink.core.native_installer_cutover_policy import (
+    default_native_installer_cutover_policy_file,
+    load_native_installer_cutover_policy,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TARGET_DIR = ROOT / "dist" / "deliverables"
@@ -146,16 +150,20 @@ def _build_deliverables_manifest(
     install_smoke: dict[str, object] | None,
     native_installer_lane_receipt_file: Path,
     native_installer_lane_receipt: dict[str, object],
+    native_installer_cutover_policy_file: Path,
+    native_installer_cutover_policy: dict[str, object],
 ) -> dict[str, object]:
     artifact_paths = {key: Path(value) for key, value in copied_artifacts.items()}
     checksums = {
         **{path.name: _sha256_file(path) for path in artifact_paths.values()},
         native_installer_lane_receipt_file.name: _sha256_file(native_installer_lane_receipt_file),
+        native_installer_cutover_policy_file.name: _sha256_file(native_installer_cutover_policy_file),
     }
     included_entries = sorted(
         [
             *(path.name for path in artifact_paths.values()),
             native_installer_lane_receipt_file.name,
+            native_installer_cutover_policy_file.name,
             DELIVERABLES_MANIFEST_FILE,
         ]
     )
@@ -179,6 +187,12 @@ def _build_deliverables_manifest(
         "verification": verification,
         "install_smoke": install_smoke,
         "native_installer_lane_receipt_file": native_installer_lane_receipt_file.name,
+        "native_installer_cutover_policy_file": native_installer_cutover_policy_file.name,
+        "native_installer_cutover_policy": {
+            "policy_id": native_installer_cutover_policy["policy_id"],
+            "policy_format_version": native_installer_cutover_policy["format_version"],
+            "policy_checksum": native_installer_cutover_policy["policy_checksum"],
+        },
         "native_installer_lane_summary": {
             "phase": lane_phase,
             "blocking_items": blocking_items,
@@ -240,6 +254,24 @@ def execute_release_deliverables(
         name=name,
         receipt_file=native_installer_lane_receipt_file,
     )
+    try:
+        native_installer_cutover_policy = load_native_installer_cutover_policy()
+    except ValueError as exc:
+        raise DeliveryBuildError(f"Native installer cutover policy is invalid: {exc}") from exc
+    native_installer_cutover_policy_file = target_dir / default_native_installer_cutover_policy_file().name
+    _copy_artifact(Path(str(native_installer_cutover_policy["policy_file"])), native_installer_cutover_policy_file)
+    receipt_cutover_policy = native_installer_lane_receipt.get("cutover_policy", {})
+    if not isinstance(receipt_cutover_policy, dict):
+        raise DeliveryBuildError("Native installer lane receipt is missing cutover_policy.")
+    for receipt_key, policy_key in (
+        ("policy_id", "policy_id"),
+        ("policy_format_version", "format_version"),
+        ("policy_checksum", "policy_checksum"),
+    ):
+        if receipt_cutover_policy.get(receipt_key) != native_installer_cutover_policy[policy_key]:
+            raise DeliveryBuildError(
+                f"Native installer lane receipt {receipt_key} does not match the current cutover policy."
+            )
     deliverables_manifest = _build_deliverables_manifest(
         version=version,
         name=name,
@@ -250,6 +282,8 @@ def execute_release_deliverables(
         install_smoke=install_smoke,
         native_installer_lane_receipt_file=native_installer_lane_receipt_file,
         native_installer_lane_receipt=native_installer_lane_receipt,
+        native_installer_cutover_policy_file=native_installer_cutover_policy_file,
+        native_installer_cutover_policy=native_installer_cutover_policy,
     )
     deliverables_manifest_file = target_dir / DELIVERABLES_MANIFEST_FILE
     _write_json_file(deliverables_manifest_file, deliverables_manifest)
@@ -263,6 +297,8 @@ def execute_release_deliverables(
         "install_smoke": install_smoke,
         "native_installer_lane_receipt_file": str(native_installer_lane_receipt_file),
         "native_installer_lane_receipt": native_installer_lane_receipt,
+        "native_installer_cutover_policy_file": str(native_installer_cutover_policy_file),
+        "native_installer_cutover_policy": native_installer_cutover_policy,
         "deliverables_manifest_file": str(deliverables_manifest_file),
         "deliverables_manifest": deliverables_manifest,
     }

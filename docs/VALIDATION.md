@@ -4,8 +4,8 @@ Last updated: 2026-04-16
 
 ## 当前验证基线
 
-- `uv run python scripts/run_full_test_suite.py` -> 365 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 365` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> 369 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 369` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest` -> passed
 - `uv run protolink --audit-plugin-manifests` -> passed
@@ -20,14 +20,14 @@ Last updated: 2026-04-16
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
 - `uv run protolink --smoke-check` -> `smoke-check-ok`
-- 当前 full-suite 快照：`365 passed`
+- 当前 full-suite 快照：`369 passed`
 
 ## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 365
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 369
 uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest
 uv run protolink --audit-plugin-manifests
 uv run protolink --list-extension-descriptors
@@ -64,7 +64,9 @@ uv build
 - `uv run protolink --verify-native-installer-scaffold` 还会校验 manifest `checksums` 是否完整覆盖 `included_entries`，并验证 `ProtoLink.wxs`、`ProtoLink.Generated.wxi` 与 payload digest。
 - `verify_native_installer_lane.py` 现在会把 `lifecycle_contract_ready` 纳入 `stage_status`；contract 不完整时会输出 `contract-incomplete` phase 与 `repair_lifecycle_contract` next_action。
 - `verify_native_installer_lane.py` 现在支持 `--receipt-file <path>`，可把 lane truth 持久化为 JSON receipt。
+- `verify_native_installer_lane.py` 现在会从 `docs/NATIVE_INSTALLER_CUTOVER_POLICY.json` 读取 `manual_cutover_requirements`，并把 `policy_id`、`policy_format_version`、`policy_checksum` 一起写入 receipt。
 - `build_release_deliverables.py` 现在会在目标目录写出 `deliverables-manifest.json` 与 `native-installer-lane-receipt.json`。
+- `build_release_deliverables.py` 现在会把 `NATIVE_INSTALLER_CUTOVER_POLICY.json` 一起归档到 `dist/deliverables`。
 - `verify_release_deliverables.py` 会复核 deliverables manifest、archive checksum、package verifier 结果与 native lane receipt；默认不把 native installer `ready_for_release=false` 视为 bundled release blocker。
 - `run_soak_validation.py` 在使用 `--require-all-ready` 时会把非 ready 循环转为非零退出码，并输出 `cycle_ready`、`failing_cycles`、`total_duration_ms`。
 - `run_full_test_suite.py` 以逐文件方式聚合 full-suite 真值，是当前正式的 pytest 基线入口。

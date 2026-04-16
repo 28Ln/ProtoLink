@@ -32,6 +32,7 @@
 - `RELEASE_CHECKLIST.md`：发布运行手册
 - `SMOKE_CHECKLIST.md`：冒烟运行手册
 - `NATIVE_INSTALLER_PLAN.md`：原生安装器与签名路线计划
+- `NATIVE_INSTALLER_CUTOVER_POLICY.json`：原生安装器 cutover policy 机器可读真值
 
 ## 交接
 

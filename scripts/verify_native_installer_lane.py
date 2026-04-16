@@ -4,13 +4,18 @@ import argparse
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from protolink.core.native_installer_cutover_policy import load_native_installer_cutover_policy
 
 
 class VerificationError(RuntimeError):
@@ -143,6 +148,7 @@ def _native_installer_lane_phase(stage_status: dict[str, bool]) -> str:
 
 def _build_cutover_policy(
     *,
+    policy: dict[str, object],
     toolchain: dict[str, object],
     stage_status: dict[str, bool],
     ready_for_release: bool,
@@ -179,18 +185,17 @@ def _build_cutover_policy(
         next_action = "run_cutover_install_validation"
 
     return {
-        "current_canonical_release_lane": "bundled-runtime-installer-package",
+        "policy_file": policy["policy_name"],
+        "policy_id": policy["policy_id"],
+        "policy_format_version": policy["format_version"],
+        "policy_checksum": policy["policy_checksum"],
+        "current_canonical_release_lane": policy["current_canonical_release_lane"],
         "native_installer_lane_phase": _native_installer_lane_phase(stage_status),
         "probe_ready": probe_ready,
         "cutover_ready": ready_for_release,
         "blocking_items": blocking_items,
         "next_action": next_action,
-        "manual_cutover_requirements": [
-            "approved_code_signing_certificate",
-            "approved_rfc3161_timestamp_service",
-            "documented_release_approval",
-            "bundled_runtime_rollback_artifact_retained",
-        ],
+        "manual_cutover_requirements": list(policy["manual_cutover_requirements"]),
     }
 
 
@@ -207,6 +212,10 @@ def execute_native_installer_lane(
         workspace = temp_root / "workspace"
     workspace = workspace.resolve()
     started_at = time.perf_counter()
+    try:
+        policy = load_native_installer_cutover_policy()
+    except ValueError as exc:
+        raise VerificationError(f"Native installer cutover policy is invalid: {exc}") from exc
 
     toolchain = _run_json(_uv("protolink", "--verify-native-installer-toolchain"))
     scaffold_build_raw = _run_json(_uv("protolink", "--workspace", str(workspace), "--build-native-installer-scaffold", name))
@@ -237,6 +246,7 @@ def execute_native_installer_lane(
     }
     ready_for_release = all(stage_status.values())
     cutover_policy = _build_cutover_policy(
+        policy=policy,
         toolchain=toolchain,
         stage_status=stage_status,
         ready_for_release=ready_for_release,

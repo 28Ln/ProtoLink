@@ -7,11 +7,111 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from protolink.core.native_installer_cutover_policy import load_native_installer_cutover_policy
 
 
 def _load_script(script_name: str) -> dict[str, object]:
     script_file = Path(__file__).resolve().parents[1] / 'scripts' / script_name
     return runpy.run_path(str(script_file), run_name=f'{script_name}_test_module')
+
+
+def _write_cutover_policy_file(path: Path) -> dict[str, object]:
+    payload = {
+        "policy_id": "native-installer-cutover-policy",
+        "format_version": "protolink-native-installer-cutover-policy-v1",
+        "current_canonical_release_lane": "bundled-runtime-installer-package",
+        "manual_cutover_requirements": [
+            "approved_code_signing_certificate",
+            "approved_rfc3161_timestamp_service",
+            "documented_release_approval",
+            "bundled_runtime_rollback_artifact_retained",
+        ],
+        "signing": {
+            "required": True,
+            "method": "windows-authenticode",
+            "approved_certificate_required": True,
+        },
+        "timestamp": {
+            "required": True,
+            "service_type": "rfc3161",
+            "approved_service_required": True,
+        },
+        "approvals": {
+            "release_owner_approval_required": True,
+            "signing_operation_approval_required": True,
+        },
+        "rollback": {
+            "bundled_runtime_artifact_required": True,
+            "rollback_validation_required": True,
+        },
+        "clean_machine_validation": {
+            "required": True,
+            "required_commands": [
+                "msiexec /i ProtoLink.msi /qn /l*v install.log",
+                "protolink --headless-summary",
+                "msiexec /x ProtoLink.msi /qn /l*v uninstall.log",
+            ],
+        },
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+    return load_native_installer_cutover_policy(path)
+
+
+def test_load_native_installer_cutover_policy_reads_valid_file(tmp_path: Path) -> None:
+    policy_file = tmp_path / 'NATIVE_INSTALLER_CUTOVER_POLICY.json'
+    policy = _write_cutover_policy_file(policy_file)
+
+    assert policy['policy_id'] == 'native-installer-cutover-policy'
+    assert policy['format_version'] == 'protolink-native-installer-cutover-policy-v1'
+    assert policy['policy_checksum']
+    assert 'documented_release_approval' in policy['manual_cutover_requirements']
+
+
+def test_load_native_installer_cutover_policy_rejects_missing_section(tmp_path: Path) -> None:
+    policy_file = tmp_path / 'NATIVE_INSTALLER_CUTOVER_POLICY.json'
+    payload = {
+        "policy_id": "native-installer-cutover-policy",
+        "format_version": "protolink-native-installer-cutover-policy-v1",
+        "current_canonical_release_lane": "bundled-runtime-installer-package",
+        "manual_cutover_requirements": [
+            "approved_code_signing_certificate",
+            "approved_rfc3161_timestamp_service",
+            "documented_release_approval",
+            "bundled_runtime_rollback_artifact_retained",
+        ],
+        "signing": {
+            "required": True,
+            "method": "windows-authenticode",
+            "approved_certificate_required": True,
+        },
+        "timestamp": {
+            "required": True,
+            "service_type": "rfc3161",
+            "approved_service_required": True,
+        },
+        "approvals": {
+            "release_owner_approval_required": True,
+            "signing_operation_approval_required": True,
+        },
+        "rollback": {
+            "bundled_runtime_artifact_required": True,
+            "rollback_validation_required": True,
+        },
+    }
+    policy_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+
+    with pytest.raises(ValueError, match='clean_machine_validation'):
+        load_native_installer_cutover_policy(policy_file)
+
+
+def test_load_native_installer_cutover_policy_rejects_invalid_field_type(tmp_path: Path) -> None:
+    policy_file = tmp_path / 'NATIVE_INSTALLER_CUTOVER_POLICY.json'
+    payload = json.loads(Path(__file__).resolve().parents[1].joinpath('docs', 'NATIVE_INSTALLER_CUTOVER_POLICY.json').read_text(encoding='utf-8'))
+    payload['timestamp']['approved_service_required'] = 'yes'
+    policy_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+
+    with pytest.raises(ValueError, match='approved_service_required'):
+        load_native_installer_cutover_policy(policy_file)
 
 
 def test_execute_full_test_suite_aggregates_file_results(tmp_path: Path) -> None:
@@ -465,6 +565,8 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
     target_dir = tmp_path / 'deliverables'
     build_root = tmp_path / 'build-root'
     build_root.mkdir()
+    policy_file = tmp_path / 'NATIVE_INSTALLER_CUTOVER_POLICY.json'
+    policy = _write_cutover_policy_file(policy_file)
     release_archive = build_root / 'release.zip'
     portable_archive = build_root / 'portable.zip'
     distribution_archive = build_root / 'distribution.zip'
@@ -493,6 +595,8 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
     execute.__globals__['_run_json'] = fake_run_json
     execute.__globals__['_project_version'] = lambda: '0.2.5'
     execute.__globals__['_run_install_smoke'] = lambda installer_archive, target_dir: {'launch_script': 'Launch-ProtoLink.ps1'}
+    execute.__globals__['load_native_installer_cutover_policy'] = lambda: policy
+    execute.__globals__['default_native_installer_cutover_policy_file'] = lambda: policy_file
     def fake_native_lane_receipt(*, workspace, name, receipt_file):
         payload = {
             'generated_at': '2026-04-16T00:00:00+00:00',
@@ -501,8 +605,14 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
                 'lifecycle_contract_ready': True,
             },
             'cutover_policy': {
+                'policy_file': policy_file.name,
+                'policy_id': policy['policy_id'],
+                'policy_format_version': policy['format_version'],
+                'policy_checksum': policy['policy_checksum'],
+                'current_canonical_release_lane': policy['current_canonical_release_lane'],
                 'native_installer_lane_phase': 'probe-only',
                 'blocking_items': ['missing_wix', 'missing_signtool'],
+                'manual_cutover_requirements': list(policy['manual_cutover_requirements']),
             },
             'ready_for_release': False,
         }
@@ -522,16 +632,20 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
     assert result['verification']['installer']['checksum_matches'] is True
     assert result['install_smoke']['launch_script'] == 'Launch-ProtoLink.ps1'
     assert Path(result['native_installer_lane_receipt_file']).exists()
+    assert Path(result['native_installer_cutover_policy_file']).exists()
     assert Path(result['deliverables_manifest_file']).exists()
     assert result['deliverables_manifest']['native_installer_lane_summary']['phase'] == 'probe-only'
     assert result['deliverables_manifest']['checksums']['protolink-0.2.5-installer-package.zip']
     assert result['deliverables_manifest']['checksums']['native-installer-lane-receipt.json']
+    assert result['deliverables_manifest']['checksums'][policy_file.name]
 
 
 def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_path: Path) -> None:
     ns = _load_script('verify_release_deliverables.py')
     target_dir = tmp_path / 'deliverables'
     target_dir.mkdir()
+    policy_file = target_dir / 'NATIVE_INSTALLER_CUTOVER_POLICY.json'
+    policy = _write_cutover_policy_file(policy_file)
 
     file_payloads = {
         'protolink-0.2.5-release-bundle.zip': b'release',
@@ -553,13 +667,17 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
             'signature_verified': False,
         },
         'cutover_policy': {
+            'policy_file': policy_file.name,
+            'policy_id': policy['policy_id'],
+            'policy_format_version': policy['format_version'],
+            'policy_checksum': policy['policy_checksum'],
             'current_canonical_release_lane': 'bundled-runtime-installer-package',
             'native_installer_lane_phase': 'probe-only',
             'probe_ready': True,
             'cutover_ready': False,
             'blocking_items': ['missing_wix', 'missing_signtool'],
             'next_action': 'install_wix_and_signtool',
-            'manual_cutover_requirements': ['approved_code_signing_certificate'],
+            'manual_cutover_requirements': list(policy['manual_cutover_requirements']),
         },
         'ready_for_release': False,
     }
@@ -580,7 +698,7 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
         },
         'checksums': {
             name: sha256(target_dir / name)
-            for name in (*file_payloads.keys(), 'native-installer-lane-receipt.json')
+            for name in (*file_payloads.keys(), 'native-installer-lane-receipt.json', policy_file.name)
         },
         'verification': {
             'portable': {'checksum_matches': True},
@@ -589,6 +707,12 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
         },
         'install_smoke': None,
         'native_installer_lane_receipt_file': 'native-installer-lane-receipt.json',
+        'native_installer_cutover_policy_file': policy_file.name,
+        'native_installer_cutover_policy': {
+            'policy_id': policy['policy_id'],
+            'policy_format_version': policy['format_version'],
+            'policy_checksum': policy['policy_checksum'],
+        },
         'native_installer_lane_summary': {
             'phase': 'probe-only',
             'blocking_items': ['missing_wix', 'missing_signtool'],
@@ -599,6 +723,7 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
         'included_entries': [
             'deliverables-manifest.json',
             'native-installer-lane-receipt.json',
+            policy_file.name,
             'protolink-0.2.5-distribution-package.zip',
             'protolink-0.2.5-installer-package.zip',
             'protolink-0.2.5-portable-package.zip',
@@ -632,6 +757,8 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
     ns = _load_script('verify_release_deliverables.py')
     target_dir = tmp_path / 'deliverables'
     target_dir.mkdir()
+    policy_file = target_dir / 'NATIVE_INSTALLER_CUTOVER_POLICY.json'
+    policy = _write_cutover_policy_file(policy_file)
 
     for name, payload in {
         'protolink-0.2.5-release-bundle.zip': b'release',
@@ -652,13 +779,17 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
             'signature_verified': False,
         },
         'cutover_policy': {
+            'policy_file': policy_file.name,
+            'policy_id': policy['policy_id'],
+            'policy_format_version': policy['format_version'],
+            'policy_checksum': policy['policy_checksum'],
             'current_canonical_release_lane': 'bundled-runtime-installer-package',
             'native_installer_lane_phase': 'probe-only',
             'probe_ready': True,
             'cutover_ready': False,
             'blocking_items': ['missing_wix', 'missing_signtool'],
             'next_action': 'install_wix_and_signtool',
-            'manual_cutover_requirements': ['approved_code_signing_certificate'],
+            'manual_cutover_requirements': list(policy['manual_cutover_requirements']),
         },
         'ready_for_release': False,
     }
@@ -684,6 +815,7 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
                     'protolink-0.2.5-distribution-package.zip': sha256(target_dir / 'protolink-0.2.5-distribution-package.zip'),
                     'protolink-0.2.5-installer-package.zip': sha256(target_dir / 'protolink-0.2.5-installer-package.zip'),
                     'native-installer-lane-receipt.json': sha256(receipt_file),
+                    policy_file.name: sha256(policy_file),
                 },
                 'verification': {
                     'portable': {'checksum_matches': True},
@@ -692,6 +824,12 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
                 },
                 'install_smoke': None,
                 'native_installer_lane_receipt_file': 'native-installer-lane-receipt.json',
+                'native_installer_cutover_policy_file': policy_file.name,
+                'native_installer_cutover_policy': {
+                    'policy_id': policy['policy_id'],
+                    'policy_format_version': policy['format_version'],
+                    'policy_checksum': policy['policy_checksum'],
+                },
                 'native_installer_lane_summary': {
                     'phase': 'toolchain-ready',
                     'blocking_items': ['missing_wix', 'missing_signtool'],
@@ -702,6 +840,7 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
                 'included_entries': [
                     'deliverables-manifest.json',
                     'native-installer-lane-receipt.json',
+                    policy_file.name,
                     'protolink-0.2.5-distribution-package.zip',
                     'protolink-0.2.5-installer-package.zip',
                     'protolink-0.2.5-portable-package.zip',
@@ -735,6 +874,8 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
     ns = _load_script('verify_release_deliverables.py')
     target_dir = tmp_path / 'deliverables'
     target_dir.mkdir()
+    policy_file = target_dir / 'NATIVE_INSTALLER_CUTOVER_POLICY.json'
+    policy = _write_cutover_policy_file(policy_file)
 
     for name, payload in {
         'protolink-0.2.5-release-bundle.zip': b'release',
@@ -755,13 +896,17 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
             'signature_verified': False,
         },
         'cutover_policy': {
+            'policy_file': policy_file.name,
+            'policy_id': policy['policy_id'],
+            'policy_format_version': policy['format_version'],
+            'policy_checksum': policy['policy_checksum'],
             'current_canonical_release_lane': 'bundled-runtime-installer-package',
             'native_installer_lane_phase': 'probe-only',
             'probe_ready': True,
             'cutover_ready': False,
             'blocking_items': ['missing_wix', 'missing_signtool'],
             'next_action': 'install_wix_and_signtool',
-            'manual_cutover_requirements': ['approved_code_signing_certificate'],
+            'manual_cutover_requirements': list(policy['manual_cutover_requirements']),
         },
         'ready_for_release': False,
     }
@@ -787,6 +932,7 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
                     'protolink-0.2.5-distribution-package.zip': sha256(target_dir / 'protolink-0.2.5-distribution-package.zip'),
                     'protolink-0.2.5-installer-package.zip': sha256(target_dir / 'protolink-0.2.5-installer-package.zip'),
                     'native-installer-lane-receipt.json': sha256(receipt_file),
+                    policy_file.name: sha256(policy_file),
                 },
                 'verification': {
                     'portable': {'checksum_matches': True},
@@ -795,6 +941,12 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
                 },
                 'install_smoke': None,
                 'native_installer_lane_receipt_file': 'native-installer-lane-receipt.json',
+                'native_installer_cutover_policy_file': policy_file.name,
+                'native_installer_cutover_policy': {
+                    'policy_id': policy['policy_id'],
+                    'policy_format_version': policy['format_version'],
+                    'policy_checksum': policy['policy_checksum'],
+                },
                 'native_installer_lane_summary': {
                     'phase': 'probe-only',
                     'blocking_items': ['missing_wix', 'missing_signtool'],
@@ -805,6 +957,7 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
                 'included_entries': [
                     'deliverables-manifest.json',
                     'native-installer-lane-receipt.json',
+                    policy_file.name,
                     'protolink-0.2.5-distribution-package.zip',
                     'protolink-0.2.5-installer-package.zip',
                     'protolink-0.2.5-portable-package.zip',
@@ -832,6 +985,126 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
 
     with pytest.raises(ns['DeliveryVerificationError'], match='ready_for_release'):
         ns['execute_verify_release_deliverables'](target_dir=target_dir, require_native_ready=True)
+
+
+def test_execute_verify_release_deliverables_rejects_missing_archived_policy(tmp_path: Path) -> None:
+    ns = _load_script('verify_release_deliverables.py')
+    target_dir = tmp_path / 'deliverables'
+    target_dir.mkdir()
+
+    for name, payload in {
+        'protolink-0.2.5-release-bundle.zip': b'release',
+        'protolink-0.2.5-portable-package.zip': b'portable',
+        'protolink-0.2.5-distribution-package.zip': b'distribution',
+        'protolink-0.2.5-installer-package.zip': b'installer',
+    }.items():
+        (target_dir / name).write_bytes(payload)
+
+    receipt = {
+        'generated_at': '2026-04-16T00:00:00+00:00',
+        'stage_status': {
+            'toolchain_ready': False,
+            'scaffold_built': True,
+            'scaffold_verified': True,
+            'lifecycle_contract_ready': True,
+            'msi_built': False,
+            'signature_verified': False,
+        },
+        'cutover_policy': {
+            'policy_file': 'NATIVE_INSTALLER_CUTOVER_POLICY.json',
+            'policy_id': 'native-installer-cutover-policy',
+            'policy_format_version': 'protolink-native-installer-cutover-policy-v1',
+            'policy_checksum': 'deadbeef',
+            'current_canonical_release_lane': 'bundled-runtime-installer-package',
+            'native_installer_lane_phase': 'probe-only',
+            'probe_ready': True,
+            'cutover_ready': False,
+            'blocking_items': ['missing_wix', 'missing_signtool'],
+            'next_action': 'install_wix_and_signtool',
+            'manual_cutover_requirements': [
+                'approved_code_signing_certificate',
+                'approved_rfc3161_timestamp_service',
+                'documented_release_approval',
+                'bundled_runtime_rollback_artifact_retained',
+            ],
+        },
+        'ready_for_release': False,
+    }
+    receipt_file = target_dir / 'native-installer-lane-receipt.json'
+    receipt_file.write_text(json.dumps(receipt, ensure_ascii=False, indent=2), encoding='utf-8')
+    sha256 = ns['_sha256_file']
+    (target_dir / 'deliverables-manifest.json').write_text(
+        json.dumps(
+            {
+                'format_version': 'protolink-deliverables-v1',
+                'version': '0.2.5',
+                'build_name': 'release-0.2.5',
+                'workspace': str(tmp_path / 'workspace'),
+                'copied_artifacts': {
+                    'release_archive': 'protolink-0.2.5-release-bundle.zip',
+                    'portable_archive': 'protolink-0.2.5-portable-package.zip',
+                    'distribution_archive': 'protolink-0.2.5-distribution-package.zip',
+                    'installer_archive': 'protolink-0.2.5-installer-package.zip',
+                },
+                'checksums': {
+                    'protolink-0.2.5-release-bundle.zip': sha256(target_dir / 'protolink-0.2.5-release-bundle.zip'),
+                    'protolink-0.2.5-portable-package.zip': sha256(target_dir / 'protolink-0.2.5-portable-package.zip'),
+                    'protolink-0.2.5-distribution-package.zip': sha256(target_dir / 'protolink-0.2.5-distribution-package.zip'),
+                    'protolink-0.2.5-installer-package.zip': sha256(target_dir / 'protolink-0.2.5-installer-package.zip'),
+                    'native-installer-lane-receipt.json': sha256(receipt_file),
+                    'NATIVE_INSTALLER_CUTOVER_POLICY.json': 'deadbeef',
+                },
+                'verification': {
+                    'portable': {'checksum_matches': True},
+                    'distribution': {'checksum_matches': True},
+                    'installer': {'checksum_matches': True},
+                },
+                'install_smoke': None,
+                'native_installer_lane_receipt_file': 'native-installer-lane-receipt.json',
+                'native_installer_cutover_policy_file': 'NATIVE_INSTALLER_CUTOVER_POLICY.json',
+                'native_installer_cutover_policy': {
+                    'policy_id': 'native-installer-cutover-policy',
+                    'policy_format_version': 'protolink-native-installer-cutover-policy-v1',
+                    'policy_checksum': 'deadbeef',
+                },
+                'native_installer_lane_summary': {
+                    'phase': 'probe-only',
+                    'blocking_items': ['missing_wix', 'missing_signtool'],
+                    'lifecycle_contract_ready': True,
+                    'toolchain_ready': False,
+                    'ready_for_release': False,
+                },
+                'included_entries': [
+                    'deliverables-manifest.json',
+                    'native-installer-lane-receipt.json',
+                    'NATIVE_INSTALLER_CUTOVER_POLICY.json',
+                    'protolink-0.2.5-distribution-package.zip',
+                    'protolink-0.2.5-installer-package.zip',
+                    'protolink-0.2.5-portable-package.zip',
+                    'protolink-0.2.5-release-bundle.zip',
+                ],
+                'target_dir': str(target_dir),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding='utf-8',
+    )
+
+    def fake_run_json(command, *, cwd=None):
+        command_text = ' '.join(command)
+        if '--verify-portable-package' in command_text:
+            return {'checksum_matches': True}
+        if '--verify-distribution-package' in command_text:
+            return {'checksum_matches': True}
+        if '--verify-installer-package' in command_text:
+            return {'checksum_matches': True}
+        raise AssertionError(command)
+
+    ns['execute_verify_release_deliverables'].__globals__['_run_json'] = fake_run_json
+
+    with pytest.raises(ns['DeliveryVerificationError'], match='cutover policy file was not found'):
+        ns['execute_verify_release_deliverables'](target_dir=target_dir)
 
 
 def test_parse_gui_audit_resolution_rejects_invalid_token() -> None:

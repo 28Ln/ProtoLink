@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from protolink.core.native_installer_cutover_policy import load_native_installer_cutover_policy
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TARGET_DIR = ROOT / "dist" / "deliverables"
@@ -116,6 +117,8 @@ def execute_verify_release_deliverables(
     checksums = _require_dict(manifest, "checksums", label="Deliverables manifest")
     verification = _require_dict(manifest, "verification", label="Deliverables manifest")
     receipt_name = _require_string(manifest, "native_installer_lane_receipt_file", label="Deliverables manifest")
+    policy_name = _require_string(manifest, "native_installer_cutover_policy_file", label="Deliverables manifest")
+    policy_metadata = _require_dict(manifest, "native_installer_cutover_policy", label="Deliverables manifest")
     native_installer_lane_summary = _require_dict(
         manifest, "native_installer_lane_summary", label="Deliverables manifest"
     )
@@ -175,6 +178,32 @@ def execute_verify_release_deliverables(
         )
     if receipt_name not in included_entry_names:
         raise DeliveryVerificationError(f"Deliverables manifest included_entries is missing '{receipt_name}'.")
+    policy_file = _safe_top_level_path(target_dir, policy_name, label="native_installer_cutover_policy_file")
+    if not policy_file.exists() or not policy_file.is_file():
+        raise DeliveryVerificationError(f"Native installer cutover policy file was not found: {policy_file}")
+    policy_checksum = checksums.get(policy_name)
+    if not isinstance(policy_checksum, str) or not policy_checksum:
+        raise DeliveryVerificationError(f"Deliverables manifest is missing checksum for '{policy_name}'.")
+    actual_policy_checksum = _sha256_file(policy_file)
+    if actual_policy_checksum != policy_checksum:
+        raise DeliveryVerificationError(
+            f"Native installer cutover policy checksum mismatch.\nexpected: {policy_checksum}\nactual:   {actual_policy_checksum}"
+        )
+    if policy_name not in included_entry_names:
+        raise DeliveryVerificationError(f"Deliverables manifest included_entries is missing '{policy_name}'.")
+    try:
+        archived_policy = load_native_installer_cutover_policy(policy_file)
+    except ValueError as exc:
+        raise DeliveryVerificationError(f"Archived native installer cutover policy is invalid: {exc}") from exc
+    for manifest_key, policy_key in (
+        ("policy_id", "policy_id"),
+        ("policy_format_version", "format_version"),
+        ("policy_checksum", "policy_checksum"),
+    ):
+        if policy_metadata.get(manifest_key) != archived_policy[policy_key]:
+            raise DeliveryVerificationError(
+                f"Deliverables manifest native installer cutover policy {manifest_key} does not match the archived policy."
+            )
 
     receipt = _read_json_file(receipt_file, label="Native installer lane receipt")
     stage_status = _require_dict(receipt, "stage_status", label="Native installer lane receipt")
@@ -219,6 +248,15 @@ def execute_verify_release_deliverables(
         raise DeliveryVerificationError("Deliverables manifest native installer lane summary.ready_for_release does not match the receipt.")
     if require_native_ready and not receipt_ready:
         raise DeliveryVerificationError("Native installer lane is not ready_for_release for these deliverables.")
+    for receipt_key, policy_key in (
+        ("policy_id", "policy_id"),
+        ("policy_format_version", "format_version"),
+        ("policy_checksum", "policy_checksum"),
+    ):
+        if cutover_policy.get(receipt_key) != archived_policy[policy_key]:
+            raise DeliveryVerificationError(
+                f"Native installer lane receipt {receipt_key} does not match the archived cutover policy."
+            )
 
     install_smoke = manifest.get("install_smoke")
     install_smoke_present = install_smoke is not None
@@ -232,6 +270,7 @@ def execute_verify_release_deliverables(
         "manifest_file": str(manifest_file),
         "checked_artifacts": checked_artifacts,
         "receipt_file": str(receipt_file),
+        "policy_file": str(policy_file),
         "native_installer_lane_phase": receipt_phase,
         "install_smoke_present": install_smoke_present,
         "checks": {

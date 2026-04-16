@@ -20,6 +20,7 @@ TARGET_FILES = {
     "ENGINEERING_TASKLIST": ROOT / "docs" / "ENGINEERING_TASKLIST.md",
     "HANDOFF": ROOT / "docs" / "HANDOFF.md",
     "NATIVE_INSTALLER_PLAN": ROOT / "docs" / "NATIVE_INSTALLER_PLAN.md",
+    "NATIVE_INSTALLER_CUTOVER_POLICY": ROOT / "docs" / "NATIVE_INSTALLER_CUTOVER_POLICY.json",
     "RISK_REGISTER": ROOT / "docs" / "RISK_REGISTER.md",
     "VALIDATION": ROOT / "docs" / "VALIDATION.md",
     "RELEASE_CHECKLIST": ROOT / "docs" / "RELEASE_CHECKLIST.md",
@@ -75,6 +76,7 @@ def main() -> int:
     tasklist = _read("ENGINEERING_TASKLIST")
     handoff = _read("HANDOFF")
     native_installer_plan = _read("NATIVE_INSTALLER_PLAN")
+    native_installer_cutover_policy = _read("NATIVE_INSTALLER_CUTOVER_POLICY")
     risk_register = _read("RISK_REGISTER")
     validation = _read("VALIDATION")
     release_checklist = _read("RELEASE_CHECKLIST")
@@ -87,11 +89,13 @@ def main() -> int:
 
     _require_contains("INDEX", index, "HANDOFF.md")
     _require_contains("INDEX", index, "NATIVE_INSTALLER_PLAN.md")
+    _require_contains("INDEX", index, "NATIVE_INSTALLER_CUTOVER_POLICY.json")
     _require_contains("INDEX", index, "EXTENSION_CONTRACT.md")
     _require_contains("README", readme, f"Current canonical mainline: `{expected_mainline}`")
     _require_contains("README", readme, "`docs/HANDOFF.md`")
     _require_contains("README", readme, "`docs/ROADMAP.md`")
     _require_contains("README", readme, "Native installer scaffold")
+    _require_contains("README", readme, "NATIVE_INSTALLER_CUTOVER_POLICY.json")
     _require_contains("README", readme, "verify_release_deliverables.py")
     _require_contains("TASKS", tasks, "`docs/ENGINEERING_TASKLIST.md`")
     _require_contains("README", readme, FULL_SUITE_COMMAND)
@@ -104,8 +108,16 @@ def main() -> int:
     _require_contains("MAINLINE_STATUS", mainline_status, f"- ID: `{expected_mainline}`")
     _require_contains("HANDOFF", handoff, "当前主线")
     _require_contains("NATIVE_INSTALLER_PLAN", native_installer_plan, "native installer scaffold")
+    _require_contains("NATIVE_INSTALLER_PLAN", native_installer_plan, "NATIVE_INSTALLER_CUTOVER_POLICY.json")
+    _require_contains(
+        "NATIVE_INSTALLER_CUTOVER_POLICY",
+        native_installer_cutover_policy,
+        "\"format_version\": \"protolink-native-installer-cutover-policy-v1\"",
+    )
+    _require_contains("NATIVE_INSTALLER_CUTOVER_POLICY", native_installer_cutover_policy, "\"manual_cutover_requirements\"")
     _require_contains("RELEASE_CHECKLIST", release_checklist, "native installer scaffold")
     _require_contains("RELEASE_CHECKLIST", release_checklist, "verify_release_deliverables.py")
+    _require_contains("RELEASE_CHECKLIST", release_checklist, "NATIVE_INSTALLER_CUTOVER_POLICY.json")
     _require_contains("RISK_REGISTER", risk_register, "风险清单")
     _require_contains("TASK_ARCHIVE", task_archive, "- `PL-012` —")
     _require_contains("CI_WORKFLOW", ci_workflow, "scripts/build_release_deliverables.py")

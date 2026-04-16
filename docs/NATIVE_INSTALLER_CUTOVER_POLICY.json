@@ -1,0 +1,37 @@
+{
+  "policy_id": "native-installer-cutover-policy",
+  "format_version": "protolink-native-installer-cutover-policy-v1",
+  "current_canonical_release_lane": "bundled-runtime-installer-package",
+  "manual_cutover_requirements": [
+    "approved_code_signing_certificate",
+    "approved_rfc3161_timestamp_service",
+    "documented_release_approval",
+    "bundled_runtime_rollback_artifact_retained"
+  ],
+  "signing": {
+    "required": true,
+    "method": "windows-authenticode",
+    "approved_certificate_required": true
+  },
+  "timestamp": {
+    "required": true,
+    "service_type": "rfc3161",
+    "approved_service_required": true
+  },
+  "approvals": {
+    "release_owner_approval_required": true,
+    "signing_operation_approval_required": true
+  },
+  "rollback": {
+    "bundled_runtime_artifact_required": true,
+    "rollback_validation_required": true
+  },
+  "clean_machine_validation": {
+    "required": true,
+    "required_commands": [
+      "msiexec /i ProtoLink.msi /qn /l*v install.log",
+      "protolink --headless-summary",
+      "msiexec /x ProtoLink.msi /qn /l*v uninstall.log"
+    ]
+  }
+}
