@@ -18,11 +18,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="校验 ProtoLink 的 release-staging 安装与运行链路。")
     parser.add_argument("--name", default="release-staging", help="产物名称前缀。")
     parser.add_argument("--keep-artifacts", action="store_true", help="保留临时暂存、安装和工作区目录。")
-    parser.add_argument(
-        "--skip-native-installer-lane",
-        action="store_true",
-        help="跳过附加的 native installer lane 结构化探针。",
-    )
     return parser
 
 
@@ -63,10 +58,6 @@ def _run_json(command: list[str]) -> dict[str, object]:
 
 def _uv(*args: str) -> list[str]:
     return ["uv", "run", *args]
-
-
-def _python(script: Path, *args: str) -> list[str]:
-    return [sys.executable, str(script), *args]
 
 
 def _sanitized_environment(*, python_path: Path | None = None) -> dict[str, str]:
@@ -122,182 +113,151 @@ def _parse_headless_summary(label: str, output: str, install_root: Path) -> dict
     }
 
 
-def execute_release_staging(
-    *,
-    name: str = "release-staging",
-    workspace: Path | None = None,
-    include_native_installer_lane: bool = True,
-) -> dict[str, object]:
-    temp_root: Path | None = None
-    if workspace is None:
-        temp_root = Path(tempfile.mkdtemp(prefix="protolink-release-staging-"))
-        workspace = temp_root / "workspace"
-    workspace = workspace.resolve()
-    temp_root = workspace.parent if temp_root is None else temp_root
-    staging_dir = temp_root / "installer-staging"
-    install_dir = temp_root / "installer-install"
-
-    generate_payload = _run_json(_uv("protolink", "--workspace", str(workspace), "--generate-smoke-artifacts"))
-    build_payload = _run_json(_uv("protolink", "--workspace", str(workspace), "--build-installer-package", name))
-
-    portable_archive = str(build_payload["portable_archive_file"])
-    distribution_archive = str(build_payload["distribution_archive_file"])
-    installer_archive = str(build_payload["installer_archive_file"])
-
-    verify_portable = _run_json(_uv("protolink", "--verify-portable-package", portable_archive))
-    verify_distribution = _run_json(_uv("protolink", "--verify-distribution-package", distribution_archive))
-    verify_installer = _run_json(_uv("protolink", "--verify-installer-package", installer_archive))
-
-    install_payload = _run_json(
-        _uv(
-            "protolink",
-            "--install-installer-package",
-            installer_archive,
-            str(staging_dir),
-            str(install_dir),
-        )
-    )
-
-    required_files = {
-        "installer_package_manifest_file": install_payload["installer_package_manifest_file"],
-        "installer_manifest_file": install_payload["installer_manifest_file"],
-        "distribution_manifest_file": install_payload["distribution_manifest_file"],
-        "portable_receipt_file": install_payload["portable_receipt_file"],
-    }
-    for label, path_value in required_files.items():
-        if not Path(str(path_value)).exists():
-            raise SystemExit(f"Release-staging verification is missing expected file: {label} -> {path_value}")
-
-    installed_scripts = {
-        "install_script": install_dir / "INSTALL.ps1",
-        "launch_ps1": install_dir / "Launch-ProtoLink.ps1",
-        "launch_bat": install_dir / "Launch-ProtoLink.bat",
-    }
-    for label, path_value in installed_scripts.items():
-        if not path_value.exists():
-            raise SystemExit(f"Release-staging verification is missing expected installed script: {label} -> {path_value}")
-
-    runtime_python = install_dir / "runtime" / "python.exe"
-    site_packages = install_dir / "sp"
-    if not runtime_python.exists():
-        raise SystemExit(f"Bundled runtime executable was not installed: {runtime_python}")
-    if not site_packages.exists():
-        raise SystemExit(f"Bundled site-packages directory was not installed: {site_packages}")
-
-    runtime_env = _sanitized_environment(python_path=site_packages)
-    installed_summary = _run_command(
-        [str(runtime_python), "-m", "protolink", "--headless-summary"],
-        env=runtime_env,
-        cwd=temp_root,
-    ).stdout
-    installed_summary_details = _parse_headless_summary(
-        "runtime/python.exe -m protolink --headless-summary",
-        installed_summary,
-        install_dir,
-    )
-
-    launcher_env = _sanitized_environment()
-    install_script_summary = _run_command(
-        ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(installed_scripts["install_script"])],
-        env=launcher_env,
-        cwd=temp_root,
-    ).stdout
-    install_script_details = _parse_headless_summary("INSTALL.ps1", install_script_summary, install_dir)
-    launch_ps1_summary = _run_command(
-        [
-            "powershell",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(installed_scripts["launch_ps1"]),
-            "--headless-summary",
-        ],
-        env=launcher_env,
-        cwd=temp_root,
-    ).stdout
-    launch_ps1_details = _parse_headless_summary("Launch-ProtoLink.ps1", launch_ps1_summary, install_dir)
-    launch_bat_summary = _run_command(
-        ["cmd", "/c", str(installed_scripts["launch_bat"]), "--headless-summary"],
-        env=launcher_env,
-        cwd=temp_root,
-    ).stdout
-    launch_bat_details = _parse_headless_summary("Launch-ProtoLink.bat", launch_bat_summary, install_dir)
-
-    uninstall_payload = _run_json(_uv("protolink", "--uninstall-portable-package", str(install_dir)))
-    if not uninstall_payload.get("removed_receipt"):
-        raise SystemExit("Portable uninstall did not remove the install receipt.")
-
-    native_installer_lane = None
-    if include_native_installer_lane:
-        native_workspace = temp_root / "ni"
-        native_installer_lane = _run_json(
-            _python(
-                ROOT / "scripts" / "verify_native_installer_lane.py",
-                "--workspace",
-                str(native_workspace),
-                "--name",
-                f"{name}-native",
-            )
-        )
-
-    return {
-        "workspace": str(workspace),
-        "temp_root": str(temp_root),
-        "generate_smoke_artifacts": {
-            "log_file": generate_payload["log_file"],
-            "capture_file": generate_payload["capture_file"],
-            "replay_step_count": generate_payload["replay_step_count"],
-        },
-        "build_installer_package": {
-            "release_archive_file": build_payload["release_archive_file"],
-            "portable_archive_file": build_payload["portable_archive_file"],
-            "distribution_archive_file": build_payload["distribution_archive_file"],
-            "installer_archive_file": build_payload["installer_archive_file"],
-        },
-        "verify_portable_package": {
-            "archive_file": verify_portable["archive_file"],
-            "checksum_matches": verify_portable["checksum_matches"],
-        },
-        "verify_distribution_package": {
-            "archive_file": verify_distribution["archive_file"],
-            "checksum_matches": verify_distribution["checksum_matches"],
-        },
-        "verify_installer_package": {
-            "archive_file": verify_installer["archive_file"],
-            "checksum_matches": verify_installer["checksum_matches"],
-        },
-        "install_installer_package": {
-            "archive_file": install_payload["archive_file"],
-            "install_dir": install_payload["install_dir"],
-            "portable_receipt_file": install_payload["portable_receipt_file"],
-        },
-        "installed_headless_summary": installed_summary_details,
-        "install_script_headless_summary": install_script_details,
-        "launch_ps1_headless_summary": launch_ps1_details,
-        "launch_bat_headless_summary": launch_bat_details,
-        "uninstall_portable_package": {
-            "target_dir": uninstall_payload["target_dir"],
-            "removed_receipt": uninstall_payload["removed_receipt"],
-        },
-        "native_installer_lane": native_installer_lane,
-    }
-
-
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+
+    temp_root = Path(tempfile.mkdtemp(prefix="protolink-release-staging-"))
+    workspace = temp_root / "workspace"
+    staging_dir = temp_root / "installer-staging"
+    install_dir = temp_root / "installer-install"
+
     try:
-        result = execute_release_staging(
-            name=args.name,
-            include_native_installer_lane=not args.skip_native_installer_lane,
+        generate_payload = _run_json(_uv("protolink", "--workspace", str(workspace), "--generate-smoke-artifacts"))
+        build_payload = _run_json(_uv("protolink", "--workspace", str(workspace), "--build-installer-package", args.name))
+
+        portable_archive = str(build_payload["portable_archive_file"])
+        distribution_archive = str(build_payload["distribution_archive_file"])
+        installer_archive = str(build_payload["installer_archive_file"])
+
+        verify_portable = _run_json(_uv("protolink", "--verify-portable-package", portable_archive))
+        verify_distribution = _run_json(_uv("protolink", "--verify-distribution-package", distribution_archive))
+        verify_installer = _run_json(_uv("protolink", "--verify-installer-package", installer_archive))
+
+        install_payload = _run_json(
+            _uv(
+                "protolink",
+                "--install-installer-package",
+                installer_archive,
+                str(staging_dir),
+                str(install_dir),
+            )
         )
+
+        required_files = {
+            "installer_package_manifest_file": install_payload["installer_package_manifest_file"],
+            "installer_manifest_file": install_payload["installer_manifest_file"],
+            "distribution_manifest_file": install_payload["distribution_manifest_file"],
+            "portable_receipt_file": install_payload["portable_receipt_file"],
+        }
+        for label, path_value in required_files.items():
+            if not Path(str(path_value)).exists():
+                raise SystemExit(f"Release-staging verification is missing expected file: {label} -> {path_value}")
+
+        installed_scripts = {
+            "install_script": install_dir / "INSTALL.ps1",
+            "launch_ps1": install_dir / "Launch-ProtoLink.ps1",
+            "launch_bat": install_dir / "Launch-ProtoLink.bat",
+        }
+        for label, path_value in installed_scripts.items():
+            if not path_value.exists():
+                raise SystemExit(f"Release-staging verification is missing expected installed script: {label} -> {path_value}")
+
+        runtime_python = install_dir / "runtime" / "python.exe"
+        site_packages = install_dir / "sp"
+        if not runtime_python.exists():
+            raise SystemExit(f"Bundled runtime executable was not installed: {runtime_python}")
+        if not site_packages.exists():
+            raise SystemExit(f"Bundled site-packages directory was not installed: {site_packages}")
+
+        runtime_env = _sanitized_environment(python_path=site_packages)
+        installed_summary = _run_command(
+            [str(runtime_python), "-m", "protolink", "--headless-summary"],
+            env=runtime_env,
+            cwd=temp_root,
+        ).stdout
+        installed_summary_details = _parse_headless_summary(
+            "runtime/python.exe -m protolink --headless-summary",
+            installed_summary,
+            install_dir,
+        )
+
+        launcher_env = _sanitized_environment()
+        install_script_summary = _run_command(
+            ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(installed_scripts["install_script"])],
+            env=launcher_env,
+            cwd=temp_root,
+        ).stdout
+        install_script_details = _parse_headless_summary("INSTALL.ps1", install_script_summary, install_dir)
+        launch_ps1_summary = _run_command(
+            [
+                "powershell",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(installed_scripts["launch_ps1"]),
+                "--headless-summary",
+            ],
+            env=launcher_env,
+            cwd=temp_root,
+        ).stdout
+        launch_ps1_details = _parse_headless_summary("Launch-ProtoLink.ps1", launch_ps1_summary, install_dir)
+        launch_bat_summary = _run_command(
+            ["cmd", "/c", str(installed_scripts["launch_bat"]), "--headless-summary"],
+            env=launcher_env,
+            cwd=temp_root,
+        ).stdout
+        launch_bat_details = _parse_headless_summary("Launch-ProtoLink.bat", launch_bat_summary, install_dir)
+
+        uninstall_payload = _run_json(_uv("protolink", "--uninstall-portable-package", str(install_dir)))
+        if not uninstall_payload.get("removed_receipt"):
+            raise SystemExit("Portable uninstall did not remove the install receipt.")
+
+        result = {
+            "workspace": str(workspace),
+            "temp_root": str(temp_root),
+            "generate_smoke_artifacts": {
+                "log_file": generate_payload["log_file"],
+                "capture_file": generate_payload["capture_file"],
+                "replay_step_count": generate_payload["replay_step_count"],
+            },
+            "build_installer_package": {
+                "release_archive_file": build_payload["release_archive_file"],
+                "portable_archive_file": build_payload["portable_archive_file"],
+                "distribution_archive_file": build_payload["distribution_archive_file"],
+                "installer_archive_file": build_payload["installer_archive_file"],
+            },
+            "verify_portable_package": {
+                "archive_file": verify_portable["archive_file"],
+                "checksum_matches": verify_portable["checksum_matches"],
+            },
+            "verify_distribution_package": {
+                "archive_file": verify_distribution["archive_file"],
+                "checksum_matches": verify_distribution["checksum_matches"],
+            },
+            "verify_installer_package": {
+                "archive_file": verify_installer["archive_file"],
+                "checksum_matches": verify_installer["checksum_matches"],
+            },
+            "install_installer_package": {
+                "archive_file": install_payload["archive_file"],
+                "install_dir": install_payload["install_dir"],
+                "portable_receipt_file": install_payload["portable_receipt_file"],
+            },
+            "installed_headless_summary": installed_summary_details,
+            "install_script_headless_summary": install_script_details,
+            "launch_ps1_headless_summary": launch_ps1_details,
+            "launch_bat_headless_summary": launch_bat_details,
+            "uninstall_portable_package": {
+                "target_dir": uninstall_payload["target_dir"],
+                "removed_receipt": uninstall_payload["removed_receipt"],
+            },
+        }
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     finally:
-        temp_root = Path(str(result["temp_root"])) if 'result' in locals() else None
         if not args.keep_artifacts:
-            if temp_root is not None:
-                shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(temp_root, ignore_errors=True)
 
 
 if __name__ == "__main__":
