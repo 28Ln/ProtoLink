@@ -62,6 +62,7 @@ uv build
 - `audit-plugin-manifests` 会静态审计 `workspace/plugins/*/manifest.json`；任何 invalid manifest 都会进入 `--release-preflight` 阻断。
 - `list-extension-descriptors` 只列出通过静态校验的扩展描述清单；`plan-extension-loading`、`load-enabled-extensions` 与 `release-preflight` 共同解释可装载状态、显式 Class A runtime execution 与正式交付门禁。
 - `audit_gui_layout.py` 当前在目标分辨率下返回 `highest_severity=clean`，dashboard 与报文分析台的已知布局压缩警告已收敛。
+- 2.0 收尾文档应与本文件保持同一真值口径，尤其是 `HANDOFF_2_0` / `PROJECT_FLOW_2_0` / `ISSUE_REGISTER_2_0`。
 
 ## Extension boundary verification
 

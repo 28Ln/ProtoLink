@@ -2,6 +2,11 @@
 
 ## 产品
 
+- `PROJECT_FLOW_2_0.md`：2.0 全链路流程与运行/交付入口
+- `FEATURES_2_0.md`：2.0 功能说明
+- `ISSUE_REGISTER_2_0.md`：2.0 问题台账
+- `DEPENDENCY_AUDIT_2_0.md`：2.0 依赖与兼容性审计
+- `HANDOFF_2_0.md`：2.0 正式交接文档
 - `PROJECT_BRIEF.md`：产品目标、目标用户、范围与非目标
 - `ROADMAP.md`：长期演进方向
 - `../CHANGELOG.md`：阶段版本变更记录
@@ -31,6 +36,7 @@
 ## 交接
 
 - `HANDOFF.md`：接手说明、目录入口、第一周动作
+- `HANDOFF_2_0.md`：2.0 收尾交接与下一团队入口
 - `RISK_REGISTER.md`：风险清单
 
 ## 归档

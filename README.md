@@ -94,6 +94,11 @@ docs/            正式工程文档与归档
 ## 文档入口
 
 - `docs/INDEX.md`：文档索引
+- `docs/PROJECT_FLOW_2_0.md`：2.0 全链路流程与入口
+- `docs/FEATURES_2_0.md`：2.0 功能说明
+- `docs/ISSUE_REGISTER_2_0.md`：2.0 问题台账
+- `docs/DEPENDENCY_AUDIT_2_0.md`：2.0 依赖与兼容性审计
+- `docs/HANDOFF_2_0.md`：2.0 交接文档
 - `docs/PROJECT_BRIEF.md`：产品目标、范围与非目标
 - `docs/ARCHITECTURE.md`：入口、分层、状态、数据流、异常流
 - `docs/CURRENT_STATE.md`：当前真实进展
@@ -118,6 +123,7 @@ ProtoLink 目前已经具备：
 - 可执行的测试与回归基线
 - 可执行的 release-staging 验证链
 - bundled-runtime 便携/分发/安装包链路
+- 当前打包后的 GUI 启动入口：`Launch-ProtoLink.bat` / `Launch-ProtoLink.ps1`
 - native installer scaffold / toolchain / MSI build / signature verify CLI
 - `workspace/plugins/<plugin-id>/manifest.json` 的发现、静态校验、descriptor registry、registry.json 装载计划、显式 Class A runtime loading CLI 与 release-preflight runtime gate
 - 无口头补充前提下的正式 handoff 文档集

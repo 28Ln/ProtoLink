@@ -9,6 +9,8 @@
 - wired controlled Class A runtime loading into release-preflight and failure evidence recording
 - made headless summary expose runtime gate counts without implicitly executing plugin code
 - cleared formal GUI audit warnings for the dashboard and packet-console delivery layout at target resolutions
+- added 2.0 project-flow / feature / issue / dependency / handoff documentation baseline
+- removed obsolete temp probe directories and stale dist artifacts
 
 ## 0.2.5 - 2026-04-15
 
