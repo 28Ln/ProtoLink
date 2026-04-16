@@ -195,6 +195,70 @@ def test_execute_native_installer_lane_handles_missing_toolchain_with_structured
     assert 'documented_release_approval' in result['cutover_policy']['manual_cutover_requirements']
 
 
+def test_main_writes_native_installer_lane_receipt_file(tmp_path: Path, capsys) -> None:
+    ns = _load_script('verify_native_installer_lane.py')
+    receipt_file = tmp_path / 'native-installer-lane-receipt.json'
+    workspace = tmp_path / 'workspace'
+    result_payload = {
+        'generated_at': '2026-04-16T00:00:00+00:00',
+        'workspace': str(workspace),
+        'temporary_root': None,
+        'duration_ms': 1.0,
+        'stage_status': {
+            'toolchain_ready': False,
+            'scaffold_built': True,
+            'scaffold_verified': True,
+            'lifecycle_contract_ready': True,
+            'msi_built': False,
+            'signature_verified': False,
+        },
+        'cutover_policy': {
+            'current_canonical_release_lane': 'bundled-runtime-installer-package',
+            'native_installer_lane_phase': 'probe-only',
+            'probe_ready': True,
+            'cutover_ready': False,
+            'blocking_items': ['missing_wix', 'missing_signtool'],
+            'next_action': 'install_wix_and_signtool',
+            'manual_cutover_requirements': ['approved_code_signing_certificate'],
+        },
+        'toolchain': {'ready': False},
+        'scaffold_build': {'native_installer_scaffold_dir': str(tmp_path / 'scaffold')},
+        'scaffold_verify': {'checksum_matches': True, 'lifecycle_contract_ready': True},
+        'msi_build': None,
+        'signature_verify': None,
+        'ready_for_release': False,
+    }
+
+    args = type(
+        'Args',
+        (),
+        {
+            'workspace': workspace,
+            'name': 'lane',
+            'receipt_file': receipt_file,
+            'require_toolchain': False,
+            'require_signed': False,
+            'keep_artifacts': True,
+        },
+    )()
+
+    class _FakeParser:
+        def parse_args(self):
+            return args
+
+    ns['main'].__globals__['build_parser'] = lambda: _FakeParser()
+    ns['main'].__globals__['execute_native_installer_lane'] = lambda **kwargs: result_payload
+
+    exit_code = ns['main']()
+    captured = capsys.readouterr()
+    stored_payload = json.loads(receipt_file.read_text(encoding='utf-8'))
+
+    assert exit_code == 0
+    assert json.loads(captured.out)['cutover_policy']['native_installer_lane_phase'] == 'probe-only'
+    assert stored_payload['stage_status']['lifecycle_contract_ready'] is True
+    assert stored_payload['cutover_policy']['native_installer_lane_phase'] == 'probe-only'
+
+
 def test_execute_native_installer_lane_raises_when_toolchain_is_required(tmp_path: Path) -> None:
     ns = _load_script('verify_native_installer_lane.py')
 
@@ -429,6 +493,22 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
     execute.__globals__['_run_json'] = fake_run_json
     execute.__globals__['_project_version'] = lambda: '0.2.5'
     execute.__globals__['_run_install_smoke'] = lambda installer_archive, target_dir: {'launch_script': 'Launch-ProtoLink.ps1'}
+    def fake_native_lane_receipt(*, workspace, name, receipt_file):
+        payload = {
+            'generated_at': '2026-04-16T00:00:00+00:00',
+            'stage_status': {
+                'toolchain_ready': False,
+                'lifecycle_contract_ready': True,
+            },
+            'cutover_policy': {
+                'native_installer_lane_phase': 'probe-only',
+                'blocking_items': ['missing_wix', 'missing_signtool'],
+            },
+            'ready_for_release': False,
+        }
+        receipt_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+        return payload
+    execute.__globals__['_run_native_installer_lane_receipt'] = fake_native_lane_receipt
 
     result = execute(
         name='release-0.2.5',
@@ -441,6 +521,10 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
     assert Path(result['copied_artifacts']['portable_archive']).exists()
     assert result['verification']['installer']['checksum_matches'] is True
     assert result['install_smoke']['launch_script'] == 'Launch-ProtoLink.ps1'
+    assert Path(result['native_installer_lane_receipt_file']).exists()
+    assert Path(result['deliverables_manifest_file']).exists()
+    assert result['deliverables_manifest']['native_installer_lane_summary']['phase'] == 'probe-only'
+    assert result['deliverables_manifest']['checksums']['protolink-0.2.5-installer-package.zip']
 
 
 def test_parse_gui_audit_resolution_rejects_invalid_token() -> None:

@@ -209,6 +209,8 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
 - 当前 bundled-runtime release gate 仍以 `verify_release_staging.py`、`verify_dist_install.py`、`run_soak_validation.py`、`uv build` 为正式门禁。
 - `python scripts/verify_native_installer_lane.py` 在当前阶段只承担 probe truth，不把缺失 WiX / SignTool 直接升级为 bundled release blocker。
 - 只有在显式启用 `--require-toolchain` 或 `--require-signed` 时，native installer lane 才进入 cutover gate 语义。
+- `python scripts/verify_native_installer_lane.py --receipt-file <path>` 可把当前 lane truth 落盘为正式 JSON receipt。
+- `build_release_deliverables.py` 会把 `native-installer-lane-receipt.json` 与 `deliverables-manifest.json` 一起写入 `dist/deliverables/`，作为阶段性交付 evidence。
 - `verify_native_installer_lane.py` 的结构化输出必须持续说明：
   - `current_canonical_release_lane`
   - `native_installer_lane_phase`

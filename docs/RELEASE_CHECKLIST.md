@@ -18,7 +18,7 @@ Last updated: 2026-04-16
 ```powershell
 uv sync --python 3.11 --extra dev --extra ui
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 360
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 361
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local
@@ -52,6 +52,7 @@ python scripts/verify_native_installer_lane.py --require-signed
 - 切换 native installer release lane 前，至少保留一份已验证的 bundled-runtime installer package 作为回退产物。
 - 切换前必须记录 release owner 审批与签名操作审批；审批证据应与签名产物一同归档。
 - 只有在 clean-machine install / uninstall / `protolink --headless-summary` 全部通过后，native installer 才允许进入 cutover 决策。
+- `dist/deliverables` 发布归档应包含 `deliverables-manifest.json` 与 `native-installer-lane-receipt.json`，用于交付后复核。
 
 ## 工作区与交付检查
 
@@ -74,6 +75,7 @@ python scripts/verify_native_installer_lane.py --require-signed
   - `--build-native-installer-msi`
   - `--verify-native-installer-signature`
 - `--verify-native-installer-scaffold` 必须能校验 `target_arch`、`install_scope`、`install_dir_name`、`product_code_policy`、`upgrade_strategy` 与静默安装命令
+- `python scripts/verify_native_installer_lane.py --receipt-file <path>` 可作为 release evidence 落盘入口
 - `uv run protolink --help` 中必须能看到这些命令
 - `README.md`、`docs/NATIVE_INSTALLER_PLAN.md`、`docs/VALIDATION.md`、本文件必须包含**精确 flag 名称**
 - `--load-enabled-extensions` 作为正式 CLI surface 时，README、`docs/VALIDATION.md`、`docs/EXTENSION_CONTRACT.md` 与本文件必须保持同一口径

@@ -16,7 +16,7 @@ Last updated: 2026-04-16
 ## 2. Current Real Status
 
 - branch: `main`
-- latest verified pytest truth: `360 passed`
+- latest verified pytest truth: `361 passed`
 - current active mainline: `PL-014`
 - current version baseline: `0.2.5`
 - worktree baseline: 以当前仓库为准，接手前先执行 `git status`
@@ -42,7 +42,7 @@ Last updated: 2026-04-16
 
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
-- `uv run python scripts/run_full_test_suite.py --json-only` -> `360 passed`
+- `uv run python scripts/run_full_test_suite.py --json-only` -> `361 passed`
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name local` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
@@ -51,7 +51,7 @@ Last updated: 2026-04-16
 - `uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest` -> passed
 - `python scripts/verify_native_installer_lane.py` -> passed
 - `uv run python scripts/build_release_deliverables.py --name release-0.2.5 --target-dir dist\deliverables` -> passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 360` -> passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 361` -> passed
 
 ## 5. What Is Done
 
@@ -105,7 +105,7 @@ Last updated: 2026-04-16
 ## 8. First Steps for the Next Team
 
 1. 执行 `git status`
-2. 执行 `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 360`
+2. 执行 `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 361`
 3. 执行 `uv run python scripts/run_full_test_suite.py --json-only`
 4. 阅读：
    - `docs/PROJECT_STATUS.md`
@@ -121,6 +121,8 @@ Last updated: 2026-04-16
 当前应保留：
 
 - `dist/deliverables/`
+- `dist/deliverables/deliverables-manifest.json`
+- `dist/deliverables/native-installer-lane-receipt.json`
 - `dist/gui-audit/latest/`
 - 当前 `dist/protolink-0.2.5.*`
 - `docs/` canonical 文档

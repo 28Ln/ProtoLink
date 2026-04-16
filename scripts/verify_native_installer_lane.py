@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -20,6 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="验证 ProtoLink 的 native installer lane（toolchain / scaffold / msi / signature）。")
     parser.add_argument("--workspace", type=Path, help="可选，使用指定 workspace。默认创建临时 workspace。")
     parser.add_argument("--name", default="native-lane", help="scaffold/build 名称前缀。")
+    parser.add_argument("--receipt-file", type=Path, help="可选，写出 native installer lane JSON receipt。")
     parser.add_argument("--require-toolchain", action="store_true", help="若 WiX 或 SignTool 缺失则返回非零退出码。")
     parser.add_argument("--require-signed", action="store_true", help="若 MSI 签名校验未通过则返回非零退出码。")
     parser.add_argument("--keep-artifacts", action="store_true", help="保留临时目录。")
@@ -64,6 +66,12 @@ def _run_optional_json(command: list[str], *, cwd: Path = ROOT) -> dict[str, obj
         "stderr": completed.stderr,
         "payload": payload,
     }
+
+
+def _write_json_file(path: Path, payload: dict[str, object]) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(path)
 
 
 def _uv(*args: str) -> list[str]:
@@ -235,6 +243,7 @@ def execute_native_installer_lane(
     )
 
     result = {
+        "generated_at": datetime.now(UTC).isoformat(),
         "workspace": str(workspace),
         "temporary_root": str(temp_root) if temp_root is not None else None,
         "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
@@ -271,6 +280,8 @@ def main() -> int:
             require_toolchain=args.require_toolchain,
             require_signed=args.require_signed,
         )
+        if args.receipt_file is not None:
+            _write_json_file(args.receipt_file.resolve(), result)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     finally:

@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TARGET_DIR = ROOT / "dist" / "deliverables"
 VERSION_PATTERN = re.compile(r'^version\s*=\s*"([^"]+)"', re.MULTILINE)
+DELIVERABLES_MANIFEST_FILE = "deliverables-manifest.json"
+DELIVERABLES_MANIFEST_FORMAT_VERSION = "protolink-deliverables-v1"
+NATIVE_INSTALLER_LANE_RECEIPT_FILE = "native-installer-lane-receipt.json"
 
 
 class DeliveryBuildError(RuntimeError):
@@ -68,6 +74,10 @@ def _copy_artifact(source: Path, destination: Path) -> str:
     return str(destination)
 
 
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def _run_install_smoke(installer_archive: Path, *, target_dir: Path) -> dict[str, object]:
     staging_dir = target_dir / "_staging"
     install_dir = target_dir / "_installed"
@@ -100,6 +110,85 @@ def _run_install_smoke(installer_archive: Path, *, target_dir: Path) -> dict[str
         "install_payload": install_payload,
         "launch_script": str(launch_script),
         "headless_summary": completed.stdout.strip().splitlines(),
+    }
+
+
+def _write_json_file(path: Path, payload: dict[str, object]) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(path)
+
+
+def _run_native_installer_lane_receipt(*, workspace: Path, name: str, receipt_file: Path) -> dict[str, object]:
+    script_file = ROOT / "scripts" / "verify_native_installer_lane.py"
+    return _run_json(
+        [
+            sys.executable,
+            str(script_file),
+            "--workspace",
+            str(workspace),
+            "--name",
+            f"{name}-receipt",
+            "--receipt-file",
+            str(receipt_file),
+        ]
+    )
+
+
+def _build_deliverables_manifest(
+    *,
+    version: str,
+    name: str,
+    workspace: Path,
+    target_dir: Path,
+    copied_artifacts: dict[str, str],
+    verification: dict[str, object],
+    install_smoke: dict[str, object] | None,
+    native_installer_lane_receipt_file: Path,
+    native_installer_lane_receipt: dict[str, object],
+) -> dict[str, object]:
+    artifact_paths = {key: Path(value) for key, value in copied_artifacts.items()}
+    checksums = {path.name: _sha256_file(path) for path in artifact_paths.values()}
+    included_entries = sorted(
+        [
+            *(path.name for path in artifact_paths.values()),
+            native_installer_lane_receipt_file.name,
+            DELIVERABLES_MANIFEST_FILE,
+        ]
+    )
+    lane_phase = None
+    blocking_items: list[object] = []
+    cutover_policy = native_installer_lane_receipt.get("cutover_policy", {})
+    if isinstance(cutover_policy, dict):
+        lane_phase = cutover_policy.get("native_installer_lane_phase")
+        raw_blocking_items = cutover_policy.get("blocking_items", [])
+        if isinstance(raw_blocking_items, list):
+            blocking_items = list(raw_blocking_items)
+
+    return {
+        "format_version": DELIVERABLES_MANIFEST_FORMAT_VERSION,
+        "version": version,
+        "build_name": name,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "workspace": str(workspace),
+        "copied_artifacts": {key: Path(value).name for key, value in copied_artifacts.items()},
+        "checksums": checksums,
+        "verification": verification,
+        "install_smoke": install_smoke,
+        "native_installer_lane_receipt_file": native_installer_lane_receipt_file.name,
+        "native_installer_lane_summary": {
+            "phase": lane_phase,
+            "blocking_items": blocking_items,
+            "lifecycle_contract_ready": native_installer_lane_receipt.get("stage_status", {}).get("lifecycle_contract_ready")
+            if isinstance(native_installer_lane_receipt.get("stage_status", {}), dict)
+            else None,
+            "toolchain_ready": native_installer_lane_receipt.get("stage_status", {}).get("toolchain_ready")
+            if isinstance(native_installer_lane_receipt.get("stage_status", {}), dict)
+            else None,
+            "ready_for_release": native_installer_lane_receipt.get("ready_for_release"),
+        },
+        "included_entries": included_entries,
+        "target_dir": str(target_dir),
     }
 
 
@@ -142,6 +231,26 @@ def execute_release_deliverables(
     if not skip_install_smoke:
         install_smoke = _run_install_smoke(installer_archive, target_dir=target_dir)
 
+    native_installer_lane_receipt_file = target_dir / NATIVE_INSTALLER_LANE_RECEIPT_FILE
+    native_installer_lane_receipt = _run_native_installer_lane_receipt(
+        workspace=workspace,
+        name=name,
+        receipt_file=native_installer_lane_receipt_file,
+    )
+    deliverables_manifest = _build_deliverables_manifest(
+        version=version,
+        name=name,
+        workspace=workspace,
+        target_dir=target_dir,
+        copied_artifacts=copied_artifacts,
+        verification=verification,
+        install_smoke=install_smoke,
+        native_installer_lane_receipt_file=native_installer_lane_receipt_file,
+        native_installer_lane_receipt=native_installer_lane_receipt,
+    )
+    deliverables_manifest_file = target_dir / DELIVERABLES_MANIFEST_FILE
+    _write_json_file(deliverables_manifest_file, deliverables_manifest)
+
     return {
         "version": version,
         "workspace": str(workspace),
@@ -149,6 +258,10 @@ def execute_release_deliverables(
         "copied_artifacts": copied_artifacts,
         "verification": verification,
         "install_smoke": install_smoke,
+        "native_installer_lane_receipt_file": str(native_installer_lane_receipt_file),
+        "native_installer_lane_receipt": native_installer_lane_receipt,
+        "deliverables_manifest_file": str(deliverables_manifest_file),
+        "deliverables_manifest": deliverables_manifest,
     }
 
 

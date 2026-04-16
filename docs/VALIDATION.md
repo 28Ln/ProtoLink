@@ -4,8 +4,8 @@ Last updated: 2026-04-16
 
 ## 当前验证基线
 
-- `uv run python scripts/run_full_test_suite.py` -> 360 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 360` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> 361 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 361` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest` -> passed
 - `uv run protolink --audit-plugin-manifests` -> passed
@@ -18,14 +18,14 @@ Last updated: 2026-04-16
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
 - `uv run protolink --smoke-check` -> `smoke-check-ok`
-- 当前 full-suite 快照：`360 passed`
+- 当前 full-suite 快照：`361 passed`
 
 ## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 360
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 361
 uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest
 uv run protolink --audit-plugin-manifests
 uv run protolink --list-extension-descriptors
@@ -58,6 +58,8 @@ uv build
 - `verify_native_installer_lane.py` 默认会输出 `current_canonical_release_lane`、`native_installer_lane_phase`、`blocking_items`、`next_action`，用于解释 native installer 当前处于 probe、toolchain-ready、unsigned 或 signed-ready 的哪一阶段。
 - `uv run protolink --verify-native-installer-scaffold` 现在会校验 lifecycle contract，并要求 manifest / WiX source / WiX include 在 `install_scope`、`install_dir_name`、`upgrade_strategy`、`downgrade_error_message`、静默安装命令等字段上保持一致。
 - `verify_native_installer_lane.py` 现在会把 `lifecycle_contract_ready` 纳入 `stage_status`；contract 不完整时会输出 `contract-incomplete` phase 与 `repair_lifecycle_contract` next_action。
+- `verify_native_installer_lane.py` 现在支持 `--receipt-file <path>`，可把 lane truth 持久化为 JSON receipt。
+- `build_release_deliverables.py` 现在会在目标目录写出 `deliverables-manifest.json` 与 `native-installer-lane-receipt.json`。
 - `run_soak_validation.py` 在使用 `--require-all-ready` 时会把非 ready 循环转为非零退出码，并输出 `cycle_ready`、`failing_cycles`、`total_duration_ms`。
 - `run_full_test_suite.py` 以逐文件方式聚合 full-suite 真值，是当前正式的 pytest 基线入口。
 - `audit-plugin-manifests` 会静态审计 `workspace/plugins/*/manifest.json`；任何 invalid manifest 都会进入 `--release-preflight` 阻断。
