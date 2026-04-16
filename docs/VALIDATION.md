@@ -4,8 +4,8 @@ Last updated: 2026-04-16
 
 ## 当前验证基线
 
-- `uv run python scripts/run_full_test_suite.py` -> 361 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 361` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> 364 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 364` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest` -> passed
 - `uv run protolink --audit-plugin-manifests` -> passed
@@ -13,19 +13,21 @@ Last updated: 2026-04-16
 - `uv run protolink --plan-extension-loading` -> passed
 - `uv run protolink --load-enabled-extensions` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
+- `uv run python scripts/build_release_deliverables.py --name release-0.2.5 --target-dir dist\deliverables` -> passed
+- `uv run python scripts/verify_release_deliverables.py --target-dir dist\deliverables` -> passed
 - `python scripts/verify_dist_install.py --artifact-version 0.2.5` -> passed
 - `python scripts/run_soak_validation.py --cycles 2 --sleep-ms 0 --require-all-ready` -> passed
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
 - `uv run protolink --smoke-check` -> `smoke-check-ok`
-- 当前 full-suite 快照：`361 passed`
+- 当前 full-suite 快照：`364 passed`
 
 ## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 361
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 364
 uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest
 uv run protolink --audit-plugin-manifests
 uv run protolink --list-extension-descriptors
@@ -45,6 +47,8 @@ uv run protolink --smoke-check
 
 ```powershell
 uv run python scripts/verify_release_staging.py --name local
+uv run python scripts/build_release_deliverables.py --name release-0.2.5 --target-dir dist\deliverables
+uv run python scripts/verify_release_deliverables.py --target-dir dist\deliverables
 python scripts/verify_dist_install.py --artifact-version 0.2.5
 uv run protolink --build-native-installer-scaffold proto-stage
 uv run protolink --verify-native-installer-scaffold <scaffold-dir>
@@ -60,6 +64,7 @@ uv build
 - `verify_native_installer_lane.py` 现在会把 `lifecycle_contract_ready` 纳入 `stage_status`；contract 不完整时会输出 `contract-incomplete` phase 与 `repair_lifecycle_contract` next_action。
 - `verify_native_installer_lane.py` 现在支持 `--receipt-file <path>`，可把 lane truth 持久化为 JSON receipt。
 - `build_release_deliverables.py` 现在会在目标目录写出 `deliverables-manifest.json` 与 `native-installer-lane-receipt.json`。
+- `verify_release_deliverables.py` 会复核 deliverables manifest、archive checksum、package verifier 结果与 native lane receipt；默认不把 native installer `ready_for_release=false` 视为 bundled release blocker。
 - `run_soak_validation.py` 在使用 `--require-all-ready` 时会把非 ready 循环转为非零退出码，并输出 `cycle_ready`、`failing_cycles`、`total_duration_ms`。
 - `run_full_test_suite.py` 以逐文件方式聚合 full-suite 真值，是当前正式的 pytest 基线入口。
 - `audit-plugin-manifests` 会静态审计 `workspace/plugins/*/manifest.json`；任何 invalid manifest 都会进入 `--release-preflight` 阻断。

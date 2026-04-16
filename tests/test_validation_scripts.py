@@ -525,6 +525,313 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
     assert Path(result['deliverables_manifest_file']).exists()
     assert result['deliverables_manifest']['native_installer_lane_summary']['phase'] == 'probe-only'
     assert result['deliverables_manifest']['checksums']['protolink-0.2.5-installer-package.zip']
+    assert result['deliverables_manifest']['checksums']['native-installer-lane-receipt.json']
+
+
+def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_path: Path) -> None:
+    ns = _load_script('verify_release_deliverables.py')
+    target_dir = tmp_path / 'deliverables'
+    target_dir.mkdir()
+
+    file_payloads = {
+        'protolink-0.2.5-release-bundle.zip': b'release',
+        'protolink-0.2.5-portable-package.zip': b'portable',
+        'protolink-0.2.5-distribution-package.zip': b'distribution',
+        'protolink-0.2.5-installer-package.zip': b'installer',
+    }
+    for name, payload in file_payloads.items():
+        (target_dir / name).write_bytes(payload)
+
+    receipt = {
+        'generated_at': '2026-04-16T00:00:00+00:00',
+        'stage_status': {
+            'toolchain_ready': False,
+            'scaffold_built': True,
+            'scaffold_verified': True,
+            'lifecycle_contract_ready': True,
+            'msi_built': False,
+            'signature_verified': False,
+        },
+        'cutover_policy': {
+            'current_canonical_release_lane': 'bundled-runtime-installer-package',
+            'native_installer_lane_phase': 'probe-only',
+            'probe_ready': True,
+            'cutover_ready': False,
+            'blocking_items': ['missing_wix', 'missing_signtool'],
+            'next_action': 'install_wix_and_signtool',
+            'manual_cutover_requirements': ['approved_code_signing_certificate'],
+        },
+        'ready_for_release': False,
+    }
+    receipt_file = target_dir / 'native-installer-lane-receipt.json'
+    receipt_file.write_text(json.dumps(receipt, ensure_ascii=False, indent=2), encoding='utf-8')
+
+    sha256 = ns['_sha256_file']
+    manifest = {
+        'format_version': 'protolink-deliverables-v1',
+        'version': '0.2.5',
+        'build_name': 'release-0.2.5',
+        'workspace': str(tmp_path / 'workspace'),
+        'copied_artifacts': {
+            'release_archive': 'protolink-0.2.5-release-bundle.zip',
+            'portable_archive': 'protolink-0.2.5-portable-package.zip',
+            'distribution_archive': 'protolink-0.2.5-distribution-package.zip',
+            'installer_archive': 'protolink-0.2.5-installer-package.zip',
+        },
+        'checksums': {
+            name: sha256(target_dir / name)
+            for name in (*file_payloads.keys(), 'native-installer-lane-receipt.json')
+        },
+        'verification': {
+            'portable': {'checksum_matches': True},
+            'distribution': {'checksum_matches': True},
+            'installer': {'checksum_matches': True},
+        },
+        'install_smoke': None,
+        'native_installer_lane_receipt_file': 'native-installer-lane-receipt.json',
+        'native_installer_lane_summary': {
+            'phase': 'probe-only',
+            'blocking_items': ['missing_wix', 'missing_signtool'],
+            'lifecycle_contract_ready': True,
+            'toolchain_ready': False,
+            'ready_for_release': False,
+        },
+        'included_entries': [
+            'deliverables-manifest.json',
+            'native-installer-lane-receipt.json',
+            'protolink-0.2.5-distribution-package.zip',
+            'protolink-0.2.5-installer-package.zip',
+            'protolink-0.2.5-portable-package.zip',
+            'protolink-0.2.5-release-bundle.zip',
+        ],
+        'target_dir': str(target_dir),
+    }
+    (target_dir / 'deliverables-manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
+
+    def fake_run_json(command, *, cwd=None):
+        command_text = ' '.join(command)
+        if '--verify-portable-package' in command_text:
+            return {'checksum_matches': True}
+        if '--verify-distribution-package' in command_text:
+            return {'checksum_matches': True}
+        if '--verify-installer-package' in command_text:
+            return {'checksum_matches': True}
+        raise AssertionError(command)
+
+    ns['execute_verify_release_deliverables'].__globals__['_run_json'] = fake_run_json
+    result = ns['execute_verify_release_deliverables'](target_dir=target_dir)
+
+    assert result['ready'] is True
+    assert result['blocking_items'] == []
+    assert result['native_installer_lane_phase'] == 'probe-only'
+    assert result['install_smoke_present'] is False
+    assert Path(result['receipt_file']).exists()
+
+
+def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tmp_path: Path) -> None:
+    ns = _load_script('verify_release_deliverables.py')
+    target_dir = tmp_path / 'deliverables'
+    target_dir.mkdir()
+
+    for name, payload in {
+        'protolink-0.2.5-release-bundle.zip': b'release',
+        'protolink-0.2.5-portable-package.zip': b'portable',
+        'protolink-0.2.5-distribution-package.zip': b'distribution',
+        'protolink-0.2.5-installer-package.zip': b'installer',
+    }.items():
+        (target_dir / name).write_bytes(payload)
+
+    receipt = {
+        'generated_at': '2026-04-16T00:00:00+00:00',
+        'stage_status': {
+            'toolchain_ready': False,
+            'scaffold_built': True,
+            'scaffold_verified': True,
+            'lifecycle_contract_ready': True,
+            'msi_built': False,
+            'signature_verified': False,
+        },
+        'cutover_policy': {
+            'current_canonical_release_lane': 'bundled-runtime-installer-package',
+            'native_installer_lane_phase': 'probe-only',
+            'probe_ready': True,
+            'cutover_ready': False,
+            'blocking_items': ['missing_wix', 'missing_signtool'],
+            'next_action': 'install_wix_and_signtool',
+            'manual_cutover_requirements': ['approved_code_signing_certificate'],
+        },
+        'ready_for_release': False,
+    }
+    receipt_file = target_dir / 'native-installer-lane-receipt.json'
+    receipt_file.write_text(json.dumps(receipt, ensure_ascii=False, indent=2), encoding='utf-8')
+    sha256 = ns['_sha256_file']
+    (target_dir / 'deliverables-manifest.json').write_text(
+        json.dumps(
+            {
+                'format_version': 'protolink-deliverables-v1',
+                'version': '0.2.5',
+                'build_name': 'release-0.2.5',
+                'workspace': str(tmp_path / 'workspace'),
+                'copied_artifacts': {
+                    'release_archive': 'protolink-0.2.5-release-bundle.zip',
+                    'portable_archive': 'protolink-0.2.5-portable-package.zip',
+                    'distribution_archive': 'protolink-0.2.5-distribution-package.zip',
+                    'installer_archive': 'protolink-0.2.5-installer-package.zip',
+                },
+                'checksums': {
+                    'protolink-0.2.5-release-bundle.zip': sha256(target_dir / 'protolink-0.2.5-release-bundle.zip'),
+                    'protolink-0.2.5-portable-package.zip': sha256(target_dir / 'protolink-0.2.5-portable-package.zip'),
+                    'protolink-0.2.5-distribution-package.zip': sha256(target_dir / 'protolink-0.2.5-distribution-package.zip'),
+                    'protolink-0.2.5-installer-package.zip': sha256(target_dir / 'protolink-0.2.5-installer-package.zip'),
+                    'native-installer-lane-receipt.json': sha256(receipt_file),
+                },
+                'verification': {
+                    'portable': {'checksum_matches': True},
+                    'distribution': {'checksum_matches': True},
+                    'installer': {'checksum_matches': True},
+                },
+                'install_smoke': None,
+                'native_installer_lane_receipt_file': 'native-installer-lane-receipt.json',
+                'native_installer_lane_summary': {
+                    'phase': 'toolchain-ready',
+                    'blocking_items': ['missing_wix', 'missing_signtool'],
+                    'lifecycle_contract_ready': True,
+                    'toolchain_ready': False,
+                    'ready_for_release': False,
+                },
+                'included_entries': [
+                    'deliverables-manifest.json',
+                    'native-installer-lane-receipt.json',
+                    'protolink-0.2.5-distribution-package.zip',
+                    'protolink-0.2.5-installer-package.zip',
+                    'protolink-0.2.5-portable-package.zip',
+                    'protolink-0.2.5-release-bundle.zip',
+                ],
+                'target_dir': str(target_dir),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding='utf-8',
+    )
+
+    def fake_run_json(command, *, cwd=None):
+        command_text = ' '.join(command)
+        if '--verify-portable-package' in command_text:
+            return {'checksum_matches': True}
+        if '--verify-distribution-package' in command_text:
+            return {'checksum_matches': True}
+        if '--verify-installer-package' in command_text:
+            return {'checksum_matches': True}
+        raise AssertionError(command)
+
+    ns['execute_verify_release_deliverables'].__globals__['_run_json'] = fake_run_json
+
+    with pytest.raises(ns['DeliveryVerificationError'], match='phase mismatch'):
+        ns['execute_verify_release_deliverables'](target_dir=target_dir)
+
+
+def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: Path) -> None:
+    ns = _load_script('verify_release_deliverables.py')
+    target_dir = tmp_path / 'deliverables'
+    target_dir.mkdir()
+
+    for name, payload in {
+        'protolink-0.2.5-release-bundle.zip': b'release',
+        'protolink-0.2.5-portable-package.zip': b'portable',
+        'protolink-0.2.5-distribution-package.zip': b'distribution',
+        'protolink-0.2.5-installer-package.zip': b'installer',
+    }.items():
+        (target_dir / name).write_bytes(payload)
+
+    receipt = {
+        'generated_at': '2026-04-16T00:00:00+00:00',
+        'stage_status': {
+            'toolchain_ready': False,
+            'scaffold_built': True,
+            'scaffold_verified': True,
+            'lifecycle_contract_ready': True,
+            'msi_built': False,
+            'signature_verified': False,
+        },
+        'cutover_policy': {
+            'current_canonical_release_lane': 'bundled-runtime-installer-package',
+            'native_installer_lane_phase': 'probe-only',
+            'probe_ready': True,
+            'cutover_ready': False,
+            'blocking_items': ['missing_wix', 'missing_signtool'],
+            'next_action': 'install_wix_and_signtool',
+            'manual_cutover_requirements': ['approved_code_signing_certificate'],
+        },
+        'ready_for_release': False,
+    }
+    receipt_file = target_dir / 'native-installer-lane-receipt.json'
+    receipt_file.write_text(json.dumps(receipt, ensure_ascii=False, indent=2), encoding='utf-8')
+    sha256 = ns['_sha256_file']
+    (target_dir / 'deliverables-manifest.json').write_text(
+        json.dumps(
+            {
+                'format_version': 'protolink-deliverables-v1',
+                'version': '0.2.5',
+                'build_name': 'release-0.2.5',
+                'workspace': str(tmp_path / 'workspace'),
+                'copied_artifacts': {
+                    'release_archive': 'protolink-0.2.5-release-bundle.zip',
+                    'portable_archive': 'protolink-0.2.5-portable-package.zip',
+                    'distribution_archive': 'protolink-0.2.5-distribution-package.zip',
+                    'installer_archive': 'protolink-0.2.5-installer-package.zip',
+                },
+                'checksums': {
+                    'protolink-0.2.5-release-bundle.zip': sha256(target_dir / 'protolink-0.2.5-release-bundle.zip'),
+                    'protolink-0.2.5-portable-package.zip': sha256(target_dir / 'protolink-0.2.5-portable-package.zip'),
+                    'protolink-0.2.5-distribution-package.zip': sha256(target_dir / 'protolink-0.2.5-distribution-package.zip'),
+                    'protolink-0.2.5-installer-package.zip': sha256(target_dir / 'protolink-0.2.5-installer-package.zip'),
+                    'native-installer-lane-receipt.json': sha256(receipt_file),
+                },
+                'verification': {
+                    'portable': {'checksum_matches': True},
+                    'distribution': {'checksum_matches': True},
+                    'installer': {'checksum_matches': True},
+                },
+                'install_smoke': None,
+                'native_installer_lane_receipt_file': 'native-installer-lane-receipt.json',
+                'native_installer_lane_summary': {
+                    'phase': 'probe-only',
+                    'blocking_items': ['missing_wix', 'missing_signtool'],
+                    'lifecycle_contract_ready': True,
+                    'toolchain_ready': False,
+                    'ready_for_release': False,
+                },
+                'included_entries': [
+                    'deliverables-manifest.json',
+                    'native-installer-lane-receipt.json',
+                    'protolink-0.2.5-distribution-package.zip',
+                    'protolink-0.2.5-installer-package.zip',
+                    'protolink-0.2.5-portable-package.zip',
+                    'protolink-0.2.5-release-bundle.zip',
+                ],
+                'target_dir': str(target_dir),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding='utf-8',
+    )
+
+    def fake_run_json(command, *, cwd=None):
+        command_text = ' '.join(command)
+        if '--verify-portable-package' in command_text:
+            return {'checksum_matches': True}
+        if '--verify-distribution-package' in command_text:
+            return {'checksum_matches': True}
+        if '--verify-installer-package' in command_text:
+            return {'checksum_matches': True}
+        raise AssertionError(command)
+
+    ns['execute_verify_release_deliverables'].__globals__['_run_json'] = fake_run_json
+
+    with pytest.raises(ns['DeliveryVerificationError'], match='ready_for_release'):
+        ns['execute_verify_release_deliverables'](target_dir=target_dir, require_native_ready=True)
 
 
 def test_parse_gui_audit_resolution_rejects_invalid_token() -> None:

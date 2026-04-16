@@ -18,11 +18,12 @@ Last updated: 2026-04-16
 ```powershell
 uv sync --python 3.11 --extra dev --extra ui
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 361
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 364
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local
 uv run python scripts/build_release_deliverables.py --name release-0.2.5 --target-dir dist\\deliverables
+uv run python scripts/verify_release_deliverables.py --target-dir dist\\deliverables
 python scripts/verify_dist_install.py --artifact-version 0.2.5
 uv run protolink --build-native-installer-scaffold proto-stage
 uv run protolink --verify-native-installer-scaffold <scaffold-dir>
@@ -76,6 +77,7 @@ python scripts/verify_native_installer_lane.py --require-signed
   - `--verify-native-installer-signature`
 - `--verify-native-installer-scaffold` 必须能校验 `target_arch`、`install_scope`、`install_dir_name`、`product_code_policy`、`upgrade_strategy` 与静默安装命令
 - `python scripts/verify_native_installer_lane.py --receipt-file <path>` 可作为 release evidence 落盘入口
+- `uv run python scripts/verify_release_deliverables.py --target-dir <dir>` 可作为 deliverables 目录复核入口
 - `uv run protolink --help` 中必须能看到这些命令
 - `README.md`、`docs/NATIVE_INSTALLER_PLAN.md`、`docs/VALIDATION.md`、本文件必须包含**精确 flag 名称**
 - `--load-enabled-extensions` 作为正式 CLI surface 时，README、`docs/VALIDATION.md`、`docs/EXTENSION_CONTRACT.md` 与本文件必须保持同一口径

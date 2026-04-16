@@ -9,7 +9,7 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 ## 当前真实进展
 
 - 工程代码入口、工作区、日志、配置、打包链路已统一
-- 361 个 pytest 用例通过
+- 364 个 pytest 用例通过
 - targeted regression 全绿
 - release-staging 验证全链通过
 - wheel / sdist fresh-install 验证通过
@@ -20,6 +20,7 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 - `PL-014` 已具备 WiX scaffold 构建/校验、toolchain 检测、MSI build 与签名校验 CLI
 - `PL-014` 已把 native installer scaffold lifecycle contract 纳入 manifest / verify 边界
 - `PL-014` 已把 native installer lane receipt 与 deliverables manifest 纳入可归档 evidence
+- `PL-014` 已新增 deliverables verifier，可独立复核 `dist/deliverables`
 - 已具备 `verify_native_installer_lane.py` 原生安装器 lane 脚本
 - 已具备 `run_soak_validation.py` 本地长稳/soak 验证脚本与 strict ready gate
 - 已具备 `workspace/plugins/*/manifest.json` 的发现、静态校验、审计报告与 release-preflight 阻断
@@ -32,12 +33,14 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 
 ## 当前验证快照
 
-- `uv run python scripts/run_full_test_suite.py` -> `361 passed`
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 361` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> `364 passed`
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 364` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
 - `uv run python scripts/verify_release_staging.py --name local` -> passed
+- `uv run python scripts/build_release_deliverables.py --name release-0.2.5 --target-dir dist\deliverables` -> passed
+- `uv run python scripts/verify_release_deliverables.py --target-dir dist\deliverables` -> passed
 - `python scripts/verify_dist_install.py --artifact-version 0.2.5` -> passed
 - `python scripts/run_soak_validation.py --cycles 2 --sleep-ms 0 --require-all-ready` -> passed
 - `python scripts/verify_native_installer_lane.py` -> passed

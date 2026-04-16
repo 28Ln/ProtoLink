@@ -148,7 +148,10 @@ def _build_deliverables_manifest(
     native_installer_lane_receipt: dict[str, object],
 ) -> dict[str, object]:
     artifact_paths = {key: Path(value) for key, value in copied_artifacts.items()}
-    checksums = {path.name: _sha256_file(path) for path in artifact_paths.values()}
+    checksums = {
+        **{path.name: _sha256_file(path) for path in artifact_paths.values()},
+        native_installer_lane_receipt_file.name: _sha256_file(native_installer_lane_receipt_file),
+    }
     included_entries = sorted(
         [
             *(path.name for path in artifact_paths.values()),
