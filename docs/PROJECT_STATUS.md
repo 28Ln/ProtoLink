@@ -14,6 +14,7 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 - release-staging 验证全链通过
 - wheel / sdist fresh-install 验证通过
 - README、状态文档、风险文档、handoff 文档已形成正式入口
+- 已新增 2.0 收尾文档集，覆盖 project flow / features / issue register / dependency audit / handoff
 - GUI 改造任务已沉淀为 `docs/GUI_REFACTOR_TASKLIST.md`，不再依赖聊天摘要推进
 - `PL-012` 与 `PL-013` 已关闭，当前正式主线已切换为 `PL-014`
 - `PL-014` 已具备 WiX scaffold 构建/校验、toolchain 检测、MSI build 与签名校验 CLI
@@ -25,6 +26,7 @@ ProtoLink 当前处于：**0.2.5 正式版本基线已冻结，进入 native ins
 - `uv run protolink --release-preflight` 已纳入 enabled Class A runtime load gate，并在 load_failed 时写入 failure evidence
 - 当前 Class B 仍为 `review_required`，Class C 仍不进入自动执行范围
 - GUI formal audit 已在目标分辨率下达到 `highest_severity=clean`
+- 已清理仓库根目录与 dist 下的临时 probe / 过期 smoke / 旧版 dist 噪音
 
 ## 当前验证快照
 
