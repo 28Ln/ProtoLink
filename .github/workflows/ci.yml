@@ -74,6 +74,12 @@ jobs:
       - name: Verify clean release-staging flow
         run: uv run python scripts/verify_release_staging.py --name ci
 
+      - name: Build release deliverables
+        run: uv run python scripts/build_release_deliverables.py --name release-${{ env.PROTO_VERSION }} --target-dir dist\\deliverables
+
+      - name: Verify release deliverables evidence
+        run: uv run python scripts/verify_release_deliverables.py --target-dir dist\\deliverables
+
       - name: Verify native installer lane probe
         run: python scripts/verify_native_installer_lane.py
 

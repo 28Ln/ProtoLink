@@ -24,6 +24,7 @@ TARGET_FILES = {
     "VALIDATION": ROOT / "docs" / "VALIDATION.md",
     "RELEASE_CHECKLIST": ROOT / "docs" / "RELEASE_CHECKLIST.md",
     "TASK_ARCHIVE": ROOT / "docs" / "TASK_ARCHIVE.md",
+    "CI_WORKFLOW": ROOT / ".github" / "workflows" / "ci.yml",
 }
 
 
@@ -78,6 +79,7 @@ def main() -> int:
     validation = _read("VALIDATION")
     release_checklist = _read("RELEASE_CHECKLIST")
     task_archive = _read("TASK_ARCHIVE")
+    ci_workflow = _read("CI_WORKFLOW")
     cli_source = (ROOT / "src" / "protolink" / "app.py").read_text(encoding="utf-8")
 
     expected_mainline = args.expected_mainline
@@ -90,6 +92,7 @@ def main() -> int:
     _require_contains("README", readme, "`docs/HANDOFF.md`")
     _require_contains("README", readme, "`docs/ROADMAP.md`")
     _require_contains("README", readme, "Native installer scaffold")
+    _require_contains("README", readme, "verify_release_deliverables.py")
     _require_contains("TASKS", tasks, "`docs/ENGINEERING_TASKLIST.md`")
     _require_contains("README", readme, FULL_SUITE_COMMAND)
     _require_contains("CURRENT_STATE", current_state, f"`{FULL_SUITE_COMMAND}` -> `{expected_count} passed`")
@@ -97,12 +100,16 @@ def main() -> int:
     _require_contains("VALIDATION", validation, f"`{FULL_SUITE_COMMAND}` -> {expected_count} passed")
     _require_contains("VALIDATION", validation, f"`{expected_count} passed`")
     _require_contains("VALIDATION", validation, "Native installer scaffold")
+    _require_contains("VALIDATION", validation, "verify_release_deliverables.py")
     _require_contains("MAINLINE_STATUS", mainline_status, f"- ID: `{expected_mainline}`")
     _require_contains("HANDOFF", handoff, "当前主线")
     _require_contains("NATIVE_INSTALLER_PLAN", native_installer_plan, "native installer scaffold")
     _require_contains("RELEASE_CHECKLIST", release_checklist, "native installer scaffold")
+    _require_contains("RELEASE_CHECKLIST", release_checklist, "verify_release_deliverables.py")
     _require_contains("RISK_REGISTER", risk_register, "风险清单")
     _require_contains("TASK_ARCHIVE", task_archive, "- `PL-012` —")
+    _require_contains("CI_WORKFLOW", ci_workflow, "scripts/build_release_deliverables.py")
+    _require_contains("CI_WORKFLOW", ci_workflow, "scripts/verify_release_deliverables.py")
     _require_regex("ENGINEERING_TASKLIST", tasklist, rf"^### {re.escape(expected_mainline)} — ")
     _require_regex("PROJECT_STATUS", project_status, rf"^- `{re.escape(expected_mainline)}`")
 
