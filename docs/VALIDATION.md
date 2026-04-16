@@ -4,8 +4,8 @@ Last updated: 2026-04-16
 
 ## 当前验证基线
 
-- `uv run python scripts/run_full_test_suite.py` -> 359 passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 359` -> passed
+- `uv run python scripts/run_full_test_suite.py` -> 356 passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 356` -> passed
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest` -> passed
 - `uv run protolink --audit-plugin-manifests` -> passed
@@ -18,14 +18,14 @@ Last updated: 2026-04-16
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
 - `uv run protolink --smoke-check` -> `smoke-check-ok`
-- 当前 full-suite 快照：`359 passed`
+- 当前 full-suite 快照：`356 passed`
 
 ## 本地开发验证
 
 ```powershell
 uv sync --python 3.11 --extra dev
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 359
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 356
 uv run python scripts/audit_gui_layout.py --output-dir dist\gui-audit\latest
 uv run protolink --audit-plugin-manifests
 uv run protolink --list-extension-descriptors
@@ -56,7 +56,7 @@ python scripts/run_soak_validation.py --cycles 2 --sleep-ms 0 --require-all-read
 uv build
 ```
 
-- `verify_native_installer_lane.py` 默认输出 readiness probe，并返回 `lane_status`、`blocking_items`、`next_actions`、`readiness` 等结构化门禁结果；若要作为发布门禁，必须显式加 `--require-toolchain` 或 `--require-signed`。
+- `verify_native_installer_lane.py` 默认输出 readiness probe；若要作为发布门禁，必须显式加 `--require-toolchain` 或 `--require-signed`。
 - `run_soak_validation.py` 在使用 `--require-all-ready` 时会把非 ready 循环转为非零退出码，并输出 `cycle_ready`、`failing_cycles`、`total_duration_ms`。
 - `run_full_test_suite.py` 以逐文件方式聚合 full-suite 真值，是当前正式的 pytest 基线入口。
 - `audit-plugin-manifests` 会静态审计 `workspace/plugins/*/manifest.json`；任何 invalid manifest 都会进入 `--release-preflight` 阻断。

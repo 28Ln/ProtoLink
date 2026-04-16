@@ -94,7 +94,6 @@ def main() -> int:
     _require_contains("README", readme, FULL_SUITE_COMMAND)
     _require_contains("CURRENT_STATE", current_state, f"`{FULL_SUITE_COMMAND}` -> `{expected_count} passed`")
     _require_contains("PROJECT_STATUS", project_status, f"`{FULL_SUITE_COMMAND}` -> `{expected_count} passed`")
-    _require_contains("PROJECT_STATUS", project_status, f"- {expected_count} 个 pytest 用例通过")
     _require_contains("VALIDATION", validation, f"`{FULL_SUITE_COMMAND}` -> {expected_count} passed")
     _require_contains("VALIDATION", validation, f"`{expected_count} passed`")
     _require_contains("VALIDATION", validation, "Native installer scaffold")

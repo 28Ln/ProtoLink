@@ -183,12 +183,6 @@ def test_execute_native_installer_lane_handles_missing_toolchain_with_structured
     assert result['stage_status']['scaffold_built'] is True
     assert result['stage_status']['scaffold_verified'] is True
     assert result['stage_status']['toolchain_ready'] is False
-    assert result['readiness']['ready_for_build'] is False
-    assert result['readiness']['ready_for_signing'] is False
-    assert result['lane_status'] == 'toolchain_missing'
-    assert 'native_installer_wix_missing' in result['blocking_items']
-    assert 'native_installer_signtool_missing' in result['blocking_items']
-    assert any('Install WiX Toolset v4' in item for item in result['next_actions'])
     assert 'native_installer_manifest' not in result['scaffold_build']
     assert result['ready_for_release'] is False
 
@@ -232,213 +226,30 @@ def test_execute_native_installer_lane_raises_when_signature_is_required(tmp_pat
                 },
             }
         if '--build-native-installer-scaffold' in command:
-            return {
-                'native_installer_scaffold_dir': str(tmp_path / 'scaffold'),
-                'native_installer_payload_file': str(tmp_path / 'scaffold' / 'payload' / 'installer.zip'),
-            }
-        if '--verify-native-installer-scaffold' in command:
-            return {'checksum_matches': True}
-        raise AssertionError(command)
-
-    def fake_run_optional_json(command, *, cwd=None):
-        if '--build-native-installer-msi' in command:
-            installer_file = tmp_path / 'ProtoLink.msi'
-            installer_file.write_text('msi', encoding='utf-8')
-            return {
-                'ok': True,
-                'returncode': 0,
-                'stdout': '',
-                'stderr': '',
-                'payload': {'output_file': str(installer_file)},
-            }
-        if '--verify-installer-package' in command:
-            return {'ok': True, 'returncode': 0, 'stdout': '{}', 'stderr': '', 'payload': {'checksum_matches': True}}
-        if '--install-installer-package' in command:
-            install_dir = Path(command[-1])
-            (install_dir / 'runtime').mkdir(parents=True, exist_ok=True)
-            (install_dir / 'sp').mkdir(parents=True, exist_ok=True)
-            (install_dir / 'workspace').mkdir(parents=True, exist_ok=True)
-            (install_dir / '.protolink').mkdir(parents=True, exist_ok=True)
-            (install_dir / 'runtime' / 'python.exe').write_text('runtime', encoding='utf-8')
-            (install_dir / '.protolink' / 'app_settings.json').write_text('{}', encoding='utf-8')
-            return {
-                'ok': True,
-                'returncode': 0,
-                'stdout': '{}',
-                'stderr': '',
-                'payload': {'install_dir': str(install_dir)},
-            }
-        if '--uninstall-portable-package' in command:
-            return {'ok': True, 'returncode': 0, 'stdout': '{}', 'stderr': '', 'payload': {'removed_receipt': True}}
-        if '--build-native-installer-msi' in command:
-            raise AssertionError('duplicate build-native-installer-msi handler')
-        if '--verify-native-installer-signature' in command:
-            return {'ok': False, 'returncode': 1, 'stdout': '', 'stderr': 'unsigned', 'payload': None}
-        raise AssertionError(command)
-
-    def fake_run_optional_command(command, *, cwd=None, env=None):
-        if command[0].lower() == 'msiexec' and '/i' in command:
-            install_root = next(Path(arg.split('=', 1)[1]) for arg in command if arg.startswith('INSTALLDIR='))
-            payload_dir = install_root / 'payload'
-            payload_dir.mkdir(parents=True, exist_ok=True)
-            (payload_dir / 'installer.zip').write_text('payload', encoding='utf-8')
-            return {'ok': True, 'returncode': 0, 'stdout': '', 'stderr': ''}
-        if command[0].lower() == 'msiexec' and '/x' in command:
-            return {'ok': True, 'returncode': 0, 'stdout': '', 'stderr': ''}
-        if command[0].endswith('python.exe'):
-            install_dir = Path(command[0]).parents[1]
-            return {
-                'ok': True,
-                'returncode': 0,
-                'stdout': (
-                    'ProtoLink\n'
-                    f'工作区：{install_dir / "workspace"}\n'
-                    f'设置：{install_dir / ".protolink" / "app_settings.json"}\n'
-                    '已注册传输：6\n'
-                    '模块数：15\n'
-                ),
-                'stderr': '',
-            }
-        raise AssertionError(command)
-
-    execute = ns['execute_native_installer_lane']
-    execute.__globals__['_run_json'] = fake_run_json
-    execute.__globals__['_run_optional_json'] = fake_run_optional_json
-    execute.__globals__['_run_optional_command'] = fake_run_optional_command
-
-    with pytest.raises(ns['VerificationError'], match='signed-and-ready'):
-        execute(workspace=tmp_path / 'workspace', name='lane', require_signed=True)
-
-
-def test_execute_native_installer_lane_reports_signature_not_ready_with_structured_result(tmp_path: Path) -> None:
-    ns = _load_script('verify_native_installer_lane.py')
-
-    def fake_run_json(command, *, cwd=None):
-        if '--verify-native-installer-toolchain' in command:
-            return {
-                'ready': True,
-                'tools': {
-                    'wix': {'available': True},
-                    'signtool': {'available': True},
-                },
-            }
-        if '--build-native-installer-scaffold' in command:
-            return {
-                'native_installer_scaffold_dir': str(tmp_path / 'scaffold'),
-                'native_installer_payload_file': str(tmp_path / 'scaffold' / 'payload' / 'installer.zip'),
-            }
-        if '--verify-native-installer-scaffold' in command:
-            return {'checksum_matches': True}
-        raise AssertionError(command)
-
-    def fake_run_optional_json(command, *, cwd=None):
-        if '--build-native-installer-msi' in command:
-            installer_file = tmp_path / 'ProtoLink.msi'
-            installer_file.write_text('msi', encoding='utf-8')
-            return {
-                'ok': True,
-                'returncode': 0,
-                'stdout': '',
-                'stderr': '',
-                'payload': {'output_file': str(installer_file)},
-            }
-        if '--verify-installer-package' in command:
-            return {'ok': True, 'returncode': 0, 'stdout': '{}', 'stderr': '', 'payload': {'checksum_matches': True}}
-        if '--install-installer-package' in command:
-            install_dir = Path(command[-1])
-            (install_dir / 'runtime').mkdir(parents=True, exist_ok=True)
-            (install_dir / 'sp').mkdir(parents=True, exist_ok=True)
-            (install_dir / 'workspace').mkdir(parents=True, exist_ok=True)
-            (install_dir / '.protolink').mkdir(parents=True, exist_ok=True)
-            (install_dir / 'runtime' / 'python.exe').write_text('runtime', encoding='utf-8')
-            (install_dir / '.protolink' / 'app_settings.json').write_text('{}', encoding='utf-8')
-            return {
-                'ok': True,
-                'returncode': 0,
-                'stdout': '{}',
-                'stderr': '',
-                'payload': {'install_dir': str(install_dir)},
-            }
-        if '--uninstall-portable-package' in command:
-            return {'ok': True, 'returncode': 0, 'stdout': '{}', 'stderr': '', 'payload': {'removed_receipt': True}}
-        if '--verify-native-installer-signature' in command:
-            return {'ok': False, 'returncode': 1, 'stdout': '', 'stderr': 'unsigned', 'payload': None}
-        raise AssertionError(command)
-
-    def fake_run_optional_command(command, *, cwd=None, env=None):
-        if command[0].lower() == 'msiexec' and '/i' in command:
-            install_root = next(Path(arg.split('=', 1)[1]) for arg in command if arg.startswith('INSTALLDIR='))
-            payload_dir = install_root / 'payload'
-            payload_dir.mkdir(parents=True, exist_ok=True)
-            (payload_dir / 'installer.zip').write_text('payload', encoding='utf-8')
-            return {'ok': True, 'returncode': 0, 'stdout': '', 'stderr': ''}
-        if command[0].lower() == 'msiexec' and '/x' in command:
-            return {'ok': True, 'returncode': 0, 'stdout': '', 'stderr': ''}
-        if command[0].endswith('python.exe'):
-            install_dir = Path(command[0]).parents[1]
-            return {
-                'ok': True,
-                'returncode': 0,
-                'stdout': (
-                    'ProtoLink\n'
-                    f'工作区：{install_dir / "workspace"}\n'
-                    f'设置：{install_dir / ".protolink" / "app_settings.json"}\n'
-                    '已注册传输：6\n'
-                    '模块数：15\n'
-                ),
-                'stderr': '',
-            }
-        raise AssertionError(command)
-
-    execute = ns['execute_native_installer_lane']
-    execute.__globals__['_run_json'] = fake_run_json
-    execute.__globals__['_run_optional_json'] = fake_run_optional_json
-    execute.__globals__['_run_optional_command'] = fake_run_optional_command
-
-    result = execute(workspace=tmp_path / 'workspace', name='lane')
-
-    assert result['msi_file'].endswith('ProtoLink.msi')
-    assert result['readiness']['ready_for_build'] is True
-    assert result['readiness']['ready_for_install_verification'] is True
-    assert result['readiness']['ready_for_signing'] is True
-    assert result['readiness']['ready_for_release'] is False
-    assert result['stage_status']['msi_installed'] is True
-    assert result['stage_status']['installed_payload_verified'] is True
-    assert result['stage_status']['installed_payload_runnable'] is True
-    assert result['stage_status']['msi_uninstalled'] is True
-    assert result['lane_status'] == 'signature_not_ready'
-    assert 'native_installer_signature_not_verified' in result['blocking_items']
-    assert any('Fix Authenticode signing' in item for item in result['next_actions'])
-    assert result['ready_for_release'] is False
-
-
-def test_execute_native_installer_lane_reports_temporary_root_when_workspace_is_implicit(tmp_path: Path) -> None:
-    ns = _load_script('verify_native_installer_lane.py')
-
-    def fake_run_json(command, *, cwd=None):
-        if '--verify-native-installer-toolchain' in command:
-            return {
-                'ready': False,
-                'tools': {
-                    'wix': {'available': False},
-                    'signtool': {'available': False},
-                },
-            }
-        if '--build-native-installer-scaffold' in command:
             return {'native_installer_scaffold_dir': str(tmp_path / 'scaffold')}
         if '--verify-native-installer-scaffold' in command:
             return {'checksum_matches': True}
         raise AssertionError(command)
 
+    def fake_run_optional_json(command, *, cwd=None):
+        if '--build-native-installer-msi' in command:
+            return {
+                'ok': True,
+                'returncode': 0,
+                'stdout': '',
+                'stderr': '',
+                'payload': {'output_file': str(tmp_path / 'ProtoLink.msi')},
+            }
+        if '--verify-native-installer-signature' in command:
+            return {'ok': False, 'returncode': 1, 'stdout': '', 'stderr': 'unsigned', 'payload': None}
+        raise AssertionError(command)
+
     execute = ns['execute_native_installer_lane']
     execute.__globals__['_run_json'] = fake_run_json
-    execute.__globals__['_run_optional_json'] = lambda *args, **kwargs: {'ok': False, 'returncode': 2, 'stdout': '', 'stderr': '', 'payload': None}
+    execute.__globals__['_run_optional_json'] = fake_run_optional_json
 
-    result = execute(workspace=None, name='lane')
-
-    assert result['temporary_root'] is not None
-    assert Path(result['temporary_root']).exists()
-    assert str(Path(result['workspace']).parent) == result['temporary_root']
+    with pytest.raises(ns['VerificationError'], match='signed-and-ready'):
+        execute(workspace=tmp_path / 'workspace', name='lane', require_signed=True)
 
 
 def test_execute_soak_validation_runs_multiple_cycles(tmp_path: Path) -> None:

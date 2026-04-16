@@ -18,7 +18,7 @@ Last updated: 2026-04-16
 ```powershell
 uv sync --python 3.11 --extra dev --extra ui
 uv run python scripts/run_full_test_suite.py
-uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 359
+uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 356
 uv run python scripts/run_targeted_regressions.py --suite all
 uv run protolink --smoke-check
 uv run python scripts/verify_release_staging.py --name local
@@ -58,5 +58,4 @@ uv build
 - `README.md`、`docs/NATIVE_INSTALLER_PLAN.md`、`docs/VALIDATION.md`、本文件必须包含**精确 flag 名称**
 - `--load-enabled-extensions` 作为正式 CLI surface 时，README、`docs/VALIDATION.md`、`docs/EXTENSION_CONTRACT.md` 与本文件必须保持同一口径
 - `scripts/verify_canonical_truth.py` 必须通过
-- `verify_native_installer_lane.py` 的输出中，`lane_status`、`blocking_items`、`next_actions` 与 `readiness` 必须可解释当前 lane 所处阶段
 - scaffold / toolchain / build / signature verify 仅用于推进原生安装器路线，不替代现有 release-staging / dist-install / build 门禁
