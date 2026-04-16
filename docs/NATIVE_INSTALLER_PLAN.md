@@ -218,6 +218,7 @@ WiX/native installer 实现进入代码面之前，必须先形成一个 **nativ
 - `python scripts/verify_native_installer_lane.py --receipt-file <path>` 可把当前 lane truth 落盘为正式 JSON receipt。
 - `build_release_deliverables.py` 会把 `native-installer-lane-receipt.json` 与 `deliverables-manifest.json` 一起写入 `dist/deliverables/`，作为阶段性交付 evidence。
 - `docs/NATIVE_INSTALLER_CUTOVER_POLICY.json` 提供签名 / 时间戳 / 审批 / 回滚要求的机器可读真值；`verify_native_installer_lane.py`、`build_release_deliverables.py` 与 `verify_release_deliverables.py` 必须与其保持一致。
+- `verify_native_installer_lane.py` 会把该 policy 解释成 `policy_status` 与 `policy_ready`；只有 policy 级 blocker 清零，native cutover 才算真正 ready。
 - `verify_native_installer_lane.py` 的结构化输出必须持续说明：
   - `current_canonical_release_lane`
   - `native_installer_lane_phase`

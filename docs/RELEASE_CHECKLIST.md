@@ -55,6 +55,7 @@ python scripts/verify_native_installer_lane.py --require-signed
 - 只有在 clean-machine install / uninstall / `protolink --headless-summary` 全部通过后，native installer 才允许进入 cutover 决策。
 - `dist/deliverables` 发布归档应包含 `deliverables-manifest.json` 与 `native-installer-lane-receipt.json`，用于交付后复核。
 - `dist/deliverables` 发布归档还应包含 `NATIVE_INSTALLER_CUTOVER_POLICY.json`，用于复核签名 / 时间戳 / 审批 / 回滚 policy。
+- native installer lane 的严格判断应以 `policy_ready` 为准，而不是仅凭 `ready_for_release` 或单一签名结果。
 
 ## 工作区与交付检查
 

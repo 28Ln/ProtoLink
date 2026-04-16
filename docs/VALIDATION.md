@@ -65,9 +65,10 @@ uv build
 - `verify_native_installer_lane.py` 现在会把 `lifecycle_contract_ready` 纳入 `stage_status`；contract 不完整时会输出 `contract-incomplete` phase 与 `repair_lifecycle_contract` next_action。
 - `verify_native_installer_lane.py` 现在支持 `--receipt-file <path>`，可把 lane truth 持久化为 JSON receipt。
 - `verify_native_installer_lane.py` 现在会从 `docs/NATIVE_INSTALLER_CUTOVER_POLICY.json` 读取 `manual_cutover_requirements`，并把 `policy_id`、`policy_format_version`、`policy_checksum` 一起写入 receipt。
+- `verify_native_installer_lane.py` 现在会输出 `policy_status` 与 `policy_ready`，把 signing / timestamp / approvals / rollback / clean-machine validation 的缺口拆成结构化 blocker。
 - `build_release_deliverables.py` 现在会在目标目录写出 `deliverables-manifest.json` 与 `native-installer-lane-receipt.json`。
 - `build_release_deliverables.py` 现在会把 `NATIVE_INSTALLER_CUTOVER_POLICY.json` 一起归档到 `dist/deliverables`。
-- `verify_release_deliverables.py` 会复核 deliverables manifest、archive checksum、package verifier 结果与 native lane receipt；默认不把 native installer `ready_for_release=false` 视为 bundled release blocker。
+- `verify_release_deliverables.py` 会复核 deliverables manifest、archive checksum、package verifier 结果与 native lane receipt；默认不把 native installer `policy_ready=false` 视为 bundled release blocker。
 - `run_soak_validation.py` 在使用 `--require-all-ready` 时会把非 ready 循环转为非零退出码，并输出 `cycle_ready`、`failing_cycles`、`total_duration_ms`。
 - `run_full_test_suite.py` 以逐文件方式聚合 full-suite 真值，是当前正式的 pytest 基线入口。
 - `audit-plugin-manifests` 会静态审计 `workspace/plugins/*/manifest.json`；任何 invalid manifest 都会进入 `--release-preflight` 阻断。

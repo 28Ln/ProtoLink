@@ -99,6 +99,7 @@ uv build
 - `uv run protolink --verify-native-installer-scaffold` 现在还会校验 `ProtoLink.wxs`、`ProtoLink.Generated.wxi` 与 payload 的 included-entry checksums。
 - `uv run python scripts/build_release_deliverables.py --name release-0.2.5 --target-dir dist\\deliverables` 现在会写出顶层 `deliverables-manifest.json` 与 `native-installer-lane-receipt.json`。
 - `uv run python scripts/verify_release_deliverables.py --target-dir dist\\deliverables` 会复核 deliverables manifest、archive checksums、package verifiers 与 native lane receipt 一致性。
+- `python scripts/verify_native_installer_lane.py` 现在会额外输出 `policy_ready` 与 `policy_status`，把 signing / timestamp / approvals / rollback / clean-machine validation 拆成分节状态。
 
 ## 仓库结构
 
