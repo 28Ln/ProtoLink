@@ -124,6 +124,7 @@ Last updated: 2026-04-16
 - `dist/deliverables/`
 - `dist/deliverables/deliverables-manifest.json`
 - `dist/deliverables/native-installer-lane-receipt.json`
+- `dist/deliverables/native-installer-cutover-evidence.json`
 - `dist/gui-audit/latest/`
 - 当前 `dist/protolink-0.2.5.*`
 - `docs/` canonical 文档

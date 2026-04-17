@@ -11,6 +11,10 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+from protolink.core.native_installer_cutover_evidence import (
+    NATIVE_INSTALLER_CUTOVER_EVIDENCE_FILE,
+    default_native_installer_cutover_evidence,
+)
 from protolink.core.native_installer_cutover_policy import (
     default_native_installer_cutover_policy_file,
     load_native_installer_cutover_policy,
@@ -33,6 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--name", default="release-0.2.5", help="构建名后缀。默认 release-0.2.5。")
     parser.add_argument("--workspace", type=Path, help="可选，指定构建 workspace。默认创建临时 workspace。")
     parser.add_argument("--target-dir", type=Path, default=DEFAULT_TARGET_DIR, help="产物输出目录。默认 dist/deliverables。")
+    parser.add_argument("--cutover-evidence-file", type=Path, help="可选，提供 native installer cutover evidence JSON。")
     parser.add_argument("--skip-install-smoke", action="store_true", help="跳过安装链路自检。")
     parser.add_argument("--keep-workspace", action="store_true", help="保留自动创建的临时 workspace。")
     return parser
@@ -123,20 +128,27 @@ def _write_json_file(path: Path, payload: dict[str, object]) -> str:
     return str(path)
 
 
-def _run_native_installer_lane_receipt(*, workspace: Path, name: str, receipt_file: Path) -> dict[str, object]:
+def _run_native_installer_lane_receipt(
+    *,
+    workspace: Path,
+    name: str,
+    receipt_file: Path,
+    cutover_evidence_file: Path | None = None,
+) -> dict[str, object]:
     script_file = ROOT / "scripts" / "verify_native_installer_lane.py"
-    return _run_json(
-        [
-            sys.executable,
-            str(script_file),
-            "--workspace",
-            str(workspace),
-            "--name",
-            f"{name}-receipt",
-            "--receipt-file",
-            str(receipt_file),
-        ]
-    )
+    command = [
+        sys.executable,
+        str(script_file),
+        "--workspace",
+        str(workspace),
+        "--name",
+        f"{name}-receipt",
+        "--receipt-file",
+        str(receipt_file),
+    ]
+    if cutover_evidence_file is not None:
+        command.extend(["--cutover-evidence-file", str(cutover_evidence_file)])
+    return _run_json(command)
 
 
 def _build_deliverables_manifest(
@@ -152,18 +164,22 @@ def _build_deliverables_manifest(
     native_installer_lane_receipt: dict[str, object],
     native_installer_cutover_policy_file: Path,
     native_installer_cutover_policy: dict[str, object],
+    native_installer_cutover_evidence_file: Path,
+    native_installer_cutover_evidence: dict[str, object],
 ) -> dict[str, object]:
     artifact_paths = {key: Path(value) for key, value in copied_artifacts.items()}
     checksums = {
         **{path.name: _sha256_file(path) for path in artifact_paths.values()},
         native_installer_lane_receipt_file.name: _sha256_file(native_installer_lane_receipt_file),
         native_installer_cutover_policy_file.name: _sha256_file(native_installer_cutover_policy_file),
+        native_installer_cutover_evidence_file.name: _sha256_file(native_installer_cutover_evidence_file),
     }
     included_entries = sorted(
         [
             *(path.name for path in artifact_paths.values()),
             native_installer_lane_receipt_file.name,
             native_installer_cutover_policy_file.name,
+            native_installer_cutover_evidence_file.name,
             DELIVERABLES_MANIFEST_FILE,
         ]
     )
@@ -194,6 +210,14 @@ def _build_deliverables_manifest(
             "policy_format_version": native_installer_cutover_policy["format_version"],
             "policy_checksum": native_installer_cutover_policy["policy_checksum"],
         },
+        "native_installer_cutover_evidence_file": native_installer_cutover_evidence_file.name,
+        "native_installer_cutover_evidence": {
+            "source_present": native_installer_cutover_evidence["source_present"],
+            "source_name": native_installer_cutover_evidence["source_name"],
+            "source_checksum": native_installer_cutover_evidence["source_checksum"],
+            "evidence_id": native_installer_cutover_evidence["evidence_id"],
+            "format_version": native_installer_cutover_evidence["format_version"],
+        },
         "native_installer_lane_summary": {
             "phase": lane_phase,
             "blocking_items": blocking_items,
@@ -217,6 +241,7 @@ def execute_release_deliverables(
     name: str,
     workspace: Path | None = None,
     target_dir: Path = DEFAULT_TARGET_DIR,
+    cutover_evidence_file: Path | None = None,
     skip_install_smoke: bool = False,
 ) -> dict[str, object]:
     temp_root: Path | None = None
@@ -256,6 +281,7 @@ def execute_release_deliverables(
         workspace=workspace,
         name=name,
         receipt_file=native_installer_lane_receipt_file,
+        cutover_evidence_file=cutover_evidence_file,
     )
     try:
         native_installer_cutover_policy = load_native_installer_cutover_policy()
@@ -263,6 +289,11 @@ def execute_release_deliverables(
         raise DeliveryBuildError(f"Native installer cutover policy is invalid: {exc}") from exc
     native_installer_cutover_policy_file = target_dir / default_native_installer_cutover_policy_file().name
     _copy_artifact(Path(str(native_installer_cutover_policy["policy_file"])), native_installer_cutover_policy_file)
+    native_installer_cutover_evidence = native_installer_lane_receipt.get("cutover_evidence")
+    if not isinstance(native_installer_cutover_evidence, dict):
+        native_installer_cutover_evidence = default_native_installer_cutover_evidence()
+    native_installer_cutover_evidence_file = target_dir / NATIVE_INSTALLER_CUTOVER_EVIDENCE_FILE
+    _write_json_file(native_installer_cutover_evidence_file, native_installer_cutover_evidence)
     receipt_cutover_policy = native_installer_lane_receipt.get("cutover_policy", {})
     if not isinstance(receipt_cutover_policy, dict):
         raise DeliveryBuildError("Native installer lane receipt is missing cutover_policy.")
@@ -287,6 +318,8 @@ def execute_release_deliverables(
         native_installer_lane_receipt=native_installer_lane_receipt,
         native_installer_cutover_policy_file=native_installer_cutover_policy_file,
         native_installer_cutover_policy=native_installer_cutover_policy,
+        native_installer_cutover_evidence_file=native_installer_cutover_evidence_file,
+        native_installer_cutover_evidence=native_installer_cutover_evidence,
     )
     deliverables_manifest_file = target_dir / DELIVERABLES_MANIFEST_FILE
     _write_json_file(deliverables_manifest_file, deliverables_manifest)
@@ -302,6 +335,8 @@ def execute_release_deliverables(
         "native_installer_lane_receipt": native_installer_lane_receipt,
         "native_installer_cutover_policy_file": str(native_installer_cutover_policy_file),
         "native_installer_cutover_policy": native_installer_cutover_policy,
+        "native_installer_cutover_evidence_file": str(native_installer_cutover_evidence_file),
+        "native_installer_cutover_evidence": native_installer_cutover_evidence,
         "deliverables_manifest_file": str(deliverables_manifest_file),
         "deliverables_manifest": deliverables_manifest,
     }
@@ -320,6 +355,7 @@ def main() -> int:
             name=args.name,
             workspace=workspace,
             target_dir=args.target_dir,
+            cutover_evidence_file=args.cutover_evidence_file,
             skip_install_smoke=args.skip_install_smoke,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))

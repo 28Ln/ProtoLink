@@ -104,6 +104,7 @@ uv build
 - `verify_native_installer_lane.py` 现在支持 `--receipt-file`；`build_release_deliverables.py` 会把 lane receipt 与 deliverables manifest 一起写入 `dist/deliverables`。
 - `verify_release_deliverables.py` 会在已有 deliverables 目录上重跑 package verifiers，并校验 manifest / receipt 一致性。
 - `docs/NATIVE_INSTALLER_CUTOVER_POLICY.json` 现在是签名 / 时间戳 / 审批 / 回滚要求的机器可读真值。
+- `python scripts/verify_native_installer_lane.py --cutover-evidence-file <path>` 可注入 machine-readable cutover evidence；deliverables 会归档为 `native-installer-cutover-evidence.json`。
 - 发布线只有在评估 native installer cutover 时才显式加 `--require-toolchain` 或 `--require-signed`。
 - `run_soak_validation.py` 在加 `--require-all-ready` 后才作为长稳门禁，并沉淀 `cycle_ready` / `failing_cycles` / `total_duration_ms` 证据。
 - `run_full_test_suite.py` 是当前正式 full-suite 入口，用逐文件方式收敛 pytest 真值。

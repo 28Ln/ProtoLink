@@ -15,6 +15,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from protolink.core.native_installer_cutover_evidence import load_native_installer_cutover_evidence
 from protolink.core.native_installer_cutover_policy import load_native_installer_cutover_policy
 
 
@@ -27,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--workspace", type=Path, help="可选，使用指定 workspace。默认创建临时 workspace。")
     parser.add_argument("--name", default="native-lane", help="scaffold/build 名称前缀。")
     parser.add_argument("--receipt-file", type=Path, help="可选，写出 native installer lane JSON receipt。")
+    parser.add_argument("--cutover-evidence-file", type=Path, help="可选，提供 native installer cutover evidence JSON。")
     parser.add_argument("--require-toolchain", action="store_true", help="若 WiX 或 SignTool 缺失则返回非零退出码。")
     parser.add_argument("--require-signed", action="store_true", help="若 MSI 签名校验未通过则返回非零退出码。")
     parser.add_argument("--keep-artifacts", action="store_true", help="保留临时目录。")
@@ -151,6 +153,7 @@ def _build_policy_status(
     policy: dict[str, object],
     stage_status: dict[str, bool],
     scaffold_build: dict[str, object],
+    cutover_evidence: dict[str, object],
 ) -> dict[str, object]:
     payload = policy["payload"]
     verification_expectations = tuple(
@@ -168,7 +171,7 @@ def _build_policy_status(
 
     signing_required = bool(payload["signing"]["required"])
     signing_blocking_items: list[str] = []
-    approved_certificate_evidence_present = False
+    approved_certificate_evidence_present = bool(cutover_evidence["signing"]["approved_certificate_evidence_present"])
     if signing_required:
         if not stage_status.get("signature_verified", False):
             signing_blocking_items.append("signature_not_verified")
@@ -184,7 +187,7 @@ def _build_policy_status(
 
     timestamp_required = bool(payload["timestamp"]["required"])
     timestamp_blocking_items: list[str] = []
-    approved_timestamp_evidence_present = False
+    approved_timestamp_evidence_present = bool(cutover_evidence["timestamp"]["approved_timestamp_evidence_present"])
     if timestamp_required:
         if not stage_status.get("signature_verified", False):
             timestamp_blocking_items.append("signature_not_verified")
@@ -199,8 +202,8 @@ def _build_policy_status(
     }
 
     approvals_blocking_items: list[str] = []
-    release_owner_approval_present = False
-    signing_operation_approval_present = False
+    release_owner_approval_present = bool(cutover_evidence["approvals"]["release_owner_approval_present"])
+    signing_operation_approval_present = bool(cutover_evidence["approvals"]["signing_operation_approval_present"])
     if bool(payload["approvals"]["release_owner_approval_required"]) and not release_owner_approval_present:
         approvals_blocking_items.append("release_owner_approval_missing")
     if bool(payload["approvals"]["signing_operation_approval_required"]) and not signing_operation_approval_present:
@@ -214,7 +217,7 @@ def _build_policy_status(
     }
 
     rollback_blocking_items: list[str] = []
-    rollback_validation_present = False
+    rollback_validation_present = bool(cutover_evidence["rollback"]["rollback_validation_evidence_present"])
     if bool(payload["rollback"]["bundled_runtime_artifact_required"]) and not rollback_artifact_present:
         rollback_blocking_items.append("bundled_runtime_artifact_missing")
     if bool(payload["rollback"]["rollback_validation_required"]) and not rollback_validation_present:
@@ -228,10 +231,14 @@ def _build_policy_status(
     }
 
     clean_machine_required = bool(payload["clean_machine_validation"]["required"])
-    clean_machine_validation_present = False
+    verified_commands = tuple(str(item).strip() for item in cutover_evidence["clean_machine_validation"]["verified_commands"])
+    clean_machine_validation_present = bool(cutover_evidence["clean_machine_validation"]["validation_evidence_present"])
     clean_machine_blocking_items: list[str] = []
     if clean_machine_required and missing_required_commands:
         clean_machine_blocking_items.append("required_commands_not_declared")
+    missing_verified_commands = [command for command in required_commands if command not in verified_commands]
+    if clean_machine_required and missing_verified_commands:
+        clean_machine_blocking_items.append("required_commands_not_verified")
     if clean_machine_required and not clean_machine_validation_present:
         clean_machine_blocking_items.append("clean_machine_validation_evidence_missing")
     sections["clean_machine_validation"] = {
@@ -240,8 +247,10 @@ def _build_policy_status(
         "blocking_items": clean_machine_blocking_items,
         "required_commands": list(required_commands),
         "missing_required_commands": missing_required_commands,
+        "missing_verified_commands": missing_verified_commands,
         "verification_expectations": list(verification_expectations),
         "validation_evidence_present": clean_machine_validation_present,
+        "verified_commands": list(verified_commands),
     }
 
     blocking_items = [
@@ -335,6 +344,7 @@ def execute_native_installer_lane(
     *,
     workspace: Path | None = None,
     name: str = "native-lane",
+    cutover_evidence_file: Path | None = None,
     require_toolchain: bool = False,
     require_signed: bool = False,
 ) -> dict[str, object]:
@@ -348,6 +358,10 @@ def execute_native_installer_lane(
         policy = load_native_installer_cutover_policy()
     except ValueError as exc:
         raise VerificationError(f"Native installer cutover policy is invalid: {exc}") from exc
+    try:
+        cutover_evidence = load_native_installer_cutover_evidence(cutover_evidence_file)
+    except ValueError as exc:
+        raise VerificationError(f"Native installer cutover evidence is invalid: {exc}") from exc
 
     toolchain = _run_json(_uv("protolink", "--verify-native-installer-toolchain"))
     scaffold_build_raw = _run_json(_uv("protolink", "--workspace", str(workspace), "--build-native-installer-scaffold", name))
@@ -381,6 +395,7 @@ def execute_native_installer_lane(
         policy=policy,
         stage_status=stage_status,
         scaffold_build=scaffold_build,
+        cutover_evidence=cutover_evidence,
     )
     cutover_policy = _build_cutover_policy(
         policy=policy,
@@ -395,6 +410,7 @@ def execute_native_installer_lane(
         "temporary_root": str(temp_root) if temp_root is not None else None,
         "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
         "stage_status": stage_status,
+        "cutover_evidence": cutover_evidence,
         "policy_status": policy_status,
         "cutover_policy": cutover_policy,
         "toolchain": toolchain,
@@ -426,6 +442,7 @@ def main() -> int:
         result = execute_native_installer_lane(
             workspace=workspace,
             name=args.name,
+            cutover_evidence_file=args.cutover_evidence_file,
             require_toolchain=args.require_toolchain,
             require_signed=args.require_signed,
         )

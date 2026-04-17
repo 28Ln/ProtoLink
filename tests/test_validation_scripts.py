@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from protolink.core.native_installer_cutover_policy import load_native_installer_cutover_policy
+from protolink.core.native_installer_cutover_evidence import load_native_installer_cutover_evidence
 
 
 def _load_script(script_name: str) -> dict[str, object]:
@@ -55,6 +56,49 @@ def _write_cutover_policy_file(path: Path) -> dict[str, object]:
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
     return load_native_installer_cutover_policy(path)
+
+
+def _write_cutover_evidence_file(
+    path: Path,
+    *,
+    approved_certificate_evidence_present: bool = False,
+    approved_timestamp_evidence_present: bool = False,
+    release_owner_approval_present: bool = False,
+    signing_operation_approval_present: bool = False,
+    rollback_validation_evidence_present: bool = False,
+    validation_evidence_present: bool = False,
+    verified_commands: list[str] | None = None,
+) -> dict[str, object]:
+    payload = {
+        "evidence_id": "native-installer-cutover-evidence",
+        "format_version": "protolink-native-installer-cutover-evidence-v1",
+        "signing": {
+            "approved_certificate_evidence_present": approved_certificate_evidence_present,
+            "certificate_reference": "cert-approval" if approved_certificate_evidence_present else None,
+        },
+        "timestamp": {
+            "approved_timestamp_evidence_present": approved_timestamp_evidence_present,
+            "timestamp_reference": "timestamp-approval" if approved_timestamp_evidence_present else None,
+            "timestamp_service": "http://timestamp.example.test" if approved_timestamp_evidence_present else None,
+        },
+        "approvals": {
+            "release_owner_approval_present": release_owner_approval_present,
+            "release_owner_reference": "release-owner-approval" if release_owner_approval_present else None,
+            "signing_operation_approval_present": signing_operation_approval_present,
+            "signing_operation_reference": "signing-op-approval" if signing_operation_approval_present else None,
+        },
+        "rollback": {
+            "rollback_validation_evidence_present": rollback_validation_evidence_present,
+            "rollback_validation_reference": "rollback-check" if rollback_validation_evidence_present else None,
+        },
+        "clean_machine_validation": {
+            "validation_evidence_present": validation_evidence_present,
+            "verified_commands": verified_commands or [],
+            "validation_reference": "clean-machine-check" if validation_evidence_present else None,
+        },
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+    return load_native_installer_cutover_evidence(path)
 
 
 def test_load_native_installer_cutover_policy_reads_valid_file(tmp_path: Path) -> None:
@@ -354,6 +398,7 @@ def test_main_writes_native_installer_lane_receipt_file(tmp_path: Path, capsys) 
             'workspace': workspace,
             'name': 'lane',
             'receipt_file': receipt_file,
+            'cutover_evidence_file': None,
             'require_toolchain': False,
             'require_signed': False,
             'keep_artifacts': True,
@@ -520,6 +565,100 @@ def test_execute_native_installer_lane_raises_when_signature_is_required(tmp_pat
         execute(workspace=tmp_path / 'workspace', name='lane', require_signed=True)
 
 
+def test_execute_native_installer_lane_reports_policy_ready_when_evidence_is_complete(tmp_path: Path) -> None:
+    ns = _load_script('verify_native_installer_lane.py')
+
+    def fake_run_json(command, *, cwd=None):
+        if '--verify-native-installer-toolchain' in command:
+            return {
+                'ready': True,
+                'tools': {
+                    'wix': {'available': True},
+                    'signtool': {'available': True},
+                },
+            }
+        if '--build-native-installer-scaffold' in command:
+            return {
+                'native_installer_scaffold_dir': str(tmp_path / 'scaffold'),
+                'installer_archive_file': str(tmp_path / 'installer-package.zip'),
+                'native_installer_manifest': {
+                    'verification_expectations': [
+                        'msiexec /i ProtoLink.msi /qn /l*v install.log',
+                        'protolink --headless-summary',
+                        'msiexec /x ProtoLink.msi /qn /l*v uninstall.log',
+                    ],
+                },
+            }
+        if '--verify-native-installer-scaffold' in command:
+            return {'checksum_matches': True, 'lifecycle_contract_ready': True}
+        raise AssertionError(command)
+
+    def fake_run_optional_json(command, *, cwd=None):
+        if '--build-native-installer-msi' in command:
+            return {
+                'ok': True,
+                'returncode': 0,
+                'stdout': '',
+                'stderr': '',
+                'payload': {'output_file': str(tmp_path / 'ProtoLink.msi')},
+            }
+        if '--verify-native-installer-signature' in command:
+            return {'ok': True, 'returncode': 0, 'stdout': '', 'stderr': '', 'payload': {'verified': True}}
+        raise AssertionError(command)
+
+    installer_archive = tmp_path / 'installer-package.zip'
+    installer_archive.write_text('installer', encoding='utf-8')
+
+    execute = ns['execute_native_installer_lane']
+    execute.__globals__['_run_json'] = fake_run_json
+    execute.__globals__['_run_optional_json'] = fake_run_optional_json
+    execute.__globals__['load_native_installer_cutover_evidence'] = lambda *args, **kwargs: {
+        'source_present': True,
+        'source_file': str(tmp_path / 'native-installer-cutover-evidence.json'),
+        'source_name': 'native-installer-cutover-evidence.json',
+        'source_checksum': 'abc',
+        'evidence_id': 'native-installer-cutover-evidence',
+        'format_version': 'protolink-native-installer-cutover-evidence-v1',
+        'signing': {
+            'approved_certificate_evidence_present': True,
+            'certificate_reference': 'cert',
+        },
+        'timestamp': {
+            'approved_timestamp_evidence_present': True,
+            'timestamp_reference': 'ts',
+            'timestamp_service': 'http://timestamp.example.test',
+        },
+        'approvals': {
+            'release_owner_approval_present': True,
+            'release_owner_reference': 'owner',
+            'signing_operation_approval_present': True,
+            'signing_operation_reference': 'signing',
+        },
+        'rollback': {
+            'rollback_validation_evidence_present': True,
+            'rollback_validation_reference': 'rollback',
+        },
+        'clean_machine_validation': {
+            'validation_evidence_present': True,
+            'verified_commands': [
+                'msiexec /i ProtoLink.msi /qn /l*v install.log',
+                'protolink --headless-summary',
+                'msiexec /x ProtoLink.msi /qn /l*v uninstall.log',
+            ],
+            'validation_reference': 'clean-machine',
+        },
+    }
+
+    result = execute(workspace=tmp_path / 'workspace', name='lane')
+
+    assert result['ready_for_release'] is True
+    assert result['policy_ready'] is True
+    assert result['policy_status']['ready'] is True
+    assert result['policy_status']['blocking_items'] == []
+    assert result['cutover_policy']['policy_ready'] is True
+    assert result['cutover_policy']['cutover_ready'] is True
+
+
 def test_execute_soak_validation_runs_multiple_cycles(tmp_path: Path) -> None:
     ns = _load_script('run_soak_validation.py')
 
@@ -587,6 +726,11 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
     build_root.mkdir()
     policy_file = tmp_path / 'NATIVE_INSTALLER_CUTOVER_POLICY.json'
     policy = _write_cutover_policy_file(policy_file)
+    cutover_evidence = _write_cutover_evidence_file(
+        tmp_path / 'native-installer-cutover-evidence.json',
+        release_owner_approval_present=True,
+        signing_operation_approval_present=True,
+    )
     release_archive = build_root / 'release.zip'
     portable_archive = build_root / 'portable.zip'
     distribution_archive = build_root / 'distribution.zip'
@@ -617,13 +761,14 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
     execute.__globals__['_run_install_smoke'] = lambda installer_archive, target_dir: {'launch_script': 'Launch-ProtoLink.ps1'}
     execute.__globals__['load_native_installer_cutover_policy'] = lambda: policy
     execute.__globals__['default_native_installer_cutover_policy_file'] = lambda: policy_file
-    def fake_native_lane_receipt(*, workspace, name, receipt_file):
+    def fake_native_lane_receipt(*, workspace, name, receipt_file, cutover_evidence_file=None):
         payload = {
             'generated_at': '2026-04-16T00:00:00+00:00',
             'stage_status': {
                 'toolchain_ready': False,
                 'lifecycle_contract_ready': True,
             },
+            'cutover_evidence': cutover_evidence,
             'policy_status': {
                 'ready': False,
                 'blocking_items': ['approvals.release_owner_approval_missing'],
@@ -667,13 +812,16 @@ def test_execute_release_deliverables_copies_and_reports_artifacts(tmp_path: Pat
     assert result['install_smoke']['launch_script'] == 'Launch-ProtoLink.ps1'
     assert Path(result['native_installer_lane_receipt_file']).exists()
     assert Path(result['native_installer_cutover_policy_file']).exists()
+    assert Path(result['native_installer_cutover_evidence_file']).exists()
     assert Path(result['deliverables_manifest_file']).exists()
     assert result['deliverables_manifest']['native_installer_lane_summary']['phase'] == 'probe-only'
     assert result['deliverables_manifest']['native_installer_lane_summary']['policy_ready'] is False
     assert result['deliverables_manifest']['native_installer_policy_status']['ready'] is False
+    assert result['deliverables_manifest']['native_installer_cutover_evidence']['evidence_id'] == 'native-installer-cutover-evidence'
     assert result['deliverables_manifest']['checksums']['protolink-0.2.5-installer-package.zip']
     assert result['deliverables_manifest']['checksums']['native-installer-lane-receipt.json']
     assert result['deliverables_manifest']['checksums'][policy_file.name]
+    assert result['deliverables_manifest']['checksums']['native-installer-cutover-evidence.json']
 
 
 def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_path: Path) -> None:
@@ -682,6 +830,19 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
     target_dir.mkdir()
     policy_file = target_dir / 'NATIVE_INSTALLER_CUTOVER_POLICY.json'
     policy = _write_cutover_policy_file(policy_file)
+    evidence_file = target_dir / 'native-installer-cutover-evidence.json'
+    evidence = _write_cutover_evidence_file(
+        evidence_file,
+        release_owner_approval_present=True,
+        signing_operation_approval_present=True,
+        rollback_validation_evidence_present=True,
+        validation_evidence_present=True,
+        verified_commands=[
+            "msiexec /i ProtoLink.msi /qn /l*v install.log",
+            "protolink --headless-summary",
+            "msiexec /x ProtoLink.msi /qn /l*v uninstall.log",
+        ],
+    )
 
     file_payloads = {
         'protolink-0.2.5-release-bundle.zip': b'release',
@@ -702,6 +863,7 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
             'msi_built': False,
             'signature_verified': False,
         },
+        'cutover_evidence': evidence,
         'policy_status': {
             'ready': False,
             'blocking_items': ['approvals.release_owner_approval_missing'],
@@ -748,7 +910,7 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
         },
         'checksums': {
             name: sha256(target_dir / name)
-            for name in (*file_payloads.keys(), 'native-installer-lane-receipt.json', policy_file.name)
+            for name in (*file_payloads.keys(), 'native-installer-lane-receipt.json', policy_file.name, evidence_file.name)
         },
         'verification': {
             'portable': {'checksum_matches': True},
@@ -763,6 +925,14 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
             'policy_format_version': policy['format_version'],
             'policy_checksum': policy['policy_checksum'],
         },
+        'native_installer_cutover_evidence_file': evidence_file.name,
+        'native_installer_cutover_evidence': {
+            'source_present': evidence['source_present'],
+            'source_name': evidence['source_name'],
+            'source_checksum': evidence['source_checksum'],
+            'evidence_id': evidence['evidence_id'],
+            'format_version': evidence['format_version'],
+        },
         'native_installer_lane_summary': {
             'phase': 'probe-only',
             'blocking_items': ['missing_wix', 'missing_signtool'],
@@ -776,6 +946,7 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
             'deliverables-manifest.json',
             'native-installer-lane-receipt.json',
             policy_file.name,
+            evidence_file.name,
             'protolink-0.2.5-distribution-package.zip',
             'protolink-0.2.5-installer-package.zip',
             'protolink-0.2.5-portable-package.zip',
@@ -803,6 +974,7 @@ def test_execute_verify_release_deliverables_checks_manifest_and_receipt(tmp_pat
     assert result['native_installer_lane_phase'] == 'probe-only'
     assert result['install_smoke_present'] is False
     assert Path(result['receipt_file']).exists()
+    assert Path(result['evidence_file']).exists()
     assert result['checks']['native_installer_lane']['policy_ready'] is False
 
 
@@ -812,6 +984,8 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
     target_dir.mkdir()
     policy_file = target_dir / 'NATIVE_INSTALLER_CUTOVER_POLICY.json'
     policy = _write_cutover_policy_file(policy_file)
+    evidence_file = target_dir / 'native-installer-cutover-evidence.json'
+    evidence = _write_cutover_evidence_file(evidence_file)
 
     for name, payload in {
         'protolink-0.2.5-release-bundle.zip': b'release',
@@ -831,6 +1005,7 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
             'msi_built': False,
             'signature_verified': False,
         },
+        'cutover_evidence': evidence,
         'policy_status': {
             'ready': False,
             'blocking_items': ['approvals.release_owner_approval_missing'],
@@ -883,6 +1058,7 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
                     'protolink-0.2.5-installer-package.zip': sha256(target_dir / 'protolink-0.2.5-installer-package.zip'),
                     'native-installer-lane-receipt.json': sha256(receipt_file),
                     policy_file.name: sha256(policy_file),
+                    evidence_file.name: sha256(evidence_file),
                 },
                 'verification': {
                     'portable': {'checksum_matches': True},
@@ -897,6 +1073,14 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
                     'policy_format_version': policy['format_version'],
                     'policy_checksum': policy['policy_checksum'],
                 },
+                'native_installer_cutover_evidence_file': evidence_file.name,
+                'native_installer_cutover_evidence': {
+                    'source_present': evidence['source_present'],
+                    'source_name': evidence['source_name'],
+                    'source_checksum': evidence['source_checksum'],
+                    'evidence_id': evidence['evidence_id'],
+                    'format_version': evidence['format_version'],
+                },
                 'native_installer_lane_summary': {
                     'phase': 'toolchain-ready',
                     'blocking_items': ['missing_wix', 'missing_signtool'],
@@ -910,6 +1094,7 @@ def test_execute_verify_release_deliverables_rejects_receipt_summary_mismatch(tm
                     'deliverables-manifest.json',
                     'native-installer-lane-receipt.json',
                     policy_file.name,
+                    evidence_file.name,
                     'protolink-0.2.5-distribution-package.zip',
                     'protolink-0.2.5-installer-package.zip',
                     'protolink-0.2.5-portable-package.zip',
@@ -945,6 +1130,8 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
     target_dir.mkdir()
     policy_file = target_dir / 'NATIVE_INSTALLER_CUTOVER_POLICY.json'
     policy = _write_cutover_policy_file(policy_file)
+    evidence_file = target_dir / 'native-installer-cutover-evidence.json'
+    evidence = _write_cutover_evidence_file(evidence_file)
 
     for name, payload in {
         'protolink-0.2.5-release-bundle.zip': b'release',
@@ -964,6 +1151,7 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
             'msi_built': False,
             'signature_verified': False,
         },
+        'cutover_evidence': evidence,
         'policy_status': {
             'ready': False,
             'blocking_items': ['approvals.release_owner_approval_missing'],
@@ -1016,6 +1204,7 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
                     'protolink-0.2.5-installer-package.zip': sha256(target_dir / 'protolink-0.2.5-installer-package.zip'),
                     'native-installer-lane-receipt.json': sha256(receipt_file),
                     policy_file.name: sha256(policy_file),
+                    evidence_file.name: sha256(evidence_file),
                 },
                 'verification': {
                     'portable': {'checksum_matches': True},
@@ -1030,6 +1219,14 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
                     'policy_format_version': policy['format_version'],
                     'policy_checksum': policy['policy_checksum'],
                 },
+                'native_installer_cutover_evidence_file': evidence_file.name,
+                'native_installer_cutover_evidence': {
+                    'source_present': evidence['source_present'],
+                    'source_name': evidence['source_name'],
+                    'source_checksum': evidence['source_checksum'],
+                    'evidence_id': evidence['evidence_id'],
+                    'format_version': evidence['format_version'],
+                },
                 'native_installer_lane_summary': {
                     'phase': 'probe-only',
                     'blocking_items': ['missing_wix', 'missing_signtool'],
@@ -1043,6 +1240,7 @@ def test_execute_verify_release_deliverables_can_require_native_ready(tmp_path: 
                     'deliverables-manifest.json',
                     'native-installer-lane-receipt.json',
                     policy_file.name,
+                    evidence_file.name,
                     'protolink-0.2.5-distribution-package.zip',
                     'protolink-0.2.5-installer-package.zip',
                     'protolink-0.2.5-portable-package.zip',
@@ -1076,6 +1274,8 @@ def test_execute_verify_release_deliverables_rejects_missing_archived_policy(tmp
     ns = _load_script('verify_release_deliverables.py')
     target_dir = tmp_path / 'deliverables'
     target_dir.mkdir()
+    evidence_file = target_dir / 'native-installer-cutover-evidence.json'
+    evidence = _write_cutover_evidence_file(evidence_file)
 
     for name, payload in {
         'protolink-0.2.5-release-bundle.zip': b'release',
@@ -1095,6 +1295,7 @@ def test_execute_verify_release_deliverables_rejects_missing_archived_policy(tmp
             'msi_built': False,
             'signature_verified': False,
         },
+        'cutover_evidence': evidence,
         'policy_status': {
             'ready': False,
             'blocking_items': ['approvals.release_owner_approval_missing'],
@@ -1152,6 +1353,7 @@ def test_execute_verify_release_deliverables_rejects_missing_archived_policy(tmp
                     'protolink-0.2.5-installer-package.zip': sha256(target_dir / 'protolink-0.2.5-installer-package.zip'),
                     'native-installer-lane-receipt.json': sha256(receipt_file),
                     'NATIVE_INSTALLER_CUTOVER_POLICY.json': 'deadbeef',
+                    evidence_file.name: sha256(evidence_file),
                 },
                 'verification': {
                     'portable': {'checksum_matches': True},
@@ -1166,6 +1368,14 @@ def test_execute_verify_release_deliverables_rejects_missing_archived_policy(tmp
                     'policy_format_version': 'protolink-native-installer-cutover-policy-v1',
                     'policy_checksum': 'deadbeef',
                 },
+                'native_installer_cutover_evidence_file': evidence_file.name,
+                'native_installer_cutover_evidence': {
+                    'source_present': evidence['source_present'],
+                    'source_name': evidence['source_name'],
+                    'source_checksum': evidence['source_checksum'],
+                    'evidence_id': evidence['evidence_id'],
+                    'format_version': evidence['format_version'],
+                },
                 'native_installer_lane_summary': {
                     'phase': 'probe-only',
                     'blocking_items': ['missing_wix', 'missing_signtool'],
@@ -1179,6 +1389,7 @@ def test_execute_verify_release_deliverables_rejects_missing_archived_policy(tmp
                     'deliverables-manifest.json',
                     'native-installer-lane-receipt.json',
                     'NATIVE_INSTALLER_CUTOVER_POLICY.json',
+                    evidence_file.name,
                     'protolink-0.2.5-distribution-package.zip',
                     'protolink-0.2.5-installer-package.zip',
                     'protolink-0.2.5-portable-package.zip',

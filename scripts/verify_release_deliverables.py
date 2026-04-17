@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from protolink.core.native_installer_cutover_evidence import load_native_installer_cutover_evidence
 from protolink.core.native_installer_cutover_policy import load_native_installer_cutover_policy
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +21,7 @@ class DeliveryVerificationError(RuntimeError):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="校验 ProtoLink dist/deliverables 的归档与证据文件。")
     parser.add_argument("--target-dir", type=Path, default=DEFAULT_TARGET_DIR, help="deliverables 目录。默认 dist/deliverables。")
-    parser.add_argument("--require-native-ready", action="store_true", help="若 native installer lane 不是 ready_for_release 则返回非零退出码。")
+    parser.add_argument("--require-native-ready", action="store_true", help="若 native installer lane 不是 policy_ready 则返回非零退出码。")
     return parser
 
 
@@ -119,6 +120,8 @@ def execute_verify_release_deliverables(
     receipt_name = _require_string(manifest, "native_installer_lane_receipt_file", label="Deliverables manifest")
     policy_name = _require_string(manifest, "native_installer_cutover_policy_file", label="Deliverables manifest")
     policy_metadata = _require_dict(manifest, "native_installer_cutover_policy", label="Deliverables manifest")
+    evidence_name = _require_string(manifest, "native_installer_cutover_evidence_file", label="Deliverables manifest")
+    evidence_metadata = _require_dict(manifest, "native_installer_cutover_evidence", label="Deliverables manifest")
     native_installer_lane_summary = _require_dict(
         manifest, "native_installer_lane_summary", label="Deliverables manifest"
     )
@@ -194,6 +197,28 @@ def execute_verify_release_deliverables(
         )
     if policy_name not in included_entry_names:
         raise DeliveryVerificationError(f"Deliverables manifest included_entries is missing '{policy_name}'.")
+    evidence_file = _safe_top_level_path(target_dir, evidence_name, label="native_installer_cutover_evidence_file")
+    if not evidence_file.exists() or not evidence_file.is_file():
+        raise DeliveryVerificationError(f"Native installer cutover evidence file was not found: {evidence_file}")
+    evidence_checksum = checksums.get(evidence_name)
+    if not isinstance(evidence_checksum, str) or not evidence_checksum:
+        raise DeliveryVerificationError(f"Deliverables manifest is missing checksum for '{evidence_name}'.")
+    actual_evidence_checksum = _sha256_file(evidence_file)
+    if actual_evidence_checksum != evidence_checksum:
+        raise DeliveryVerificationError(
+            f"Native installer cutover evidence checksum mismatch.\nexpected: {evidence_checksum}\nactual:   {actual_evidence_checksum}"
+        )
+    if evidence_name not in included_entry_names:
+        raise DeliveryVerificationError(f"Deliverables manifest included_entries is missing '{evidence_name}'.")
+    try:
+        evidence = load_native_installer_cutover_evidence(evidence_file)
+    except ValueError as exc:
+        raise DeliveryVerificationError(f"Archived native installer cutover evidence is invalid: {exc}") from exc
+    for key in ("evidence_id", "format_version", "source_present", "source_name", "source_checksum"):
+        if evidence_metadata.get(key) != evidence.get(key):
+            raise DeliveryVerificationError(
+                f"Deliverables manifest native installer cutover evidence {key} does not match the archived evidence."
+            )
     try:
         archived_policy = load_native_installer_cutover_policy(policy_file)
     except ValueError as exc:
@@ -210,6 +235,7 @@ def execute_verify_release_deliverables(
 
     receipt = _read_json_file(receipt_file, label="Native installer lane receipt")
     stage_status = _require_dict(receipt, "stage_status", label="Native installer lane receipt")
+    receipt_cutover_evidence = _require_dict(receipt, "cutover_evidence", label="Native installer lane receipt")
     receipt_policy_status = _require_dict(receipt, "policy_status", label="Native installer lane receipt")
     cutover_policy = _require_dict(receipt, "cutover_policy", label="Native installer lane receipt")
     receipt_phase = _require_string(cutover_policy, "native_installer_lane_phase", label="Native installer lane receipt")
@@ -258,6 +284,8 @@ def execute_verify_release_deliverables(
         raise DeliveryVerificationError("Deliverables manifest native installer lane summary.policy_ready does not match the receipt.")
     if native_installer_policy_status != receipt_policy_status:
         raise DeliveryVerificationError("Deliverables manifest native installer policy status does not match the receipt.")
+    if receipt_cutover_evidence != evidence:
+        raise DeliveryVerificationError("Native installer lane receipt cutover_evidence does not match the archived evidence.")
     if require_native_ready and not receipt_policy_ready:
         raise DeliveryVerificationError("Native installer policy is not ready for these deliverables.")
     for receipt_key, policy_key in (
@@ -283,6 +311,7 @@ def execute_verify_release_deliverables(
         "checked_artifacts": checked_artifacts,
         "receipt_file": str(receipt_file),
         "policy_file": str(policy_file),
+        "evidence_file": str(evidence_file),
         "native_installer_lane_phase": receipt_phase,
         "install_smoke_present": install_smoke_present,
         "checks": {
@@ -296,6 +325,7 @@ def execute_verify_release_deliverables(
                 "ready_for_release": receipt_ready,
                 "policy_ready": receipt_policy_ready,
                 "policy_status": receipt_policy_status,
+                "cutover_evidence": receipt_cutover_evidence,
             },
         },
     }

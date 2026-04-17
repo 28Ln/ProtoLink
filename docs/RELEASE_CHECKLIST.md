@@ -55,6 +55,7 @@ python scripts/verify_native_installer_lane.py --require-signed
 - 只有在 clean-machine install / uninstall / `protolink --headless-summary` 全部通过后，native installer 才允许进入 cutover 决策。
 - `dist/deliverables` 发布归档应包含 `deliverables-manifest.json` 与 `native-installer-lane-receipt.json`，用于交付后复核。
 - `dist/deliverables` 发布归档还应包含 `NATIVE_INSTALLER_CUTOVER_POLICY.json`，用于复核签名 / 时间戳 / 审批 / 回滚 policy。
+- `dist/deliverables` 发布归档还应包含 `native-installer-cutover-evidence.json`，用于复核 approvals / rollback / clean-machine validation evidence。
 - native installer lane 的严格判断应以 `policy_ready` 为准，而不是仅凭 `ready_for_release` 或单一签名结果。
 
 ## 工作区与交付检查
@@ -79,6 +80,7 @@ python scripts/verify_native_installer_lane.py --require-signed
   - `--verify-native-installer-signature`
 - `--verify-native-installer-scaffold` 必须能校验 `target_arch`、`install_scope`、`install_dir_name`、`product_code_policy`、`upgrade_strategy` 与静默安装命令
 - `python scripts/verify_native_installer_lane.py --receipt-file <path>` 可作为 release evidence 落盘入口
+- `python scripts/verify_native_installer_lane.py --cutover-evidence-file <path>` 可作为 cutover evidence 输入入口
 - `uv run python scripts/verify_release_deliverables.py --target-dir <dir>` 可作为 deliverables 目录复核入口
 - `docs/NATIVE_INSTALLER_CUTOVER_POLICY.json` 是 native installer cutover policy 的正式机器可读真值
 - `uv run protolink --help` 中必须能看到这些命令
