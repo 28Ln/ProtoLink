@@ -126,6 +126,7 @@ docs/            正式工程文档与归档
 - `docs/CURRENT_STATE.md`：当前真实进展
 - `docs/PROJECT_STATUS.md`：未完成事项、当前主线、迭代状态
 - `docs/ENGINEERING_TASKLIST.md`：正式任务台账
+- `docs/LONG_TERM_ENGINEERING_PLAN.md`：长期架构、配置、异常、存储、GUI 与演进规划
 - `docs/MAINLINE_STATUS.md`：单一主线说明
 - `docs/ROADMAP.md`：长期演进方向
 - `docs/NATIVE_INSTALLER_PLAN.md`：原生安装器与签名路线计划

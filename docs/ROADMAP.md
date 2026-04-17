@@ -11,6 +11,9 @@ Last updated: 2026-04-14
 - `docs/ENGINEERING_TASKLIST.md`
 - `docs/CURRENT_STATE.md`
 
+长期工程化规划请看：
+- `docs/LONG_TERM_ENGINEERING_PLAN.md`
+
 ## Long-term themes
 
 ### M0 Foundation

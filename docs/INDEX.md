@@ -24,6 +24,7 @@
 - `PROJECT_STATUS.md`：当前阶段、未完成事项、下一步
 - `MAINLINE_STATUS.md`：单一主线任务说明
 - `ENGINEERING_TASKLIST.md`：正式任务台账
+- `LONG_TERM_ENGINEERING_PLAN.md`：长期架构、配置、异常、存储、GUI 与演进规划
 - `GUI_REFACTOR_TASKLIST.md`：GUI 改造进展、剩余任务与交付级验收标准
 
 ## 运行与交付
