@@ -16,7 +16,7 @@ Last updated: 2026-04-16
 ## 2. Current Real Status
 
 - branch: `main`
-- latest verified pytest truth: `369 passed`
+- latest verified pytest truth: `373 passed`
 - current active mainline: `PL-014`
 - current version baseline: `0.2.5`
 - worktree baseline: 以当前仓库为准，接手前先执行 `git status`
@@ -42,7 +42,7 @@ Last updated: 2026-04-16
 
 - `uv build` -> passed
 - `uv run protolink --headless-summary` -> passed
-- `uv run python scripts/run_full_test_suite.py --json-only` -> `369 passed`
+- `uv run python scripts/run_full_test_suite.py --json-only` -> `373 passed`
 - `uv run python scripts/run_targeted_regressions.py --suite all` -> passed
 - `uv run python scripts/verify_release_staging.py --name local` -> passed
 - `uv run python scripts/verify_release_staging.py --name ci` -> passed
@@ -52,7 +52,7 @@ Last updated: 2026-04-16
 - `python scripts/verify_native_installer_lane.py` -> passed
 - `uv run python scripts/build_release_deliverables.py --name release-0.2.5 --target-dir dist\deliverables` -> passed
 - `uv run python scripts/verify_release_deliverables.py --target-dir dist\deliverables` -> passed
-- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 369` -> passed
+- `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 373` -> passed
 
 ## 5. What Is Done
 
@@ -106,7 +106,7 @@ Last updated: 2026-04-16
 ## 8. First Steps for the Next Team
 
 1. 执行 `git status`
-2. 执行 `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 369`
+2. 执行 `uv run python scripts/verify_canonical_truth.py --expected-mainline PL-014 --expected-pytest-count 373`
 3. 执行 `uv run python scripts/run_full_test_suite.py --json-only`
 4. 阅读：
    - `docs/PROJECT_STATUS.md`

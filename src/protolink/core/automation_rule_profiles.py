@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from protolink.core.auto_response import AutoResponseProtocol, AutoResponseRule
+from protolink.core.documents.atomic_io import (
+    backup_invalid_document_file,
+    load_json_object_file,
+    write_json_document,
+)
 from protolink.core.device_scan import DeviceScanConfig, DeviceScanTransportKind
 from protolink.core.rule_engine import AutomationAction, AutomationActionKind, AutomationRule, AutomationTriggerKind
 from protolink.core.transport import TransportKind
@@ -26,17 +30,17 @@ def default_automation_rules_profile_path(profiles_dir: Path) -> Path:
 def load_automation_rules_profile(path: Path) -> AutomationRulesProfile:
     if not path.exists():
         return AutomationRulesProfile()
-    try:
-        raw_text = path.read_text(encoding="utf-8")
-        if not raw_text.strip():
-            raise ValueError("automation rules profile is empty")
-        data = json.loads(raw_text)
-        if not isinstance(data, dict):
-            raise ValueError("automation rules profile must contain a JSON object")
-        if str(data.get("format_version", "")) != AUTOMATION_RULES_FORMAT_VERSION:
-            raise ValueError("automation rules profile format version is unsupported")
-    except (OSError, ValueError, json.JSONDecodeError, TypeError):
-        _backup_invalid_config_file(path)
+
+    result = load_json_object_file(
+        path,
+        empty_error_message="automation rules profile is empty",
+        non_object_error_message="automation rules profile must contain a JSON object",
+    )
+    data = result.payload
+    if data is None:
+        return AutomationRulesProfile()
+    if str(data.get("format_version", "")) != AUTOMATION_RULES_FORMAT_VERSION:
+        backup_invalid_document_file(path)
         return AutomationRulesProfile()
 
     rules: list[AutomationRule] = []
@@ -51,12 +55,11 @@ def load_automation_rules_profile(path: Path) -> AutomationRulesProfile:
 
 
 def save_automation_rules_profile(path: Path, profile: AutomationRulesProfile) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "format_version": profile.format_version,
         "rules": [_serialize_rule(rule) for rule in profile.rules],
     }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_document(path, payload)
 
 
 def _serialize_rule(rule: AutomationRule) -> dict[str, object]:
@@ -163,19 +166,3 @@ def _deserialize_device_scan_config(payload: dict[str, object]) -> DeviceScanCon
         timeout_ms=int(payload.get("timeout_ms", 500)),
     )
 
-
-def _backup_invalid_config_file(path: Path) -> Path | None:
-    if not path.exists():
-        return None
-
-    for index in range(100):
-        suffix = ".invalid" if index == 0 else f".invalid.{index}"
-        backup_path = path.with_name(f"{path.name}{suffix}")
-        if backup_path.exists():
-            continue
-        try:
-            path.replace(backup_path)
-        except OSError:
-            return None
-        return backup_path
-    return None

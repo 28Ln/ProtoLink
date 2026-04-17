@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from protolink.core.documents.atomic_io import load_json_object_file, write_json_document
 
 WORKSPACE_FORMAT_VERSION = "protolink-workspace-v1"
 WORKSPACE_MANIFEST_FILE = "workspace_manifest.json"
@@ -96,23 +96,22 @@ def load_workspace_manifest(
     manifest_file = workspace_manifest_path(root)
     if not manifest_file.exists():
         return None
-    try:
-        raw_text = manifest_file.read_text(encoding="utf-8")
-        if not raw_text.strip():
-            raise ValueError("workspace manifest is empty")
-        data = json.loads(raw_text)
-        if not isinstance(data, dict):
-            raise ValueError("workspace manifest must contain a JSON object")
-    except (OSError, ValueError, json.JSONDecodeError, TypeError) as exc:
-        backup_path = _backup_invalid_config_file(manifest_file)
-        if on_error is not None:
+
+    result = load_json_object_file(
+        manifest_file,
+        empty_error_message="workspace manifest is empty",
+        non_object_error_message="workspace manifest must contain a JSON object",
+    )
+    data = result.payload
+    if data is None:
+        if on_error is not None and result.error_message is not None and result.error_type is not None:
             on_error(
                 "workspace_manifest_load_failed",
-                str(exc),
+                result.error_message,
                 {
                     "manifest_file": str(manifest_file),
-                    "backup_file": str(backup_path) if backup_path is not None else "",
-                    "error_type": type(exc).__name__,
+                    "backup_file": str(result.backup_file) if result.backup_file is not None else "",
+                    "error_type": result.error_type,
                 },
             )
         return None
@@ -127,16 +126,12 @@ def load_workspace_manifest(
 
 def save_workspace_manifest(layout: WorkspaceLayout, manifest: WorkspaceManifest) -> Path:
     manifest_file = workspace_manifest_path(layout.root)
-    manifest_file.write_text(
-        json.dumps(
-            {
-                "format_version": manifest.format_version,
-                "directories": list(manifest.directories),
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
+    write_json_document(
+        manifest_file,
+        {
+            "format_version": manifest.format_version,
+            "directories": list(manifest.directories),
+        },
     )
     return manifest_file
 
@@ -166,19 +161,3 @@ def migrate_workspace(root: Path) -> WorkspaceMigrationResult:
         manifest_file=manifest_file,
     )
 
-
-def _backup_invalid_config_file(path: Path) -> Path | None:
-    if not path.exists():
-        return None
-
-    for index in range(100):
-        suffix = ".invalid" if index == 0 else f".invalid.{index}"
-        backup_path = path.with_name(f"{path.name}{suffix}")
-        if backup_path.exists():
-            continue
-        try:
-            path.replace(backup_path)
-        except OSError:
-            return None
-        return backup_path
-    return None

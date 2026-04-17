@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from protolink.core.documents.atomic_io import load_json_object_file, write_json_document
 
 MAX_RECENT_WORKSPACES = 8
 PROTOLINK_BASE_DIR_ENV = "PROTOLINK_BASE_DIR"
@@ -53,23 +53,21 @@ def load_app_settings(
     if not layout.settings_file.exists():
         return AppSettings()
 
-    try:
-        raw_text = layout.settings_file.read_text(encoding="utf-8")
-        if not raw_text.strip():
-            raise ValueError("settings file is empty")
-        data = json.loads(raw_text)
-        if not isinstance(data, dict):
-            raise ValueError("settings file must contain a JSON object")
-    except (OSError, ValueError, json.JSONDecodeError, TypeError) as exc:
-        backup_path = _backup_invalid_config_file(layout.settings_file)
-        if on_error is not None:
+    result = load_json_object_file(
+        layout.settings_file,
+        empty_error_message="settings file is empty",
+        non_object_error_message="settings file must contain a JSON object",
+    )
+    data = result.payload
+    if data is None:
+        if on_error is not None and result.error_message is not None and result.error_type is not None:
             on_error(
                 "settings_load_failed",
-                str(exc),
+                result.error_message,
                 {
                     "settings_file": str(layout.settings_file),
-                    "backup_file": str(backup_path) if backup_path is not None else "",
-                    "error_type": type(exc).__name__,
+                    "backup_file": str(result.backup_file) if result.backup_file is not None else "",
+                    "error_type": result.error_type,
                 },
             )
         return AppSettings()
@@ -85,10 +83,7 @@ def load_app_settings(
 
 def save_app_settings(layout: SettingsLayout, settings: AppSettings) -> None:
     payload = asdict(settings)
-    layout.settings_file.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    write_json_document(layout.settings_file, payload)
 
 
 def resolve_workspace_root(base_dir: Path, settings: AppSettings, override: Path | None = None) -> Path:
@@ -111,24 +106,6 @@ def remember_workspace(settings: AppSettings, workspace_root: Path) -> AppSettin
         active_workspace=normalized,
         recent_workspaces=recents[:MAX_RECENT_WORKSPACES],
     )
-
-
-def _backup_invalid_config_file(path: Path) -> Path | None:
-    if not path.exists():
-        return None
-
-    for index in range(100):
-        suffix = ".invalid" if index == 0 else f".invalid.{index}"
-        backup_path = path.with_name(f"{path.name}{suffix}")
-        if backup_path.exists():
-            continue
-        try:
-            path.replace(backup_path)
-        except OSError:
-            return None
-        return backup_path
-    return None
-
 
 def _detect_bundled_application_root() -> Path | None:
     module_path = Path(__file__).resolve()
